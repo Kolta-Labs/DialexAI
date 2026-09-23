@@ -1,0 +1,36 @@
+# ==============================================================================
+# Dialex Engine Docker Compose (Standard Self-Hosting)
+# ==============================================================================
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  dialex:
+    image: ghcr.io/koltalabs/dialex:latest
+    build:
+      context: ..
+      dockerfile: selfhosting/Dockerfile
+    container_name: dialex-engine
+    restart: unless-stopped
+    ports:
+      - "${DIALEX_PORT:-7890}:7890"
+    volumes:
+      - ./data:/root/.config/dialex
+    environment:
+      - DIALEX_HOST=0.0.0.0:7890
+      - DIALEX_PORT=7890
+      - DIALEX_ALLOW_INSECURE_LAN=true
+      - DIALEX_CONFIG_DIR=/root/.config/dialex
+    env_file:
+      - path: .env
+        required: false
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:7890/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

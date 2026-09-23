@@ -1,0 +1,49 @@
+name: Bump Version & Tag Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'New semantic version to release (e.g., 1.1.0 or 2.0.0)'
+        required: true
+        type: string
+      trigger_release:
+        description: 'Automatically push git tag to trigger Release pipeline'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    name: Bump Version & Create Tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout DialexAI
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Run Version Bump Script
+        run: |
+          chmod +x tools/bump-version.sh
+          ./tools/bump-version.sh "${{ github.event.inputs.version }}"
+
+      - name: Push Commit and Tag
+        run: |
+          NEW_VER="${{ github.event.inputs.version }}"
+          TAG="v${NEW_VER#v}"
+          
+          git push origin HEAD:${{ github.ref_name }}
+          
+          if [ "${{ github.event.inputs.trigger_release }}" = "true" ]; then
+            git push origin "${TAG}"
+            echo "🚀 Pushed ${TAG} tag to trigger the Release workflow!"
+          fi

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dialex AI Persona Gallery — Sovereign AI Deliberation Archetypes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #040712;
+      --card-bg: rgba(17, 24, 54, 0.65);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --text: #94a3b8;
+      --text-heading: #f8fafc;
+      --primary: #f59e0b;
+      --accent: #3b82f6;
+      --tag-bg: rgba(59, 130, 246, 0.12);
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 40px 24px;
+      line-height: 1.6;
+    }
+    .header {
+      max-width: 900px;
+      margin: 0 auto 40px auto;
+      text-align: center;
+    }
+    .brand-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 14px;
+      border-radius: 9999px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      color: #fbbf24;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 38px;
+      font-weight: 800;
+      color: var(--text-heading);
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+    .search-box {
+      max-width: 600px;
+      margin: 24px auto 0 auto;
+      display: flex;
+      gap: 10px;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 12px 18px;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      background: rgba(17, 24, 54, 0.8);
+      color: var(--text-heading);
+      font-size: 15px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+    input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 16px rgba(59, 130, 246, 0.3);
+    }
+    .grid {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 24px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 24px;
+      backdrop-filter: blur(16px);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(245, 158, 11, 0.4);
+      box-shadow: 0 20px 40px -15px rgba(0,0,0,0.6);
+    }
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-heading);
+      margin-bottom: 6px;
+    }
+    .category-badge {
+      display: inline-block;
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      background: var(--tag-bg);
+      color: #60a5fa;
+      margin-bottom: 14px;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+    .desc {
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+    .detail-section {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--card-border);
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 12.5px;
+      margin-bottom: 20px;
+    }
+    .detail-label {
+      font-weight: 700;
+      color: var(--text-heading);
+      margin-top: 6px;
+    }
+    .detail-label:first-child {
+      margin-top: 0;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: auto;
+    }
+    button, a.btn {
+      flex: 1;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: none;
+      font-size: 13px;
+      font-weight: 700;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-install {
+      background: linear-gradient(135deg, var(--primary), #ea580c);
+      color: #fff;
+    }
+    .btn-install:hover {
+      box-shadow: 0 4px 16px rgba(245, 158, 11, 0.4);
+      transform: translateY(-1px);
+    }
+    .btn-copy {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-heading);
+      border: 1px solid var(--card-border);
+    }
+    .btn-copy:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+    .copied-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #10b981;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="brand-pill">⚡ Dialex AI Persona Registry</div>
+  <h1>Curated Deliberation Personas</h1>
+  <p>Discover, explore, and import adversarial debate personas directly into your sovereign Dialex workspace.</p>
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="Search personas by name, category, or core expertise..." oninput="filterPersonas()" />
+  </div>
+</div>
+
+<div class="grid" id="personasGrid"></div>
+<div class="copied-toast" id="toast">📋 JSON copied to clipboard!</div>
+
+<script>
+  let galleryData = [];
+
+  async function loadGallery() {
+    try {
+      const res = await fetch('gallery.json');
+      const data = await res.json();
+      galleryData = data.personas || [];
+      renderPersonas(galleryData);
+    } catch (e) {
+      document.getElementById('personasGrid').innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: #ef4444;">Failed to load gallery data.</p>`;
+    }
+  }
+
+  function renderPersonas(personas) {
+    const grid = document.getElementById('personasGrid');
+    if (!personas.length) {
+      grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; padding: 40px;">No matching personas found.</p>';
+      return;
+    }
+
+    grid.innerHTML = personas.map(p => {
+      const jsonStr = encodeURIComponent(JSON.stringify(p));
+      const deepLink = `dialex://persona/import?data=${jsonStr}`;
+      return `
+        <div class="card">
+          <div>
+            <div class="card-title">${escapeHtml(p.name)}</div>
+            <span class="category-badge">${escapeHtml(p.category || 'General')}</span>
+            <div class="desc">${escapeHtml(p.description)}</div>
+            <div class="detail-section">
+              ${p.roleAndPersona ? `<div class="detail-label">Role & Persona:</div><div>${escapeHtml(p.roleAndPersona)}</div>` : ''}
+              ${p.coreExpertise ? `<div class="detail-label">Core Expertise:</div><div>${escapeHtml(p.coreExpertise)}</div>` : ''}
+              ${p.toneAndVoice ? `<div class="detail-label">Tone & Voice:</div><div>${escapeHtml(p.toneAndVoice)}</div>` : ''}
+              ${p.objective ? `<div class="detail-label">Objective:</div><div>${escapeHtml(p.objective)}</div>` : ''}
+            </div>
+          </div>
+          <div class="actions">
+            <a href="${deepLink}" class="btn btn-install">Import to App</a>
+            <button class="btn btn-copy" onclick='copyPersona(${JSON.stringify(p)})'>Copy JSON</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function filterPersonas() {
+    const query = document.getElementById('searchInput').value.toLowerCase();
+    const filtered = galleryData.filter(p => 
+      p.name.toLowerCase().includes(query) ||
+      (p.category && p.category.toLowerCase().includes(query)) ||
+      (p.coreExpertise && p.coreExpertise.toLowerCase().includes(query)) ||
+      (p.description && p.description.toLowerCase().includes(query))
+    );
+    renderPersonas(filtered);
+  }
+
+  function copyPersona(p) {
+    navigator.clipboard.writeText(JSON.stringify(p, null, 2));
+    const toast = document.getElementById('toast');
+    toast.style.display = 'block';
+    setTimeout(() => { toast.style.display = 'none'; }, 2200);
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  loadGallery();
+</script>
+
+</body>
+</html>

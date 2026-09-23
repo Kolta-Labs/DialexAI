@@ -1,0 +1,382 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.0.0). Leave empty to use gradle.properties.'
+        required: false
+        default: ''
+      prerelease:
+        description: 'Mark as pre-release'
+        type: boolean
+        default: false
+      draft:
+        description: 'Create as draft release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  prepare-release:
+    name: Prepare Release Metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag_name: ${{ steps.meta.outputs.tag_name }}
+      is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
+      is_draft: ${{ steps.meta.outputs.is_draft }}
+    steps:
+      - name: Checkout DialexAI
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract Version Metadata
+        id: meta
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            RAW_VER="${{ github.event.inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            RAW_VER="${GITHUB_REF#refs/tags/v}"
+          else
+            RAW_VER=$(grep -E "^app.version=" gradle.properties | cut -d'=' -f2 || echo "1.0.0")
+          fi
+          
+          VER="${RAW_VER#v}"
+          TAG="v${VER}"
+          
+          IS_PRE="${{ github.event.inputs.prerelease || 'false' }}"
+          IS_DRAFT="${{ github.event.inputs.draft || 'false' }}"
+          
+          echo "version=${VER}" >> $GITHUB_OUTPUT
+          echo "tag_name=${TAG}" >> $GITHUB_OUTPUT
+          echo "is_prerelease=${IS_PRE}" >> $GITHUB_OUTPUT
+          echo "is_draft=${IS_DRAFT}" >> $GITHUB_OUTPUT
+          
+          echo "📦 Target Release: ${TAG} (Version: ${VER})"
+
+  build-macos:
+    name: Build macOS Desktop (.dmg)
+    needs: prepare-release
+    runs-on: macos-latest
+    steps:
+      - name: Checkout DialexAI
+        uses: actions/checkout@v4
+        with:
+          path: DialexAI
+
+      - name: Checkout KoltLibs Dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Kolta-Labs/KoltLibs
+          path: KoltLibs
+
+      - name: Setup Java JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Package macOS DMG
+        working-directory: DialexAI
+        run: ./gradlew :desktopApp:packageDmg -Papp.version=${{ needs.prepare-release.outputs.version }} --no-daemon
+
+      - name: Stage macOS Artifacts
+        run: |
+          mkdir -p staging-macos
+          find DialexAI/desktopApp/build/compose/binaries/main/dmg -name "*.dmg" -exec cp {} staging-macos/DialexAI-${{ needs.prepare-release.outputs.version }}-macOS-arm64.dmg \;
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dialex-macos
+          path: staging-macos/*
+
+  build-windows:
+    name: Build Windows Desktop (.msi)
+    needs: prepare-release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout DialexAI
+        uses: actions/checkout@v4
+        with:
+          path: DialexAI
+
+      - name: Checkout KoltLibs Dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Kolta-Labs/KoltLibs
+          path: KoltLibs
+
+      - name: Setup Java JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Package Windows MSI Installer
+        working-directory: DialexAI
+        run: ./gradlew :desktopApp:packageMsi -Papp.version=${{ needs.prepare-release.outputs.version }} --no-daemon
+
+      - name: Stage Windows Artifacts
+        shell: bash
+        run: |
+          mkdir -p staging-windows
+          find DialexAI/desktopApp/build/compose/binaries/main/msi -name "*.msi" -exec cp {} staging-windows/DialexAI-${{ needs.prepare-release.outputs.version }}-Windows-x64.msi \;
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dialex-windows
+          path: staging-windows/*
+
+  build-linux:
+    name: Build Linux Desktop (.deb & .rpm)
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout DialexAI
+        uses: actions/checkout@v4
+        with:
+          path: DialexAI
+
+      - name: Checkout KoltLibs Dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Kolta-Labs/KoltLibs
+          path: KoltLibs
+
+      - name: Setup Java JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Linux Packaging Tools
+        run: sudo apt-get update && sudo apt-get install -y rpm fakeroot
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Package Linux DEB and RPM
+        working-directory: DialexAI
+        run: ./gradlew :desktopApp:packageDeb :desktopApp:packageRpm -Papp.version=${{ needs.prepare-release.outputs.version }} --no-daemon
+
+      - name: Stage Linux Artifacts
+        run: |
+          mkdir -p staging-linux
+          find DialexAI/desktopApp/build/compose/binaries/main/deb -name "*.deb" -exec cp {} staging-linux/DialexAI-${{ needs.prepare-release.outputs.version }}-Linux-amd64.deb \;
+          find DialexAI/desktopApp/build/compose/binaries/main/rpm -name "*.rpm" -exec cp {} staging-linux/DialexAI-${{ needs.prepare-release.outputs.version }}-Linux-amd64.rpm \; || true
+
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dialex-linux
+          path: staging-linux/*
+
+  build-android:
+    name: Build Android Mobile (.apk)
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout DialexAI
+        uses: actions/checkout@v4
+        with:
+          path: DialexAI
+
+      - name: Checkout KoltLibs Dependency
+        uses: actions/checkout@v4
+        with:
+          repository: Kolta-Labs/KoltLibs
+          path: KoltLibs
+
+      - name: Setup Java JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Android APKs
+        working-directory: DialexAI
+        run: ./gradlew :androidApp:assembleRelease :androidApp:assembleDebug -Papp.version=${{ needs.prepare-release.outputs.version }} --no-daemon
+
+      - name: Stage Android Artifacts
+        run: |
+          mkdir -p staging-android
+          if [ -f DialexAI/androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk ]; then
+            cp DialexAI/androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}.apk
+          elif [ -f DialexAI/androidApp/build/outputs/apk/release/androidApp-release.apk ]; then
+            cp DialexAI/androidApp/build/outputs/apk/release/androidApp-release.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}.apk
+          else
+            cp DialexAI/androidApp/build/outputs/apk/debug/androidApp-debug.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}-debug.apk
+          fi
+
+      - name: Upload Android Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dialex-android
+          path: staging-android/*
+
+  build-engine-binaries:
+    name: Build Go Engine Standalone Binaries
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            ext: ""
+            archive: tar.gz
+          - os: linux
+            arch: arm64
+            ext: ""
+            archive: tar.gz
+          - os: darwin
+            arch: arm64
+            ext: ""
+            archive: tar.gz
+          - os: darwin
+            arch: amd64
+            ext: ""
+            archive: tar.gz
+          - os: windows
+            arch: amd64
+            ext: ".exe"
+            archive: zip
+    steps:
+      - name: Checkout DialexAI
+        uses: actions/checkout@v4
+
+      - name: Setup Go 1.22
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+
+      - name: Compile Engine Binary
+        working-directory: engine
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
+        run: |
+          mkdir -p dist
+          go build -ldflags="-s -w -X main.Version=v${{ needs.prepare-release.outputs.version }}" \
+            -o dist/dialex-engine${{ matrix.ext }} ./cmd/dialex
+
+      - name: Package Archive
+        working-directory: engine
+        run: |
+          mkdir -p ../staging-engine
+          TARGET_NAME="dialex-engine-v${{ needs.prepare-release.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"
+          if [ "${{ matrix.archive }}" = "tar.gz" ]; then
+            tar -czvf "../staging-engine/${TARGET_NAME}.tar.gz" -C dist dialex-engine${{ matrix.ext }}
+          else
+            cd dist && zip "../../staging-engine/${TARGET_NAME}.zip" dialex-engine${{ matrix.ext }} && cd ..
+          fi
+
+      - name: Upload Engine Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dialex-engine-${{ matrix.os }}-${{ matrix.arch }}
+          path: staging-engine/*
+
+  publish-release:
+    name: Generate Changelog & Publish GitHub Release
+    needs:
+      - prepare-release
+      - build-macos
+      - build-windows
+      - build-linux
+      - build-android
+      - build-engine-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout DialexAI
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download All Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Consolidate Artifacts & Compute Checksums
+        run: |
+          mkdir -p dist-release
+          find release-assets -type f -exec cp {} dist-release/ \;
+          cd dist-release
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          cd ..
+
+      - name: Extract Changelog Section
+        id: changelog
+        run: |
+          TAG="${{ needs.prepare-release.outputs.tag_name }}"
+          VER="${{ needs.prepare-release.outputs.version }}"
+          
+          # Extract notes from CHANGELOG.md for this version if present
+          if grep -q "## \[${VER}\]" CHANGELOG.md; then
+            awk -v ver="${VER}" '
+              $0 ~ "## \\[" ver "\\]" { flag=1; next }
+              $0 ~ "## \\[" && flag { exit }
+              flag { print }
+            ' CHANGELOG.md > release_notes.md
+          else
+            echo "### 🚀 Dialex AI ${TAG} Release" > release_notes.md
+            echo "" >> release_notes.md
+            echo "Autonomous Multi-Agent AI Deliberation Platform by Kolta Labs." >> release_notes.md
+            echo "" >> release_notes.md
+            echo "#### Changes in this release:" >> release_notes.md
+            git log --pretty=format:"- %s (%h)" -n 25 >> release_notes.md
+          fi
+          
+          echo "" >> release_notes.md
+          echo "### 🔒 SHA-256 Checksums" >> release_notes.md
+          echo "\`\`\`" >> release_notes.md
+          cat dist-release/SHA256SUMS.txt >> release_notes.md
+          echo "\`\`\`" >> release_notes.md
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.tag_name }}
+          name: Dialex AI ${{ needs.prepare-release.outputs.tag_name }}
+          body_path: release_notes.md
+          draft: ${{ needs.prepare-release.outputs.is_draft == 'true' }}
+          prerelease: ${{ needs.prepare-release.outputs.is_prerelease == 'true' }}
+          files: dist-release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit & Push Updated Changelog if Modified
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git status --porcelain | grep -q CHANGELOG.md; then
+            git add CHANGELOG.md gradle.properties
+            git commit -m "docs(changelog): update release notes for ${{ needs.prepare-release.outputs.tag_name }} [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          fi

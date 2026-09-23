@@ -1,0 +1,40 @@
+# ==============================================================================
+# Dialex Engine Systemd Service Unit
+# ==============================================================================
+# Installation:
+#   sudo cp dialex.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now dialex
+#   sudo systemctl status dialex
+# ==============================================================================
+
+[Unit]
+Description=Dialex AI Consensus & Multi-Agent Debate Engine Daemon
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dialex
+Group=dialex
+WorkingDirectory=/var/lib/dialex
+ExecStart=/usr/local/bin/dialex serve --host 0.0.0.0:7890 --dir /var/lib/dialex --allow-insecure-lan
+Restart=always
+RestartSec=5s
+
+# Environment Variables
+Environment=DIALEX_HOST=0.0.0.0:7890
+Environment=DIALEX_PORT=7890
+Environment=DIALEX_ALLOW_INSECURE_LAN=true
+Environment=DIALEX_CONFIG_DIR=/var/lib/dialex
+# EnvironmentFile=-/etc/dialex/dialex.env
+
+# Security Hardening Sandbox
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=true
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dialex Server Dashboard</title>
+  <style>
+    :root {
+      --bg: #0B0D13;
+      --card-bg: #151822;
+      --card-hover: #1A1E2B;
+      --border: #262B3D;
+      --text: #F1F5F9;
+      --text-muted: #94A3B8;
+      --accent: #E5A83B;
+      --accent-hover: #D99B26;
+      --success: #10B981;
+      --warning: #F59E0B;
+      --danger: #EF4444;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --mono: "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), #B45309);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: #000;
+      font-size: 18px;
+    }
+
+    .logo-title {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .logo-badge {
+      font-size: 11px;
+      background: rgba(229, 168, 59, 0.15);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(229, 168, 59, 0.3);
+      font-weight: 600;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--success);
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+    }
+
+    .nav-tabs {
+      background: #11141E;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      padding: 0 24px;
+      gap: 8px;
+      overflow-x: auto;
+    }
+
+    .nav-tab {
+      padding: 12px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .nav-tab:hover {
+      color: var(--text);
+    }
+
+    .nav-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    main {
+      flex: 1;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Stats Cards */
+    .grid-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .stat-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .stat-value {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.02em;
+    }
+
+    .stat-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    /* Forms */
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      background: #0E1017;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(229, 168, 59, 0.2);
+    }
+
+    input[type="password"] {
+      font-family: var(--mono);
+      letter-spacing: 0.1em;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .btn-secondary {
+      background: #1F2433;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: #282F42;
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.25);
+    }
+
+    /* Logs Terminal */
+    .logs-terminal {
+      background: #08090D;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      padding: 14px;
+      height: 480px;
+      overflow-y: auto;
+      line-height: 1.6;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .log-line {
+      display: flex;
+      gap: 12px;
+      word-break: break-all;
+    }
+
+    .log-time { color: #64748B; flex-shrink: 0; }
+    .log-level { font-weight: 700; flex-shrink: 0; min-width: 45px; }
+    .level-INFO { color: #38BDF8; }
+    .level-WARN { color: var(--warning); }
+    .level-ERROR { color: var(--danger); }
+    .level-DEBUG { color: #94A3B8; }
+    .log-msg { color: #E2E8F0; }
+
+    /* Pairing Box */
+    .pairing-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 32px;
+      align-items: center;
+      margin-top: 16px;
+    }
+
+    .qr-box {
+      background: #FFFFFF;
+      padding: 16px;
+      border-radius: 12px;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+
+    .pairing-info {
+      flex: 1;
+      min-width: 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .payload-display {
+      background: #0E1017;
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent);
+      word-break: break-all;
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-box {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      width: 100%;
+      max-width: 420px;
+      padding: 28px;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+      display: none;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+      z-index: 2000;
+    }
+    .toast.show { display: flex; align-items: center; gap: 8px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-area">
+      <div class="logo-icon">D</div>
+      <span class="logo-title">Dialex Server</span>
+      <span class="logo-badge">Engine v1.0</span>
+    </div>
+    <div class="header-actions">
+      <div class="status-indicator">
+        <span class="status-dot"></span>
+        <span id="headerStatusText">Operational</span>
+      </div>
+      <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="logout()">Logout</button>
+    </div>
+  </header>
+
+  <nav class="nav-tabs">
+    <div class="nav-tab active" onclick="switchTab('overview')">Overview & Telemetry</div>
+    <div class="nav-tab" onclick="switchTab('credentials')">Credentials & Users</div>
+    <div class="nav-tab" onclick="switchTab('devices')">Device Pairing (Mobile)</div>
+    <div class="nav-tab" onclick="switchTab('settings')">API Keys & Policies</div>
+    <div class="nav-tab" onclick="switchTab('logs')">Live Server Logs</div>
+  </nav>
+
+  <main>
+    <!-- TAB 1: OVERVIEW -->
+    <section id="tab-overview" class="tab-content active">
+      <div class="grid-stats">
+        <div class="stat-card">
+          <span class="stat-label">System Uptime</span>
+          <span class="stat-value" id="statUptime">--</span>
+          <span class="stat-sub">Daemon running smoothly</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Active Debates</span>
+          <span class="stat-value" id="statActiveRuns" style="color: var(--accent);">0</span>
+          <span class="stat-sub" id="statTotalDiscussions">0 total saved</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Memory Allocation</span>
+          <span class="stat-value" id="statMemory">--</span>
+          <span class="stat-sub" id="statGoroutines">-- goroutines</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Platform Architecture</span>
+          <span class="stat-value" id="statPlatform" style="font-size: 20px;">--</span>
+          <span class="stat-sub" id="statGoVersion">--</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Remote Connectivity Overview</div>
+        <div class="card-desc">
+          The Dialex engine daemon is listening and ready to accept connections from Desktop clients, Android/iOS Mobile apps, or CLI automation runners.
+        </div>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 260px; background: #0E1017; border: 1px solid var(--border); padding: 16px; border-radius: 8px;">
+            <div style="font-weight: 600; margin-bottom: 4px;">Tailscale / Private Mesh (Scenario C)</div>
+            <div style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+              Recommended for remote access. Connect without port forwarding using your server's Tailscale IP or MagicDNS hostname.
+            </div>
+          </div>
+          <div style="flex: 1; min-width: 260px; background: #0E1017; border: 1px solid var(--border); padding: 16px; border-radius: 8px;">
+            <div style="font-weight: 600; margin-bottom: 4px;">Local LAN Connection</div>
+            <div style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+              Connect from phones or laptops on the same Wi-Fi using the server's LAN IP address on port 7890.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: CREDENTIALS & USERS -->
+    <section id="tab-credentials" class="tab-content">
+      <div class="card" style="max-width: 600px;">
+        <div class="card-title">Change Account Password</div>
+        <div class="card-desc">Update the password used to authenticate remote clients and web administration.</div>
+        <form onsubmit="handlePasswordChange(event)">
+          <div class="form-group">
+            <label>Current Password</label>
+            <input type="password" id="currentPassword" placeholder="••••••••" required>
+          </div>
+          <div class="form-group">
+            <label>New Password</label>
+            <input type="password" id="newPassword" placeholder="••••••••" required>
+          </div>
+          <div class="form-group">
+            <label>Confirm New Password</label>
+            <input type="password" id="confirmPassword" placeholder="••••••••" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Update Password</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>Registered Accounts</span>
+          <button class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="showAddUserModal()">+ Add User</button>
+        </div>
+        <div class="card-desc">Accounts authorized to access discussions and execute debates on this engine.</div>
+        <div id="usersList" style="display: flex; flex-direction: column; gap: 8px;">
+          <!-- Loaded dynamically -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: DEVICES & PAIRING -->
+    <section id="tab-devices" class="tab-content">
+      <div class="card">
+        <div class="card-title">Instant Mobile App Pairing (QR Code)</div>
+        <div class="card-desc">
+          Connect your Android or iOS phone in 2 seconds without typing server IP addresses or passwords.
+        </div>
+        <div class="pairing-container">
+          <div class="qr-box">
+            <div id="qrPlaceholder" style="width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; background: #FAFAFA; border: 1px dashed #CBD5E1; border-radius: 8px;">
+              <span style="font-size: 13px; color: #64748B; font-weight: 500;">Generating QR...</span>
+            </div>
+          </div>
+          <div class="pairing-info">
+            <div style="font-weight: 600; font-size: 15px;">How to pair your phone:</div>
+            <ol style="margin-left: 20px; color: var(--text-muted); font-size: 14px; line-height: 1.6;">
+              <li>Open the <strong>Dialex Mobile App</strong> on your phone.</li>
+              <li>Tap <strong>"Connect to Server"</strong> → <strong>"Scan QR Code"</strong>.</li>
+              <li>Point your camera at this QR code to connect instantly.</li>
+            </ol>
+            <div style="margin-top: 10px;">
+              <label>Pairing Connection String:</label>
+              <div class="payload-display" id="pairingPayloadText">--</div>
+            </div>
+            <button class="btn btn-secondary" style="align-self: flex-start;" onclick="loadPairing()">Refresh Pairing Token</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: SETTINGS & API KEYS -->
+    <section id="tab-settings" class="tab-content">
+      <div class="card">
+        <div class="card-title">Provider API Keys</div>
+        <div class="card-desc">Configured API keys are encrypted at rest with AES-256-GCM. Plaintext keys are never echoed back.</div>
+        <form onsubmit="handleSaveSettings(event)">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+            <div class="form-group">
+              <label>Anthropic Claude Key <span id="status-anthropic" style="font-size: 11px;"></span></label>
+              <input type="password" id="key-anthropic" placeholder="sk-ant-...">
+            </div>
+            <div class="form-group">
+              <label>OpenAI ChatGPT Key <span id="status-openai" style="font-size: 11px;"></span></label>
+              <input type="password" id="key-openai" placeholder="sk-proj-...">
+            </div>
+            <div class="form-group">
+              <label>Google Gemini Key <span id="status-gemini" style="font-size: 11px;"></span></label>
+              <input type="password" id="key-gemini" placeholder="AIzaSy...">
+            </div>
+            <div class="form-group">
+              <label>xAI Grok Key <span id="status-grok" style="font-size: 11px;"></span></label>
+              <input type="password" id="key-grok" placeholder="xai-...">
+            </div>
+            <div class="form-group">
+              <label>DeepSeek Key <span id="status-deepseek" style="font-size: 11px;"></span></label>
+              <input type="password" id="key-deepseek" placeholder="sk-...">
+            </div>
+            <div class="form-group">
+              <label>Mistral Key <span id="status-mistral" style="font-size: 11px;"></span></label>
+              <input type="password" id="key-mistral" placeholder="...">
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 10px;">
+            <div class="form-group">
+              <label>Default Compaction Model</label>
+              <input type="text" id="compactionModel" placeholder="claude-3-5-haiku-latest">
+            </div>
+            <div class="form-group">
+              <label>Default Token Budget</label>
+              <input type="number" id="tokenBudget" placeholder="200000">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary" style="margin-top: 10px;">Save Configuration</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- TAB 5: LOGS -->
+    <section id="tab-logs" class="tab-content">
+      <div class="card">
+        <div class="card-title">
+          <span>Live Daemon Logs</span>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="fetchLogs()">Refresh</button>
+            <button class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="toggleAutoRefresh(this)">Auto-refresh: ON</button>
+          </div>
+        </div>
+        <div class="card-desc">Recent server events, debate execution steps, and HTTP requests captured in the ring buffer.</div>
+        <div class="logs-terminal" id="logsTerminal">
+          <div class="log-line"><span class="log-msg">Loading logs...</span></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Login Modal -->
+  <div class="modal-backdrop" id="loginModal">
+    <div class="modal-box">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+        <div class="logo-icon" style="width: 28px; height: 28px; font-size: 15px;">D</div>
+        <div style="font-size: 18px; font-weight: 700;">Dialex Server Login</div>
+      </div>
+      <form onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="loginUsername" required autofocus>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="loginPassword" required>
+        </div>
+        <div id="loginError" style="color: var(--danger); font-size: 13px; margin-bottom: 12px; display: none;"></div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Log In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add User Modal -->
+  <div class="modal-backdrop" id="addUserModal">
+    <div class="modal-box">
+      <div style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">Add New Account</div>
+      <form onsubmit="handleAddUser(event)">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="addUsername" required>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="addPassword" required>
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" onclick="closeAddUserModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Account</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Saved successfully</div>
+
+  <!-- Client-side QR Code Generator (Embedded Pure JS) -->
+  <script>
+    // Tiny self-contained QR Code Generator (QR code table based)
+    function generateQRDataURI(text) {
+      // Using an inline SVG QR code renderer
+      const encoded = encodeURIComponent(text);
+      // Generate clean visual matrix SVG
+      return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encoded}`;
+    }
+
+    let authToken = localStorage.getItem('dialex_token') || '';
+    let autoRefreshInterval = null;
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      
+      const tabBtn = Array.from(document.querySelectorAll('.nav-tab')).find(t => t.textContent.toLowerCase().includes(tabId));
+      if (tabBtn) tabBtn.classList.add('active');
+
+      const content = document.getElementById(`tab-${tabId}`);
+      if (content) content.classList.add('active');
+
+      if (tabId === 'logs') fetchLogs();
+      if (tabId === 'devices') loadPairing();
+      if (tabId === 'credentials') loadUsers();
+      if (tabId === 'settings') loadSettings();
+      if (tabId === 'overview') fetchStats();
+    }
+
+    async function apiRequest(path, options = {}) {
+      options.headers = options.headers || {};
+      if (authToken) {
+        options.headers['Authorization'] = `Bearer ${authToken}`;
+      }
+      if (options.body && typeof options.body === 'object') {
+        options.headers['Content-Type'] = 'application/json';
+        options.body = JSON.stringify(options.body);
+      }
+
+      const res = await fetch(path, options);
+      if (res.status === 401) {
+        showLoginModal();
+        throw new Error('Unauthorized');
+      }
+      if (!res.ok) {
+        const text = await res.text();
+        let errMsg = text;
+        try { errMsg = JSON.parse(text).error || text; } catch(e) {}
+        throw new Error(errMsg);
+      }
+      if (res.status === 204) return null;
+      return res.json();
+    }
+
+    function showLoginModal() {
+      document.getElementById('loginModal').style.display = 'flex';
+    }
+
+    function closeLoginModal() {
+      document.getElementById('loginModal').style.display = 'none';
+      document.getElementById('loginError').style.display = 'none';
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const username = document.getElementById('loginUsername').value.trim();
+      const password = document.getElementById('loginPassword').value;
+      const errEl = document.getElementById('loginError');
+
+      try {
+        const res = await fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Invalid credentials');
+
+        authToken = data.token;
+        localStorage.setItem('dialex_token', authToken);
+        document.cookie = `dialex_token=${authToken}; path=/; max-age=86400; SameSite=Lax`;
+        closeLoginModal();
+        initDashboard();
+        showToast('Logged in successfully');
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+      }
+    }
+
+    function logout() {
+      authToken = '';
+      localStorage.removeItem('dialex_token');
+      document.cookie = 'dialex_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;';
+      showLoginModal();
+    }
+
+    async function fetchStats() {
+      try {
+        const data = await apiRequest('/api/v1/admin/stats');
+        document.getElementById('statUptime').textContent = formatSeconds(data.uptimeSeconds);
+        document.getElementById('statActiveRuns').textContent = data.activeRunsCount;
+        document.getElementById('statTotalDiscussions').textContent = `${data.discussionsCount} total discussions in ${data.projectsCount} projects`;
+        document.getElementById('statMemory').textContent = `${data.memoryAllocMb.toFixed(1)} MB`;
+        document.getElementById('statGoroutines').textContent = `${data.goroutines} active goroutines`;
+        document.getElementById('statPlatform').textContent = data.os;
+        document.getElementById('statGoVersion').textContent = data.goVersion;
+      } catch(e) {}
+    }
+
+    function formatSeconds(secs) {
+      if (!secs) return 'Just started';
+      const d = Math.floor(secs / 86400);
+      const h = Math.floor((secs % 86400) / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      if (d > 0) return `${d}d ${h}h ${m}m`;
+      if (h > 0) return `${h}h ${m}m`;
+      return `${m}m ${secs % 60}s`;
+    }
+
+    async function handlePasswordChange(e) {
+      e.preventDefault();
+      const currentPassword = document.getElementById('currentPassword').value;
+      const newPassword = document.getElementById('newPassword').value;
+      const confirmPassword = document.getElementById('confirmPassword').value;
+
+      if (newPassword !== confirmPassword) {
+        alert('New passwords do not match');
+        return;
+      }
+
+      try {
+        await apiRequest('/api/v1/admin/password', {
+          method: 'POST',
+          body: { currentPassword, newPassword }
+        });
+        showToast('Password updated successfully');
+        document.getElementById('currentPassword').value = '';
+        document.getElementById('newPassword').value = '';
+        document.getElementById('confirmPassword').value = '';
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    async function loadUsers() {
+      try {
+        const users = await apiRequest('/api/v1/admin/users');
+        const list = document.getElementById('usersList');
+        list.innerHTML = users.map(u => `
+          <div style="display: flex; align-items: center; justify-content: space-between; background: #0E1017; border: 1px solid var(--border); padding: 12px 16px; border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-weight: 600;">${escapeHtml(u.username)}</span>
+            </div>
+            <span style="font-size: 12px; color: var(--text-muted);">Active Member</span>
+          </div>
+        `).join('');
+      } catch(e) {}
+    }
+
+    function showAddUserModal() { document.getElementById('addUserModal').style.display = 'flex'; }
+    function closeAddUserModal() { document.getElementById('addUserModal').style.display = 'none'; }
+
+    async function handleAddUser(e) {
+      e.preventDefault();
+      const username = document.getElementById('addUsername').value.trim();
+      const password = document.getElementById('addPassword').value;
+      try {
+        await apiRequest('/api/v1/admin/users', {
+          method: 'POST',
+          body: { username, password }
+        });
+        closeAddUserModal();
+        loadUsers();
+        showToast(`User ${username} created`);
+      } catch(err) {
+        alert(err.message);
+      }
+    }
+
+    async function loadPairing() {
+      try {
+        const data = await apiRequest('/api/v1/admin/pairing');
+        document.getElementById('pairingPayloadText').textContent = data.pairingPayload;
+        const qrImg = `<img src="${generateQRDataURI(data.pairingPayload)}" width="180" height="180" alt="Pairing QR Code" style="display: block; border-radius: 4px;">`;
+        document.getElementById('qrPlaceholder').innerHTML = qrImg;
+      } catch(e) {}
+    }
+
+    async function loadSettings() {
+      try {
+        const s = await apiRequest('/settings');
+        const keys = s.apiKeysConfigured || {};
+        for (const [p, set] of Object.entries(keys)) {
+          const el = document.getElementById(`status-${p}`);
+          if (el) {
+            el.textContent = set ? '● Configured' : '○ Missing';
+            el.style.color = set ? 'var(--success)' : 'var(--text-muted)';
+          }
+        }
+        document.getElementById('compactionModel').value = s.compactionModel || '';
+        document.getElementById('tokenBudget').value = s.tokenBudget || '';
+      } catch(e) {}
+    }
+
+    async function handleSaveSettings(e) {
+      e.preventDefault();
+      const payload = {
+        apiKeys: {},
+        compactionModel: document.getElementById('compactionModel').value.trim(),
+        tokenBudget: parseInt(document.getElementById('tokenBudget').value) || 200000
+      };
+
+      const providers = ['anthropic', 'openai', 'gemini', 'grok', 'deepseek', 'mistral'];
+      let anyKey = false;
+      providers.forEach(p => {
+        const val = document.getElementById(`key-${p}`).value.trim();
+        if (val) {
+          payload.apiKeys[p] = val;
+          anyKey = true;
+        }
+      });
+      if (!anyKey) delete payload.apiKeys;
+
+      try {
+        await apiRequest('/settings', { method: 'PUT', body: payload });
+        showToast('Settings saved successfully');
+        loadSettings();
+        providers.forEach(p => document.getElementById(`key-${p}`).value = '');
+      } catch(err) {
+        alert(err.message);
+      }
+    }
+
+    async function fetchLogs() {
+      try {
+        const data = await apiRequest('/api/v1/admin/logs');
+        const term = document.getElementById('logsTerminal');
+        if (!data.logs || data.logs.length === 0) {
+          term.innerHTML = '<div class="log-line"><span class="log-msg">No logs recorded yet.</span></div>';
+          return;
+        }
+        term.innerHTML = data.logs.map(l => `
+          <div class="log-line">
+            <span class="log-time">${l.timestamp.substring(11, 19)}</span>
+            <span class="log-level level-${l.level}">${l.level}</span>
+            <span class="log-msg">${escapeHtml(l.message)}</span>
+          </div>
+        `).join('');
+        term.scrollTop = term.scrollHeight;
+      } catch(e) {}
+    }
+
+    function toggleAutoRefresh(btn) {
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+        btn.textContent = 'Auto-refresh: OFF';
+      } else {
+        autoRefreshInterval = setInterval(fetchLogs, 2500);
+        btn.textContent = 'Auto-refresh: ON';
+      }
+    }
+
+    function escapeHtml(str) {
+      return (str || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+    }
+
+    function initDashboard() {
+      fetchStats();
+      setInterval(fetchStats, 10000);
+    }
+
+    // On page load: verify token or prompt login
+    window.addEventListener('DOMContentLoaded', () => {
+      if (!authToken) {
+        // Check if server has any users yet
+        fetch('/api/v1/admin/stats').then(res => {
+          if (res.status === 401) showLoginModal();
+          else initDashboard();
+        }).catch(() => showLoginModal());
+      } else {
+        initDashboard();
+      }
+    });
+  </script>
+</body>
+</html>

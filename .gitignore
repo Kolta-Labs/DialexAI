@@ -1,14 +1,88 @@
-# Gradle files
+# ==============================================================================
+# Dialex AI — Git Ignore Policy (Open-Source Sovereign Security)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Secrets, Environment Variables & API Credentials
+# ------------------------------------------------------------------------------
+.env
+.env.*
+*.env
+!.env.example
+!.env.template
+
+local.properties
+secrets.properties
+secret.properties
+apikeys.properties
+*.secret
+
+# Cloud & Service Account JSON credentials
+google-services.json
+service-account*.json
+credentials.json
+token.json
+auth.json
+*.auth
+
+# ------------------------------------------------------------------------------
+# 2. Encrypted Vaults, Local Databases & Runtime Storage
+# ------------------------------------------------------------------------------
+# In-device & server local discussion storage
+dialex.vault
+*.vault
+dialex.db
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.backup
+
+# Root runtime data & discussion transcripts directory (anchored to root)
+/data/
+/storage/
+/discussions/
+/backups/
+.dialex/
+
+# ------------------------------------------------------------------------------
+# 3. Cryptographic Keys, Keystores & TLS/SSL Certificates
+# ------------------------------------------------------------------------------
+# Private keys & certificates (never commit private keys)
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.cer
+*.der
+
+# Android & Java signing keystores
+*.jks
+*.keystore
+
+# ------------------------------------------------------------------------------
+# 4. Tailscale & WireGuard State
+# ------------------------------------------------------------------------------
+/tsnet/
+/tsstate/
+/tailscale-state/
+*.tailscale.key
+tsnet-*
+
+# ------------------------------------------------------------------------------
+# 5. Kotlin Multiplatform & Gradle Build Outputs
+# ------------------------------------------------------------------------------
 .gradle/
 build/
-
-# Local configuration file (sdk path, etc)
-local.properties
-
-# Log/OS Files
+**/build/
+.kotlin/
+*.hprof
 *.log
+*.class
 
-# Android Studio generated files and folders
+# Android Studio / NDK
 captures/
 .externalNativeBuild/
 .cxx/
@@ -16,19 +90,66 @@ captures/
 *.apk
 output-metadata.json
 
-# IntelliJ
-*.iml
+# ------------------------------------------------------------------------------
+# 6. Compose Desktop & Go Engine Binaries
+# ------------------------------------------------------------------------------
+# Compiled Go engine binaries
+engine/dialex
+engine/dialex.exe
+engine/bin/
+engine/dist/
+
+# Release staging & output packages (anchored to root)
+/dist/
+/dist-*/
+/staging-*/
+/release-assets/
+*.dmg
+*.msi
+*.exe
+*.deb
+*.rpm
+*.AppImage
+*.tar.gz
+*.zip
+
+# ------------------------------------------------------------------------------
+# 7. IDE & Editor Artifacts
+# ------------------------------------------------------------------------------
 .idea/
+*.iml
+*.iws
+*.ipr
 misc.xml
 deploymentTargetDropDown.xml
 render.experimental.xml
 
-# Keystore files
-*.jks
-*.keystore
+.vscode/
+.fleet/
 
-# Google Services (e.g. APIs or Firebase)
-google-services.json
+# AI Agent Local Metadata
+.gemini/
+.claude/
+.copilot/
+.agents/
 
-# Android Profiling
-*.hprof
+# ------------------------------------------------------------------------------
+# 8. Operating System Files
+# ------------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ------------------------------------------------------------------------------
+# 9. Workspace Local Symlinks & Web Caches
+# ------------------------------------------------------------------------------
+.standards
+node_modules/
+.npm/
+npm-debug.log*
+yarn-error.log*
+.turbo/
