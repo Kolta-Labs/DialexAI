@@ -94,6 +94,14 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/cli/status", s.handleCliStatus)
 	mux.HandleFunc("GET /api/v1/cli/logins", s.handleCliLogins)
 
+	// Knowledge Graph APIs
+	mux.HandleFunc("GET /api/v1/projects/{id}/graph", s.requireAuth(s.handleGetGraph))
+	mux.HandleFunc("GET /api/v1/projects/{id}/graph/search", s.requireAuth(s.handleSearchGraph))
+	mux.HandleFunc("POST /api/v1/projects/{id}/graph/nodes", s.requireAuth(s.handleUpsertNode))
+	mux.HandleFunc("DELETE /api/v1/projects/{id}/graph/nodes/{nodeId}", s.requireAuth(s.handleDeleteNode))
+	mux.HandleFunc("POST /api/v1/projects/{id}/graph/edges", s.requireAuth(s.handleUpsertEdge))
+	mux.HandleFunc("POST /api/v1/graph/decay", s.requireAuth(s.handleTriggerDecay))
+
 	return mux
 }
 

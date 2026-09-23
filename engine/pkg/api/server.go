@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"dialex/pkg/graph"
 	"dialex/pkg/model"
 	"dialex/pkg/orchestrator"
 	"dialex/pkg/runner"
@@ -28,6 +29,7 @@ import (
 // startup is sanitized to PAUSED, resumable normally.
 type Server struct {
 	Store        *store.Store
+	GraphStore   graph.GraphStore
 	Orchestrator *orchestrator.Orchestrator
 	RunnerFor    func(model.Agent) runner.AgentRunner
 	jwtSecret    []byte
@@ -52,6 +54,11 @@ func NewServer(st *store.Store) *Server {
 		jwtSecret: secret,
 		startTime: time.Now().UTC(),
 		runs:      make(map[string]*runController),
+	}
+	if st != nil && st.Dir() != "" {
+		if gs, err := graph.OpenSQLite(filepath.Join(st.Dir(), "graph.db")); err == nil {
+			s.GraphStore = gs
+		}
 	}
 	s.Orchestrator = &orchestrator.Orchestrator{RunnerFor: func(agent model.Agent) runner.AgentRunner {
 		return s.runnerForAgent(agent)

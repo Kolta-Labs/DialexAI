@@ -76,6 +76,11 @@ func New(dir string) (*Store, error) {
 	return &Store{dir: dir, file: file, tmpFile: file + ".tmp", secrets: secrets, legacyPath: legacyPath}, nil
 }
 
+// Dir returns the root directory of the store.
+func (s *Store) Dir() string {
+	return s.dir
+}
+
 // Load reads the current state, importing a legacy state.json (see LegacyStatePath) on
 // first run if this store's own file doesn't exist yet and no import has happened before.
 // Falls back to the newest readable backup if the main file is corrupt, then to a fresh

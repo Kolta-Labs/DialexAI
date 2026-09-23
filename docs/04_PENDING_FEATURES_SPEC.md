@@ -9,7 +9,7 @@ This document serves as the formal specification for pending features slated for
 
 ## 📑 Specification Index
 
-1. [Self-Organizing Knowledge Graph with Temporal Decay](#1-self-organizing-knowledge-graph-with-temporal-decay)
+1. [Self-Organizing Knowledge Graph with Temporal Decay (COMPLETED)](#1-self-organizing-knowledge-graph-with-temporal-decay)
 2. [Pre-Debate Multi-Perspective Problem Decomposition](#2-pre-debate-multi-perspective-problem-decomposition)
 3. [Explicit Contradiction & Tension Pair Detection Engine](#3-explicit-contradiction--tension-pair-detection-engine)
 4. [Round-Aware Dynamic Graph Retrieval (In-Debate RAG)](#4-round-aware-dynamic-graph-retrieval-in-debate-rag)
@@ -21,9 +21,9 @@ This document serves as the formal specification for pending features slated for
 
 ## 1. Self-Organizing Knowledge Graph with Temporal Decay
 
-> [!IMPORTANT]
-> **Priority**: Critical / High Value  
-> **Component**: Go Engine (`pkg/store`, `pkg/graph`), KMP Shared (`domain`, `data`), Desktop/Mobile Visualizer.
+> [!NOTE]
+> **Status**: **COMPLETED** (v1.1)  
+> **Component**: Go Engine (`pkg/graph`, `pkg/api`), KMP Shared (`domain`, `data`, `presentation/graph`), Embedded SQLite + FTS5, Pure-Go WAL.
 
 ### 1.1 Problem Statement
 Currently, Dialex AI stores discussion records in flat atomic JSON files. Each deliberation starts in a fresh silo. Past insights, consensus decisions, trade-offs, and citations do not compound across discussions into institutional memory.

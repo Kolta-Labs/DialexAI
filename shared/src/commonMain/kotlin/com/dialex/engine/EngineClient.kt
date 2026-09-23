@@ -220,6 +220,29 @@ class EngineClient(
     suspend fun setupDiscussionWithAi(request: com.dialex.domain.model.AiSetupRequest): Discussion =
         post("/api/v1/debates/ai-setup", request)
 
+    // ── Knowledge Graph ───────────────────────────────────────────────────────
+
+    suspend fun getActiveGraph(projectId: String, minWeight: Double = 0.1): com.dialex.domain.model.KnowledgeGraph =
+        get("/api/v1/projects/$projectId/graph?min_weight=$minWeight")
+
+    suspend fun searchGraphNodes(projectId: String, query: String, limit: Int = 10): List<com.dialex.domain.model.KnowledgeNode> =
+        get("/api/v1/projects/$projectId/graph/search?q=$query&limit=$limit")
+
+    suspend fun upsertGraphNode(projectId: String, node: com.dialex.domain.model.KnowledgeNode): com.dialex.domain.model.KnowledgeNode =
+        post("/api/v1/projects/$projectId/graph/nodes", node)
+
+    suspend fun deleteGraphNode(nodeId: String) =
+        delete("/api/v1/projects/__any__/graph/nodes/$nodeId")
+
+    suspend fun upsertGraphEdge(projectId: String, edge: com.dialex.domain.model.KnowledgeEdge): com.dialex.domain.model.KnowledgeEdge =
+        post("/api/v1/projects/$projectId/graph/edges", edge)
+
+    @Serializable
+    private data class DecayResponse(val pruned_count: Long = 0L)
+
+    suspend fun triggerGraphDecay(minThreshold: Double = 0.05, maxStaleDays: Int = 180): Long =
+        post<Unit, DecayResponse>("/api/v1/graph/decay", Unit).pruned_count
+
     fun streamDebate(id: String): Flow<Discussion> = flow {
         var retried = false
         while (true) {

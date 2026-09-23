@@ -36,3 +36,7 @@ data class Settings(val initialTab: SettingsTab = SettingsTab.Appearance) : AppR
 /** Persona Builder — create or edit a [PredefinedPersona]. Null means a new persona. */
 @Serializable
 data class PersonaBuilder(val personaId: String? = null) : AppRoute
+
+/** Self-organizing Knowledge Graph visualizer and explorer. */
+@Serializable
+data class Graph(val projectId: String) : AppRoute

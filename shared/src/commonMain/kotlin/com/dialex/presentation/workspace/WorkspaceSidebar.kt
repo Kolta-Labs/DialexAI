@@ -4,12 +4,15 @@ package com.dialex.presentation.workspace
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.draw.shadow
 import com.dialex.model.UserInterventionPolicy
 import com.dialex.util.formatRelativeTime
 import com.dialex.ui.CliStatusFooter
 import com.dialex.ui.windowTitleBarDoubleClick
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -122,6 +125,7 @@ fun WorkspaceSidebar(
     onOpenSettings: () -> Unit,
     onOpenAiSetup: () -> Unit = {},
     onOpenPersonaBuilder: () -> Unit,
+    onOpenKnowledgeGraph: ((projectId: String) -> Unit)? = null,
     onOpenAbout: (() -> Unit)? = null,
     onSendFeedback: (() -> Unit)? = null,
     connectionLabel: String,
@@ -733,6 +737,30 @@ fun WorkspaceSidebar(
                                     }
                                 }
 
+                                if (onOpenKnowledgeGraph != null) {
+                                    Surface(
+                                        color = Color.Transparent,
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 44.dp)
+                                            .clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                projectMenuOpen = false
+                                                onOpenKnowledgeGraph.invoke(project.id)
+                                            }
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                                        ) {
+                                            Icon(Icons.Outlined.Hub, contentDescription = null, tint = cc.accent, modifier = Modifier.size(20.dp))
+                                            Spacer(Modifier.width(12.dp))
+                                            Text("Knowledge Graph", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp), color = cc.textPrimary)
+                                        }
+                                    }
+                                }
+
                                 if (!isUngrouped) {
                                     HorizontalDivider(color = cc.border.copy(alpha = 0.35f), modifier = Modifier.padding(vertical = 4.dp))
 
@@ -768,17 +796,47 @@ fun WorkspaceSidebar(
                         val projectInteractionSource = remember { MutableInteractionSource() }
                         val isProjectHovered by projectInteractionSource.collectIsHoveredAsState()
 
+                        // Smoothly animated drop target properties
+                        val targetBgColor by animateColorAsState(
+                            targetValue = when {
+                                isDropTarget -> cc.accent.copy(alpha = 0.22f)
+                                isProjectHovered -> if (cc.isDark) Color(0xFF1E1F24) else Color(0xFFEBECEE)
+                                else -> Color.Transparent
+                            },
+                            animationSpec = tween(180)
+                        )
+                        val targetBorderColor by animateColorAsState(
+                            targetValue = if (isDropTarget) cc.accent else Color.Transparent,
+                            animationSpec = tween(180)
+                        )
+                        val targetBorderWidth by animateDpAsState(
+                            targetValue = if (isDropTarget) 1.5.dp else 0.dp,
+                            animationSpec = tween(180)
+                        )
+                        val targetScale by animateFloatAsState(
+                            targetValue = if (isDropTarget) 1.025f else 1.0f,
+                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioMediumBouncy)
+                        )
+
+                        // Auto-expand project when dragging discussion hovers over it
+                        LaunchedEffect(isDropTarget) {
+                            if (isDropTarget && isCollapsed) {
+                                delay(380)
+                                collapsedProjects[project.id] = false
+                            }
+                        }
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .graphicsLayer {
+                                    scaleX = targetScale
+                                    scaleY = targetScale
+                                }
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(
-                                    if (isDropTarget) cc.accent.copy(alpha = 0.15f)
-                                    else if (isProjectHovered) (if (cc.isDark) Color(0xFF1E1F24) else Color(0xFFEBECEE))
-                                    else Color.Transparent
-                                )
+                                .background(targetBgColor)
                                 .then(
-                                    if (isDropTarget) Modifier.border(BorderStroke(1.5.dp, cc.accent), RoundedCornerShape(8.dp))
+                                    if (targetBorderWidth > 0.dp) Modifier.border(BorderStroke(targetBorderWidth, targetBorderColor), RoundedCornerShape(8.dp))
                                     else Modifier
                                 )
                                 .onGloballyPositioned { coords ->
@@ -805,27 +863,34 @@ fun WorkspaceSidebar(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 val projectItemColor = if (isDropTarget) cc.accent else (if (cc.isDark) Color(0xFF9CA3AF).copy(alpha = 0.8f) else Color(0xFF6B7280).copy(alpha = 0.8f))
-                                Icon(
-                                    when {
-                                        isDropTarget -> Icons.AutoMirrored.Outlined.DriveFileMove
-                                        isExpanded -> Icons.Filled.FolderOpen
-                                        else -> Icons.Outlined.Folder
-                                    },
-                                    contentDescription = if (isExpanded) "Collapse ${project.name}" else "Expand ${project.name}",
-                                    tint = projectItemColor,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    if (isDropTarget) "Drop to move here" else project.name,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontWeight = FontWeight.Medium,
-                                        fontSize = 14.sp
-                                    ),
-                                    color = projectItemColor,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                AnimatedContent(
+                                    targetState = isDropTarget,
+                                    transitionSpec = { fadeIn(tween(140)) togetherWith fadeOut(tween(140)) }
+                                ) { activeDrop ->
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            when {
+                                                activeDrop -> Icons.AutoMirrored.Outlined.DriveFileMove
+                                                isExpanded -> Icons.Filled.FolderOpen
+                                                else -> Icons.Outlined.Folder
+                                            },
+                                            contentDescription = if (isExpanded) "Collapse ${project.name}" else "Expand ${project.name}",
+                                            tint = projectItemColor,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            if (activeDrop) "Drop to move here" else project.name,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontWeight = if (activeDrop) FontWeight.SemiBold else FontWeight.Medium,
+                                                fontSize = 14.sp
+                                            ),
+                                            color = projectItemColor,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
                                 if (isCollapsed && !isDropTarget && visibleDiscussions.isNotEmpty()) {
                                     Spacer(Modifier.width(6.dp))
                                     Text(
@@ -943,6 +1008,30 @@ fun WorkspaceSidebar(
                                                     ),
                                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                                                 )
+                                                if (onOpenKnowledgeGraph != null) {
+                                                    DropdownMenuItem(
+                                                        modifier = Modifier.height(32.dp),
+                                                        text = {
+                                                            Text(
+                                                                "Knowledge Graph",
+                                                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, fontWeight = FontWeight.Normal),
+                                                                color = cc.textPrimary
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            projectMenuOpen = false
+                                                            onOpenKnowledgeGraph.invoke(project.id)
+                                                        },
+                                                        leadingIcon = {
+                                                            Icon(Icons.Outlined.Hub, contentDescription = null, tint = cc.accent, modifier = Modifier.size(15.dp))
+                                                        },
+                                                        colors = MenuDefaults.itemColors(
+                                                            textColor = cc.textPrimary,
+                                                            leadingIconColor = cc.accent
+                                                        ),
+                                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                                    )
+                                                }
                                                 if (!isUngrouped) {
                                                     HorizontalDivider(color = cc.border.copy(alpha = 0.35f), modifier = Modifier.padding(vertical = 2.dp))
                                                     DropdownMenuItem(
@@ -1021,6 +1110,7 @@ fun WorkspaceSidebar(
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioNoBouncy))
                                         .padding(top = 1.dp, bottom = 2.dp),
                                     verticalArrangement = Arrangement.spacedBy(1.dp)
                                 ) {
@@ -1494,9 +1584,13 @@ private fun SidebarDiscussionRow(
 
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
+    val coroutineScope = rememberCoroutineScope()
     var itemWindowPos by remember { mutableStateOf(Offset.Zero) }
     var dragDelta by remember { mutableStateOf(Offset.Zero) }
+    var startTouchOffset by remember { mutableStateOf(Offset.Zero) }
     var isItemDragging by remember { mutableStateOf(false) }
+    val dragOffsetAnim = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
+    var lastHitProject by remember { mutableStateOf<String?>(null) }
     var discActionsOpen by remember { mutableStateOf(false) }
     var discMenuOpen by remember { mutableStateOf(false) }
 
@@ -1649,21 +1743,44 @@ private fun SidebarDiscussionRow(
         }
     }
 
+    // Floating elevation and scale animations for the dragged card
+    val dragScale by animateFloatAsState(
+        targetValue = if (isItemDragging) 1.03f else 1.0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioMediumBouncy)
+    )
+    val dragElevation by animateDpAsState(
+        targetValue = if (isItemDragging) 10.dp else 0.dp,
+        animationSpec = tween(150)
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .zIndex(if (isItemDragging) 100f else 0f)
+            .graphicsLayer {
+                translationX = dragOffsetAnim.value.x
+                translationY = dragOffsetAnim.value.y
+                scaleX = dragScale
+                scaleY = dragScale
+                rotationZ = (dragOffsetAnim.value.x * 0.035f).coerceIn(-4f, 4f)
+                alpha = if (isItemDragging) 0.90f else 1.0f
+                shadowElevation = if (isItemDragging) 16f else 0f
+            }
+            .then(
+                if (isItemDragging) Modifier.shadow(dragElevation, RoundedCornerShape(8.dp))
+                else Modifier
+            )
             .clip(RoundedCornerShape(8.dp))
             .background(
-                if (isSelected) (if (cc.isDark) Color(0xFF282830) else Color(0xFFE5E7EB))
+                if (isItemDragging) (if (cc.isDark) Color(0xFF2E3038) else Color(0xFFE5E7EB))
+                else if (isSelected) (if (cc.isDark) Color(0xFF282830) else Color(0xFFE5E7EB))
                 else if (isHovered) (if (cc.isDark) Color(0xFF1E1F24) else Color(0xFFEDEDEE))
                 else Color.Transparent
             )
-            .graphicsLayer {
-                if (isItemDragging) {
-                    translationY = dragDelta.y
-                    alpha = 0.7f
-                }
-            }
+            .then(
+                if (isItemDragging) Modifier.border(BorderStroke(1.dp, cc.accent.copy(alpha = 0.6f)), RoundedCornerShape(8.dp))
+                else Modifier
+            )
             .onGloballyPositioned { coords ->
                 itemWindowPos = coords.positionInWindow()
             }
@@ -1671,30 +1788,60 @@ private fun SidebarDiscussionRow(
                 if (showProjectIndent && onDragStateChange != null) {
                     Modifier.pointerInput(disc.id) {
                         detectDragGestures(
-                            onDragStart = {
+                            onDragStart = { localOffset ->
                                 isItemDragging = true
+                                startTouchOffset = localOffset
+                                lastHitProject = null
                                 dragDelta = Offset.Zero
+                                coroutineScope.launch { dragOffsetAnim.snapTo(Offset.Zero) }
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onDragStateChange(true, disc, null)
                             },
                             onDragEnd = {
-                                isItemDragging = false
-                                dragDelta = Offset.Zero
-                                onDragStateChange(false, null, null)
+                                val targetProj = lastHitProject
+                                if (targetProj != null && onMoveDiscussionToProject != null) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onMoveDiscussionToProject.invoke(disc.id, targetProj)
+                                    isItemDragging = false
+                                    dragDelta = Offset.Zero
+                                    coroutineScope.launch { dragOffsetAnim.snapTo(Offset.Zero) }
+                                    onDragStateChange(false, null, null)
+                                } else {
+                                    onDragStateChange(false, null, null)
+                                    coroutineScope.launch {
+                                        dragOffsetAnim.animateTo(
+                                            Offset.Zero,
+                                            spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
+                                        )
+                                        isItemDragging = false
+                                        dragDelta = Offset.Zero
+                                    }
+                                }
+                                lastHitProject = null
                             },
                             onDragCancel = {
-                                isItemDragging = false
-                                dragDelta = Offset.Zero
                                 onDragStateChange(false, null, null)
+                                coroutineScope.launch {
+                                    dragOffsetAnim.animateTo(
+                                        Offset.Zero,
+                                        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
+                                    )
+                                    isItemDragging = false
+                                    dragDelta = Offset.Zero
+                                }
+                                lastHitProject = null
                             },
                             onDrag = { change, dragAmount ->
                                 change.consume()
                                 dragDelta += dragAmount
-                                val currentGlobal = itemWindowPos + dragDelta
+                                coroutineScope.launch { dragOffsetAnim.snapTo(dragDelta) }
+                                val cursorGlobal = itemWindowPos + startTouchOffset + dragDelta
                                 val hitProject = projectBounds.entries.firstOrNull { (projId, rect) ->
                                     projId != disc.projectId &&
-                                    currentGlobal.x in rect.left..rect.right &&
-                                    currentGlobal.y in rect.top..rect.bottom
+                                    cursorGlobal.x in (rect.left - 24f)..(rect.right + 24f) &&
+                                    cursorGlobal.y in (rect.top - 8f)..(rect.bottom + 8f)
                                 }?.key
+                                lastHitProject = hitProject
                                 onDragStateChange(true, disc, hitProject)
                             }
                         )

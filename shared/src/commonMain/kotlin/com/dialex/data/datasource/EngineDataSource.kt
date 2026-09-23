@@ -95,6 +95,26 @@ class EngineDataSource(private val client: EngineClient) {
     suspend fun getCliLogins(): Map<String, Boolean> =
         wrap { client.getCliLogins() }
 
+    // ── Knowledge Graph ───────────────────────────────────────────────────────
+
+    suspend fun getActiveGraph(projectId: String, minWeight: Double = 0.1): com.dialex.domain.model.KnowledgeGraph =
+        wrap { client.getActiveGraph(projectId, minWeight) }
+
+    suspend fun searchGraphNodes(projectId: String, query: String, limit: Int = 10): List<com.dialex.domain.model.KnowledgeNode> =
+        wrap { client.searchGraphNodes(projectId, query, limit) }
+
+    suspend fun upsertGraphNode(projectId: String, node: com.dialex.domain.model.KnowledgeNode): com.dialex.domain.model.KnowledgeNode =
+        wrap { client.upsertGraphNode(projectId, node) }
+
+    suspend fun deleteGraphNode(nodeId: String) =
+        wrap { client.deleteGraphNode(nodeId) }
+
+    suspend fun upsertGraphEdge(projectId: String, edge: com.dialex.domain.model.KnowledgeEdge): com.dialex.domain.model.KnowledgeEdge =
+        wrap { client.upsertGraphEdge(projectId, edge) }
+
+    suspend fun triggerGraphDecay(minThreshold: Double = 0.05, maxStaleDays: Int = 180): Long =
+        wrap { client.triggerGraphDecay(minThreshold, maxStaleDays) }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**

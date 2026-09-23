@@ -27,6 +27,7 @@ import com.dialex.data.repository.ProfileRepositoryImpl
 import com.dialex.data.repository.ProjectRepositoryImpl
 import com.dialex.data.repository.SettingsRepositoryImpl
 import com.dialex.data.repository.TemplateRepositoryImpl
+import com.dialex.data.repository.GraphRepositoryImpl
 import com.dialex.domain.model.ConnectionProfile
 import com.dialex.domain.repository.ApiKeyRepository
 import com.dialex.domain.repository.DiscussionRepository
@@ -36,6 +37,9 @@ import com.dialex.domain.repository.ProfileRepository
 import com.dialex.domain.repository.ProjectRepository
 import com.dialex.domain.repository.SettingsRepository
 import com.dialex.domain.repository.TemplateRepository
+import com.dialex.domain.repository.GraphRepository
+import com.dialex.presentation.graph.GraphRoute
+import com.dialex.presentation.nav.Graph
 import com.dialex.presentation.profile.ProfileLockDialog
 import com.dialex.engine.EngineClient
 import com.dialex.ui.LocalWindowMaximizeToggle
@@ -169,6 +173,7 @@ fun App(
     val discussionRepository: DiscussionRepository? = remember(dataSource) { dataSource?.let { DiscussionRepositoryImpl(it) } }
     val personaRepository: PersonaRepository? = remember(dataSource) { dataSource?.let { PersonaRepositoryImpl(it) } }
     val settingsRepository: SettingsRepository? = remember(dataSource) { dataSource?.let { SettingsRepositoryImpl(it) } }
+    val graphRepository: GraphRepository? = remember(dataSource) { dataSource?.let { GraphRepositoryImpl(it) } }
 
     // Live state of projects and discussions for the Sidebar
     var projects by remember { mutableStateOf<List<Project>>(emptyList()) }
@@ -392,6 +397,16 @@ fun App(
                             isCompact = false,
                         )
                     }
+                } else if (currentRoute is Graph) {
+                    // ── Full-Width Knowledge Graph ──
+                    if (graphRepository != null) {
+                        GraphRoute(
+                            projectId = currentRoute.projectId,
+                            graphRepository = graphRepository,
+                            onBack = { backStack.removeLast() },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 } else {
                     // ── Two-Pane Layout (Master-Detail with Resizable Splitter) ──
                     Row(Modifier.fillMaxSize()) {
@@ -518,6 +533,7 @@ fun App(
                                 showAiSetupDialog = true
                             },
                             onOpenPersonaBuilder = { backStack.add(Settings(SettingsTab.Personas)) },
+                            onOpenKnowledgeGraph = { projId -> backStack.add(Graph(projId)) },
                             onOpenAbout = { backStack.add(Settings(SettingsTab.About)) },
                             onSendFeedback = { showGlobalFeedbackDialog = true },
                             connectionLabel = connectionLabel,
@@ -782,6 +798,16 @@ fun App(
                                         }
                                     }
                                     is Connect -> {}
+                                    is Graph -> {
+                                        if (graphRepository != null) {
+                                            GraphRoute(
+                                                projectId = targetRoute.projectId,
+                                                graphRepository = graphRepository,
+                                                onBack = { backStack.removeLast() },
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -880,6 +906,16 @@ fun App(
                                         personaRepository = personaRepository,
                                         onBack = { backStack.removeLast() },
                                         isCompact = true,
+                                    )
+                                }
+                            }
+                            is Graph -> {
+                                if (graphRepository != null) {
+                                    GraphRoute(
+                                        projectId = targetRoute.projectId,
+                                        graphRepository = graphRepository,
+                                        onBack = { backStack.removeLast() },
+                                        modifier = Modifier.fillMaxSize()
                                     )
                                 }
                             }
