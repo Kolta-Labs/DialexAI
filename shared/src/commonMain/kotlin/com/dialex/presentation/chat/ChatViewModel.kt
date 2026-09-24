@@ -181,6 +181,10 @@ class ChatViewModel(
                 try {
                     discussionRepository.streamDiscussion(discussionId)
                         .onEach { updatedDiscussion ->
+                            // Stream is alive — clear any prior connection-lost flag.
+                            if (state.value.engineConnectionLost) {
+                                setState { copy(engineConnectionLost = false) }
+                            }
                             applyUpdatedDiscussion(updatedDiscussion)
                             if (updatedDiscussion.status != DiscussionStatus.RUNNING) {
                                 return@onEach
@@ -200,12 +204,20 @@ class ChatViewModel(
                 // If stream finishes or drops while still RUNNING, fetch latest snapshot
                 val latest = runCatching { discussionRepository.getDiscussion(discussionId) }.getOrNull()
                 if (latest != null) {
+                    // Poll succeeded — engine is reachable again.
+                    if (state.value.engineConnectionLost) {
+                        setState { copy(engineConnectionLost = false) }
+                    }
                     applyUpdatedDiscussion(latest)
                     if (latest.status != DiscussionStatus.RUNNING) {
                         break
                     }
                     delay(400)
                 } else {
+                    // Both stream and poll failed — engine is unreachable.
+                    if (!state.value.engineConnectionLost) {
+                        setState { copy(nextSpeakerProvider = null, engineConnectionLost = true) }
+                    }
                     delay(1000)
                 }
             }

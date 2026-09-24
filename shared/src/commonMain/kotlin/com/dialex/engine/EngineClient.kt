@@ -243,6 +243,23 @@ class EngineClient(
     suspend fun triggerGraphDecay(minThreshold: Double = 0.05, maxStaleDays: Int = 180): Long =
         post<Unit, DecayResponse>("/api/v1/graph/decay", Unit).pruned_count
 
+    // ── Problem Decomposition ────────────────────────────────────────────────
+    suspend fun decomposeProblem(
+        topic: String,
+        context: String = "",
+        model: String? = null,
+        provider: String? = null
+    ): com.dialex.domain.model.ProblemDecomposition =
+        post(
+            "/api/v1/discussions/decompose",
+            com.dialex.domain.model.DecompositionRequest(
+                topic = topic,
+                context = context,
+                model = model,
+                provider = provider
+            )
+        )
+
     fun streamDebate(id: String): Flow<Discussion> = flow {
         var retried = false
         while (true) {

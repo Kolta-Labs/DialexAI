@@ -115,6 +115,16 @@ class EngineDataSource(private val client: EngineClient) {
     suspend fun triggerGraphDecay(minThreshold: Double = 0.05, maxStaleDays: Int = 180): Long =
         wrap { client.triggerGraphDecay(minThreshold, maxStaleDays) }
 
+    // ── Problem Decomposition ────────────────────────────────────────────────
+
+    suspend fun decomposeProblem(
+        topic: String,
+        context: String = "",
+        model: String? = null,
+        provider: String? = null
+    ): com.dialex.domain.model.ProblemDecomposition =
+        wrap { client.decomposeProblem(topic, context, model, provider) }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**

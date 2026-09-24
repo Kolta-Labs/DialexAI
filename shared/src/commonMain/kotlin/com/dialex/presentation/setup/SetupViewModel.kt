@@ -33,6 +33,7 @@ class SetupViewModel(
     private val discussionRepository: DiscussionRepository,
     private val settingsRepository: SettingsRepository,
     private val templateRepository: TemplateRepository,
+    private val decompositionUseCase: com.dialex.domain.usecase.DecomposeProblemUseCase? = null,
     private val discussionId: String?,
     private val initialProjectId: String? = null,
     private val copyFromDiscussionId: String? = null,
@@ -674,6 +675,117 @@ class SetupViewModel(
             is SetupIntent.OpenSettings -> sendEffect(SetupEffect.NavigateToSettings)
             is SetupIntent.OpenPersonaBuilder -> sendEffect(SetupEffect.NavigateToPersonaBuilder)
             is SetupIntent.DismissError -> setState { copy(saveAsync = AsyncState.Idle) }
+            is SetupIntent.RequestProblemDecomposition -> {
+                val topic = state.value.discussion?.config?.topic?.trim().orEmpty()
+                if (topic.isBlank()) {
+                    sendEffect(SetupEffect.ShowSnackbar("Please enter a topic before decomposing the problem."))
+                    return
+                }
+                setState { copy(isDecomposing = true) }
+                viewModelScope.launch {
+                    try {
+                        val useCase = decompositionUseCase
+                        val context = state.value.discussion?.config?.commonContext.orEmpty()
+                        val result = if (useCase != null) {
+                            useCase(topic, context)
+                        } else {
+                            // Fallback heuristic if not wired
+                            com.dialex.domain.model.ProblemDecomposition(
+                                topic = topic,
+                                perspectiveA = com.dialex.domain.model.DecompositionPerspective(
+                                    id = "tech",
+                                    name = "Technical & Structural Architecture",
+                                    lensDescription = "Evaluates formal correctness, state invariants, fault isolation, and low-level performance guarantees.",
+                                    axes = listOf(
+                                        com.dialex.domain.model.ProblemAxis("axis_1", "State Consistency & SLAs", "Enforce strict transactional invariants.", "Decouple dependencies for <20ms latency.", listOf("Can we accept eventual consistency?"), 0.9),
+                                        com.dialex.domain.model.ProblemAxis("axis_2", "Blast Radius & Fault Isolation", "Isolate failure domains with circuit breakers.", "Avoid distributed coordination overhead.", listOf("How does system behave under partition?"), 0.85)
+                                    )
+                                ),
+                                perspectiveB = com.dialex.domain.model.DecompositionPerspective(
+                                    id = "strat",
+                                    name = "Product & Strategic Velocity",
+                                    lensDescription = "Evaluates delivery timelines, developer cognitive load, blast radius, and total lifecycle costs.",
+                                    axes = listOf(
+                                        com.dialex.domain.model.ProblemAxis("axis_3", "Cognitive Load & Hiring", "Adopt battle-tested paradigms.", "Invest in high-leverage esoteric technologies.", listOf("What is ramp-up time for new hires?"), 0.85),
+                                        com.dialex.domain.model.ProblemAxis("axis_4", "Time-to-Market vs Debt", "Ship MVP immediately.", "Build robust abstractions to avoid bankruptcy.", listOf("What is the cost of delay?"), 0.75)
+                                    )
+                                )
+                            )
+                        }
+                        val allIds = (result.perspectiveA.axes.map { it.id } + result.perspectiveB.axes.map { it.id }).toImmutableSet()
+                        setState {
+                            copy(
+                                isDecomposing = false,
+                                activeDecomposition = result,
+                                showDecompositionSheet = true,
+                                selectedAxisIds = allIds
+                            )
+                        }
+                    } catch (e: Exception) {
+                        setState { copy(isDecomposing = false) }
+                        sendEffect(SetupEffect.ShowSnackbar("Decomposition failed: ${e.message ?: "Unknown error"}"))
+                    }
+                }
+            }
+            is SetupIntent.DismissDecompositionSheet -> {
+                setState { copy(showDecompositionSheet = false) }
+            }
+            is SetupIntent.ToggleAxisSelection -> {
+                val current = state.value.selectedAxisIds
+                val updated = if (current.contains(intent.axisId)) current - intent.axisId else current + intent.axisId
+                setState { copy(selectedAxisIds = updated.toImmutableSet()) }
+            }
+            is SetupIntent.SelectAllPerspectiveA -> {
+                val decomp = state.value.activeDecomposition ?: return
+                val aIds = decomp.perspectiveA.axes.map { it.id }.toSet()
+                setState { copy(selectedAxisIds = aIds.toImmutableSet()) }
+            }
+            is SetupIntent.SelectAllPerspectiveB -> {
+                val decomp = state.value.activeDecomposition ?: return
+                val bIds = decomp.perspectiveB.axes.map { it.id }.toSet()
+                setState { copy(selectedAxisIds = bIds.toImmutableSet()) }
+            }
+            is SetupIntent.ApplyDecompositionToAgenda -> {
+                val decomp = state.value.activeDecomposition ?: return
+                val selectedIds = state.value.selectedAxisIds
+                val allAxes = decomp.perspectiveA.axes + decomp.perspectiveB.axes
+                val chosenAxes = allAxes.filter { it.id in selectedIds }
+                if (chosenAxes.isEmpty()) {
+                    sendEffect(SetupEffect.ShowSnackbar("Select at least one axis to include in the debate agenda."))
+                    return
+                }
+
+                val agendaText = buildString {
+                    appendLine("### 🎯 Structured Debate Agenda: Orthogonal Problem Axes")
+                    appendLine("The council must explicitly address and resolve the following orthogonal tensions:")
+                    chosenAxes.forEachIndexed { idx, axis ->
+                        appendLine("${idx + 1}. **${axis.title}** (Weight: ${axis.weight})")
+                        appendLine("   - *Thesis*: ${axis.thesis}")
+                        appendLine("   - *Antithesis*: ${axis.antithesis}")
+                        if (axis.keyQuestions.isNotEmpty()) {
+                            appendLine("   - *Core Questions*: ${axis.keyQuestions.joinToString("; ")}")
+                        }
+                    }
+                }
+
+                val currentDisc = state.value.discussion ?: return
+                val existingContext = currentDisc.config.commonContext.trim()
+                val updatedContext = if (existingContext.isBlank()) {
+                    agendaText
+                } else {
+                    existingContext.replace(Regex("### 🎯 Structured Debate Agenda[\\s\\S]*?(?=\\n\\n###|\\Z)"), "").trim() + "\n\n" + agendaText
+                }
+                val updatedConfig = currentDisc.config.copy(commonContext = updatedContext)
+                val updatedDisc = currentDisc.copy(config = updatedConfig)
+                setState {
+                    copy(
+                        discussion = updatedDisc,
+                        showDecompositionSheet = false
+                    )
+                }
+                sendEffect(SetupEffect.DecompositionApplied)
+                sendEffect(SetupEffect.ShowSnackbar("Debate agenda updated with ${chosenAxes.size} orthogonal axes."))
+            }
         }
     }
 

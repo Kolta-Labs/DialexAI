@@ -89,6 +89,14 @@ data class SetupState(
     val advancedExpanded: Boolean = false,
     val loadAsync: AsyncState<Unit> = AsyncState.Idle,
     val saveAsync: AsyncState<Unit> = AsyncState.Idle,
+    /** Whether problem decomposition analysis is currently executing. */
+    val isDecomposing: Boolean = false,
+    /** The active decomposition result generated for the current topic. */
+    val activeDecomposition: com.dialex.domain.model.ProblemDecomposition? = null,
+    /** Whether the decomposition inspection and selection modal is displayed. */
+    val showDecompositionSheet: Boolean = false,
+    /** Set of selected axis IDs to be included in the debate agenda. */
+    val selectedAxisIds: ImmutableSet<String> = persistentSetOf(),
 )
 
 sealed interface SetupIntent {
@@ -122,6 +130,12 @@ sealed interface SetupIntent {
     data object OpenSettings : SetupIntent
     data object OpenPersonaBuilder : SetupIntent
     data object DismissError : SetupIntent
+    data object RequestProblemDecomposition : SetupIntent
+    data object DismissDecompositionSheet : SetupIntent
+    data class ToggleAxisSelection(val axisId: String) : SetupIntent
+    data object SelectAllPerspectiveA : SetupIntent
+    data object SelectAllPerspectiveB : SetupIntent
+    data object ApplyDecompositionToAgenda : SetupIntent
 }
 
 sealed interface SetupEffect {
@@ -130,4 +144,5 @@ sealed interface SetupEffect {
     data object NavigateToSettings : SetupEffect
     data object NavigateToPersonaBuilder : SetupEffect
     data class ShowSnackbar(val message: String) : SetupEffect
+    data object DecompositionApplied : SetupEffect
 }

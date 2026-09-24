@@ -63,6 +63,9 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("POST /api/v1/debates/{id}/generate-title", s.requireAuth(s.handleGenerateDebateTitle))
 	mux.HandleFunc("POST /debates/ai-setup", s.requireAuth(s.handleAISetup))
 	mux.HandleFunc("POST /api/v1/debates/ai-setup", s.requireAuth(s.handleAISetup))
+	mux.HandleFunc("POST /debates/decompose", s.requireAuth(s.handleDecomposeProblem))
+	mux.HandleFunc("POST /api/v1/discussions/decompose", s.requireAuth(s.handleDecomposeProblem))
+	mux.HandleFunc("POST /api/v1/debates/decompose", s.requireAuth(s.handleDecomposeProblem))
 
 	mux.HandleFunc("GET /settings", s.requireAuth(s.handleGetSettings))
 	mux.HandleFunc("PUT /settings", s.requireAuth(s.handleUpdateSettings))

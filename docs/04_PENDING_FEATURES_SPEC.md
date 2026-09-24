@@ -10,7 +10,7 @@ This document serves as the formal specification for pending features slated for
 ## 📑 Specification Index
 
 1. [Self-Organizing Knowledge Graph with Temporal Decay (COMPLETED)](#1-self-organizing-knowledge-graph-with-temporal-decay)
-2. [Pre-Debate Multi-Perspective Problem Decomposition](#2-pre-debate-multi-perspective-problem-decomposition)
+2. [Pre-Debate Multi-Perspective Problem Decomposition (COMPLETED)](#2-pre-debate-multi-perspective-problem-decomposition)
 3. [Explicit Contradiction & Tension Pair Detection Engine](#3-explicit-contradiction--tension-pair-detection-engine)
 4. [Round-Aware Dynamic Graph Retrieval (In-Debate RAG)](#4-round-aware-dynamic-graph-retrieval-in-debate-rag)
 5. [Dedicated 1-on-1 Socratic Interview Mode](#5-dedicated-1-on-1-socratic-interview-mode)
@@ -50,9 +50,9 @@ Implement an embedded, local-first **SQLite + FTS5** graph storage engine with t
 
 ## 2. Pre-Debate Multi-Perspective Problem Decomposition
 
-> [!IMPORTANT]
-> **Priority**: High  
-> **Component**: Go Engine (`pkg/orchestrator`), KMP Presentation (`setup`, `chat`).
+> [!NOTE]
+> **Status**: **COMPLETED** (v1.2)  
+> **Component**: Go Engine (`pkg/decomposition`, `pkg/api`), KMP Shared (`domain`, `data`, `presentation/setup`), Compose UI.
 
 ### 2.1 Problem Statement
 Deliberations currently begin immediately with Round 1 framing by the Moderator. Complex, multifaceted dilemmas (e.g., *"Should we rewrite our core engine in Rust or Go?"*) often suffer from initial framing bias if the dilemma is not first split into its core orthogonal tensions.

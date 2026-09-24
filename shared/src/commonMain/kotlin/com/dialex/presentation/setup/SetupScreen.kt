@@ -872,12 +872,56 @@ fun SetupScreen(
                     onIntent(SetupIntent.AttachFile(fileName, content, scope = "topic"))
                 }
 
-                Text(
-                    "Discussion Objective & Topic",
-                    style = MaterialTheme.typography.titleSmall.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                    color = cc.textPrimary,
-                    modifier = Modifier.padding(start = 2.dp, bottom = 10.dp)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 2.dp, bottom = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Discussion Objective & Topic",
+                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                        color = cc.textPrimary
+                    )
+
+                    Surface(
+                        onClick = { onIntent(SetupIntent.RequestProblemDecomposition) },
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (state.isDecomposing) cc.accent.copy(alpha = 0.2f) else cc.panel,
+                        border = BorderStroke(1.dp, cc.accent.copy(alpha = 0.6f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (state.isDecomposing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = cc.accent
+                                )
+                                Text(
+                                    "Decomposing...",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = cc.accent
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = cc.accent,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    "⚡ Decompose Problem",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = cc.accent
+                                )
+                            }
+                        }
+                    }
+                }
 
                 val topicChips = discussion.attachedFiles
                     .filter { it.scope == "topic" }
@@ -894,6 +938,45 @@ fun SetupScreen(
                     onRemoveChip = { fileId -> onIntent(SetupIntent.RemoveFile(fileId)) },
                     cc = cc
                 )
+
+                if (config.commonContext.contains("Structured Debate Agenda")) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color(0xFF10B981).copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.35f)),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color(0xFF10B981),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    "Structured Multi-Perspective Agenda Active",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF10B981)
+                                )
+                            }
+                            Text(
+                                "Review / Re-Decompose",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = cc.accent,
+                                modifier = Modifier.clickable { onIntent(SetupIntent.RequestProblemDecomposition) }
+                            )
+                        }
+                    }
+                }
 
                 Spacer(Modifier.height(32.dp))
 

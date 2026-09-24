@@ -40,6 +40,7 @@ fun SetupRoute(
     discussionRepository: DiscussionRepository,
     settingsRepository: SettingsRepository,
     templateRepository: TemplateRepository,
+    decompositionUseCase: com.dialex.domain.usecase.DecomposeProblemUseCase? = null,
     onToggleSidebar: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null,
     isCompact: Boolean = false,
@@ -52,6 +53,7 @@ fun SetupRoute(
             discussionRepository = discussionRepository,
             settingsRepository = settingsRepository,
             templateRepository = templateRepository,
+            decompositionUseCase = decompositionUseCase,
             discussionId = discussionId,
             initialProjectId = initialProjectId,
             copyFromDiscussionId = copyFromDiscussionId,
@@ -90,6 +92,9 @@ fun SetupRoute(
                 SetupEffect.NavigateToPersonaBuilder -> backStack.add(PersonaBuilder(null))
                 is SetupEffect.ShowSnackbar -> {
                     snackbarHostState.showSnackbar(effect.message)
+                }
+                SetupEffect.DecompositionApplied -> {
+                    // Agenda successfully formatted and appended into discussion context
                 }
             }
         }
@@ -162,5 +167,18 @@ fun SetupRoute(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+
+        val decomp = state.activeDecomposition
+        if (state.showDecompositionSheet && decomp != null) {
+            DecompositionModal(
+                decomposition = decomp,
+                selectedAxisIds = state.selectedAxisIds,
+                onToggleAxis = { viewModel.onIntent(SetupIntent.ToggleAxisSelection(it)) },
+                onSelectAllPerspectiveA = { viewModel.onIntent(SetupIntent.SelectAllPerspectiveA) },
+                onSelectAllPerspectiveB = { viewModel.onIntent(SetupIntent.SelectAllPerspectiveB) },
+                onApplyToAgenda = { viewModel.onIntent(SetupIntent.ApplyDecompositionToAgenda) },
+                onDismiss = { viewModel.onIntent(SetupIntent.DismissDecompositionSheet) }
+            )
+        }
     }
 }

@@ -174,6 +174,12 @@ fun App(
     val personaRepository: PersonaRepository? = remember(dataSource) { dataSource?.let { PersonaRepositoryImpl(it) } }
     val settingsRepository: SettingsRepository? = remember(dataSource) { dataSource?.let { SettingsRepositoryImpl(it) } }
     val graphRepository: GraphRepository? = remember(dataSource) { dataSource?.let { GraphRepositoryImpl(it) } }
+    val decompositionRepository: com.dialex.domain.repository.DecompositionRepository? = remember(dataSource) {
+        dataSource?.let { com.dialex.data.repository.DecompositionRepositoryImpl(it) }
+    }
+    val decomposeProblemUseCase = remember(decompositionRepository) {
+        decompositionRepository?.let { com.dialex.domain.usecase.DecomposeProblemUseCase(it) }
+    }
 
     // Live state of projects and discussions for the Sidebar
     var projects by remember { mutableStateOf<List<Project>>(emptyList()) }
@@ -674,6 +680,7 @@ fun App(
                                                 discussionRepository = discussionRepository,
                                                 settingsRepository = settingsRepository,
                                                 templateRepository = templateRepository,
+                                                decompositionUseCase = decomposeProblemUseCase,
                                                 onToggleSidebar = if (!sidebarVisible) { { sidebarVisible = true } } else null,
                                                 onBack = {
                                                     if (backStack.size > 1) {
@@ -765,6 +772,7 @@ fun App(
                                                         discussionRepository = discussionRepository,
                                                         settingsRepository = settingsRepository,
                                                         templateRepository = templateRepository,
+                                                        decompositionUseCase = decomposeProblemUseCase,
                                                         onToggleSidebar = if (!sidebarVisible) { { sidebarVisible = true } } else null,
                                                         isCompact = false
                                                     )
@@ -792,6 +800,7 @@ fun App(
                                                 discussionRepository = discussionRepository,
                                                 settingsRepository = settingsRepository,
                                                 templateRepository = templateRepository,
+                                                decompositionUseCase = decomposeProblemUseCase,
                                                 onToggleSidebar = if (!sidebarVisible) { { sidebarVisible = true } } else null,
                                                 isCompact = false
                                             )
@@ -851,6 +860,7 @@ fun App(
                                         discussionRepository = discussionRepository,
                                         settingsRepository = settingsRepository,
                                         templateRepository = templateRepository,
+                                        decompositionUseCase = decomposeProblemUseCase,
                                         onBack = { backStack.removeLast() },
                                         isCompact = true,
                                     )

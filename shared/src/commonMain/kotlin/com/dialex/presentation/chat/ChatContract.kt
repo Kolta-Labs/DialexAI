@@ -41,6 +41,10 @@ data class ChatState(
     /** Percentage of prompt input tokens resolved via prompt caching (0-100%). */
     val cachedTokensPercent: Int = 0,
     val loadAsync: AsyncState<Unit> = AsyncState.Loading,
+    /** True while the discussion is RUNNING but both the SSE stream and the fallback
+     *  poll are failing — the engine is unreachable. Clears automatically once a poll
+     *  or stream update succeeds again. */
+    val engineConnectionLost: Boolean = false,
 )
 
 /** One row in the token usage modal — one entry per agent seat. */
