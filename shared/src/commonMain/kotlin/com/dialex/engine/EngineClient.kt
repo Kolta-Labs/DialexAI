@@ -365,6 +365,29 @@ class EngineClient(
     suspend fun socraticElevate(discussionId: String, request: SocraticElevateRequest): ElevateResult =
         post("/api/v1/discussions/$discussionId/socratic/elevate", request)
 
+    // ── Null Hypothesis Benchmarks ─────────────────────────────────────────────
+
+    suspend fun listBenchmarkCases(): List<com.dialex.domain.model.BenchmarkCase> =
+        get("/api/v1/benchmarks/cases")
+
+    suspend fun createBenchmarkCase(case: com.dialex.domain.model.BenchmarkCase): com.dialex.domain.model.BenchmarkCase =
+        post("/api/v1/benchmarks/cases", case)
+
+    suspend fun runBenchmark(request: com.dialex.domain.model.RunBenchmarkRequest): com.dialex.domain.model.BenchmarkRun =
+        post("/api/v1/benchmarks/run", request)
+
+    suspend fun listBenchmarkRuns(): List<com.dialex.domain.model.BenchmarkRun> =
+        get("/api/v1/benchmarks/runs")
+
+    suspend fun getBenchmarkRun(id: String): com.dialex.domain.model.BenchmarkRun =
+        get("/api/v1/benchmarks/runs/$id")
+
+    suspend fun getBenchmarkSummary(): com.dialex.domain.model.BenchmarkSummary =
+        get("/api/v1/benchmarks/summary")
+
+    suspend fun exportBenchmarks(format: String = "markdown"): String =
+        getText("/api/v1/benchmarks/export?format=$format")
+
 
     // ── Settings ──────────────────────────────────────────────────────────────
 
@@ -413,6 +436,49 @@ class EngineClient(
             resBody = requireSuccess(response)
             success = true
             return json.decodeFromString(resBody)
+        } catch (e: Exception) {
+            errorMsg = e.message ?: e.toString()
+            throw e
+        } finally {
+            val duration = System.currentTimeMillis() - start
+            val reqHeaders = buildMap {
+                if (authenticated && token != null) put("Authorization", "Bearer $token")
+            }
+            com.dialex.logging.ApiCallStore.trackEngineCall(
+                method = "GET",
+                url = fullUrl,
+                requestHeaders = reqHeaders,
+                requestBody = null,
+                responseStatusCode = statusCode,
+                responseHeaders = emptyMap(),
+                responseBody = resBody ?: errorMsg,
+                errorDetails = errorMsg,
+                durationMs = duration,
+                isSuccess = success
+            )
+        }
+    }
+
+    private suspend fun getText(path: String, authenticated: Boolean = true): String {
+        val start = System.currentTimeMillis()
+        val fullUrl = "$baseUrl$path"
+        var statusCode: Int? = null
+        var resBody: String? = null
+        var errorMsg: String? = null
+        var success = false
+        try {
+            var response = client.get(fullUrl) {
+                if (authenticated) authenticate()
+            }
+            if (response.status.value == 401 && authenticated && tryAutoReauth()) {
+                response = client.get(fullUrl) {
+                    authenticate()
+                }
+            }
+            statusCode = response.status.value
+            resBody = requireSuccess(response)
+            success = true
+            return resBody
         } catch (e: Exception) {
             errorMsg = e.message ?: e.toString()
             throw e

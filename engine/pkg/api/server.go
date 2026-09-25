@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"dialex/pkg/benchmark"
 	"dialex/pkg/graph"
 	"dialex/pkg/model"
 	"dialex/pkg/orchestrator"
@@ -28,12 +29,13 @@ import (
 // as the desktop app's own runningJobs map always did — a RUNNING discussion found on
 // startup is sanitized to PAUSED, resumable normally.
 type Server struct {
-	Store        *store.Store
-	GraphStore   graph.GraphStore
-	Orchestrator *orchestrator.Orchestrator
-	RunnerFor    func(model.Agent) runner.AgentRunner
-	jwtSecret    []byte
-	startTime    time.Time
+	Store          *store.Store
+	GraphStore     graph.GraphStore
+	BenchmarkStore *benchmark.Store
+	Orchestrator   *orchestrator.Orchestrator
+	RunnerFor      func(model.Agent) runner.AgentRunner
+	jwtSecret      []byte
+	startTime      time.Time
 
 	mu   sync.Mutex
 	runs map[string]*runController
@@ -59,6 +61,12 @@ func NewServer(st *store.Store) *Server {
 		if gs, err := graph.OpenSQLite(filepath.Join(st.Dir(), "graph.db")); err == nil {
 			s.GraphStore = gs
 		}
+		if bs, err := benchmark.NewStore(st.Dir()); err == nil {
+			s.BenchmarkStore = bs
+		}
+	}
+	if s.BenchmarkStore == nil {
+		s.BenchmarkStore = benchmark.NewMemoryStore()
 	}
 	s.Orchestrator = &orchestrator.Orchestrator{RunnerFor: func(agent model.Agent) runner.AgentRunner {
 		return s.runnerForAgent(agent)
@@ -75,6 +83,9 @@ func NewServer(st *store.Store) *Server {
 // run because it "looks" already running. PAUSED is exactly what it actually is: stopped,
 // resumable from its last successful turn.
 func sanitizeStaleRunningStatus(st *store.Store) {
+	if st == nil {
+		return
+	}
 	state, err := st.Load()
 	if err != nil {
 		return

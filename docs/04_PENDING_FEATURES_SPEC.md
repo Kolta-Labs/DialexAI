@@ -292,8 +292,8 @@ Convening a 4-to-6-model council is resource-intensive when a user merely wants 
 ## 6. Null Hypothesis Benchmarking & Quantitative Evaluation Suite
 
 > [!NOTE]
-> **Status**: **APPROVED ARCHITECTURAL SPECIFICATION** (v1.6) — Detailed spec: [**docs/features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md**](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md)  
-> **Component**: Go Engine (`pkg/benchmark`, `pkg/api`), CLI (`cmd/dialexbench`), KMP Shared (`domain`, `data`, `presentation/arena`), Web Admin Dashboard (`:8080/admin/benchmarks`).
+> **Status**: **COMPLETED** (v1.6) — Detailed spec: [**docs/features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md**](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md)  
+> **Component**: Go Engine (`pkg/benchmark`, `pkg/api`), CLI (`cmd/dialexbench`), KMP Shared (`domain`, `data`, `presentation/arena`), Desktop Compose UI, Web Admin Dashboard (`:8080/admin/benchmarks`).
 
 ### 6.1 Problem Statement
 To establish scientific legitimacy and enterprise ROI, Dialex AI must empirically prove that multi-agent deliberation yields superior, less hallucinated outcomes than a single well-prompted frontier model.

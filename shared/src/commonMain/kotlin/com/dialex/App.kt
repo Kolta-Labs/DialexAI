@@ -28,6 +28,7 @@ import com.dialex.data.repository.ProjectRepositoryImpl
 import com.dialex.data.repository.SettingsRepositoryImpl
 import com.dialex.data.repository.TemplateRepositoryImpl
 import com.dialex.data.repository.GraphRepositoryImpl
+import com.dialex.data.repository.BenchmarkRepositoryImpl
 import com.dialex.domain.model.ConnectionProfile
 import com.dialex.domain.repository.ApiKeyRepository
 import com.dialex.domain.repository.DiscussionRepository
@@ -38,7 +39,10 @@ import com.dialex.domain.repository.ProjectRepository
 import com.dialex.domain.repository.SettingsRepository
 import com.dialex.domain.repository.TemplateRepository
 import com.dialex.domain.repository.GraphRepository
+import com.dialex.domain.repository.BenchmarkRepository
+import com.dialex.presentation.arena.BenchmarkRoute
 import com.dialex.presentation.graph.GraphRoute
+import com.dialex.presentation.nav.BenchmarkArena
 import com.dialex.presentation.nav.Graph
 import com.dialex.presentation.profile.ProfileLockDialog
 import com.dialex.engine.EngineClient
@@ -207,6 +211,9 @@ fun App(
     }
     val decomposeProblemUseCase = remember(decompositionRepository) {
         decompositionRepository?.let { com.dialex.domain.usecase.DecomposeProblemUseCase(it) }
+    }
+    val benchmarkRepository: BenchmarkRepository? = remember(dataSource) {
+        dataSource?.let { BenchmarkRepositoryImpl(it) }
     }
 
     // Live state of projects and discussions for the Sidebar
@@ -434,6 +441,15 @@ fun App(
                             isCompact = false,
                         )
                     }
+                } else if (currentRoute is BenchmarkArena) {
+                    // ── Full-Width Benchmark Arena ──
+                    if (benchmarkRepository != null) {
+                        BenchmarkRoute(
+                            benchmarkRepository = benchmarkRepository,
+                            onBack = { backStack.removeLast() },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 } else if (currentRoute is Graph) {
                     // ── Full-Width Knowledge Graph ──
                     if (graphRepository != null) {
@@ -584,6 +600,7 @@ fun App(
                             },
                             onOpenPersonaBuilder = { backStack.add(Settings(SettingsTab.Personas)) },
                             onOpenKnowledgeGraph = { projId -> backStack.add(Graph(projId)) },
+                            onOpenBenchmarkArena = { backStack.add(BenchmarkArena) },
                             onOpenAbout = { backStack.add(Settings(SettingsTab.About)) },
                             onSendFeedback = { showGlobalFeedbackDialog = true },
                             connectionLabel = connectionLabel,
@@ -863,6 +880,15 @@ fun App(
                                             )
                                         }
                                     }
+                                    is BenchmarkArena -> {
+                                        if (benchmarkRepository != null) {
+                                            BenchmarkRoute(
+                                                benchmarkRepository = benchmarkRepository,
+                                                onBack = { backStack.removeLast() },
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -972,6 +998,15 @@ fun App(
                                     GraphRoute(
                                         projectId = targetRoute.projectId,
                                         graphRepository = graphRepository,
+                                        onBack = { backStack.removeLast() },
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                            }
+                            is BenchmarkArena -> {
+                                if (benchmarkRepository != null) {
+                                    BenchmarkRoute(
+                                        benchmarkRepository = benchmarkRepository,
                                         onBack = { backStack.removeLast() },
                                         modifier = Modifier.fillMaxSize()
                                     )

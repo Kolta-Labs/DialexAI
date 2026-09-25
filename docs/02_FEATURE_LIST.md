@@ -157,7 +157,7 @@ This document details all user-facing capabilities, unique selling propositions 
 
 The following advanced capabilities have been implemented or are queued for implementation in [**docs/04_PENDING_FEATURES_SPEC.md**](04_PENDING_FEATURES_SPEC.md):
 
-### Completed Features (v1.1 – v1.5)
+### Completed Features (v1.1 – v1.6)
 1. **Self-Organizing Knowledge Graph & Drag-and-Drop Workspace Organization (COMPLETED)**:
    - Local-first pure-Go SQLite + FTS5 graph storage with activation energy mathematical decay ($W(t) = W_0 \cdot 2^{-\Delta t / t_{\text{half}}}$) and Hebbian edge reinforcement ($\Delta W = \eta (1 - W)$).
    - Interactive 2D force-directed canvas with pan/zoom and activation filters.
@@ -181,13 +181,13 @@ The following advanced capabilities have been implemented or are queued for impl
    - *Brevis Interrogatio* rule ($\le 2$ sentences) forcing high-leverage tension and concise dialectic dialogue.
    - Live Epistemic Ledger tracking green **Hardened Invariants** vs red strike-through **Surrendered Concessions**, reactive Dialogue Assist Chips, structured **Socratic Digest**, and 1-click **Council Elevation**.
    - 📖 **Full Architectural Specification**: [**docs/features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md**](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md)
+6. **Null Hypothesis Benchmarking & Quantitative Evaluation Suite (COMPLETED)**:
+   - Automated testing framework validating multi-agent debate superiority against single-model baselines across hallucination, blind spot coverage, trade-off depth, and actionability metrics with paired two-tailed Student's $t$-test ($p < 0.05$).
+   - Full-stack execution: Native Desktop KMP UI (Sidebar "⚔️ Arena & Benchmarks" with spider/radar chart and side-by-side deliverable comparison) + Web Admin (`:8080/admin/benchmarks`) + CLI runner (`dialexbench`).
+   - Includes embedded **DialexBench-10** canonical dilemma dataset plus custom dilemma authoring and Markdown/CSV/JSON export.
+   - 📖 **Full Architectural Specification**: [**docs/features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md**](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md)
 
 ### Pending Roadmap Capabilities
-6. **Null Hypothesis Benchmarking & Evaluation Suite (SPEC APPROVED)**:
-   - Automated testing framework validating multi-agent debate superiority against single-model baselines across hallucination, blind spot coverage, trade-off depth, and actionability metrics ($p < 0.05$).
-   - Full-stack execution: Native Desktop KMP UI (Sidebar "Arena & Benchmarks") + Web Admin (`:8080/admin/benchmarks`) + CLI runner (`dialexbench`).
-   - Includes embedded **DialexBench-10** canonical dilemma dataset plus custom dilemma authoring.
-   - 📖 **Full Architectural Specification**: [**docs/features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md**](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md)
 7. **8-Layer DNA Mental & Structured Persona Ingestion**: Standardized cognitive schema (epistemic bias, communication vector, taboo spaces, heuristics) with MMOS export compatibility.
 
 ---

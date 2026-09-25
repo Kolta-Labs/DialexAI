@@ -127,6 +127,7 @@ fun WorkspaceSidebar(
     onOpenAiSetup: () -> Unit = {},
     onOpenPersonaBuilder: () -> Unit,
     onOpenKnowledgeGraph: ((projectId: String) -> Unit)? = null,
+    onOpenBenchmarkArena: (() -> Unit)? = null,
     onOpenAbout: (() -> Unit)? = null,
     onSendFeedback: (() -> Unit)? = null,
     connectionLabel: String,
@@ -492,6 +493,48 @@ fun WorkspaceSidebar(
                         ),
                         color = cc.textPrimary.copy(alpha = 0.9f)
                     )
+                }
+
+                // Item 4: Clean Flat Row for "Arena & Benchmarks"
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(34.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onOpenBenchmarkArena?.invoke() }
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Outlined.Assessment,
+                        contentDescription = "Deliberation Arena & Benchmarks",
+                        tint = Color(0xFF8B5CF6),
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "Arena & Benchmarks",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Normal
+                        ),
+                        color = cc.textPrimary.copy(alpha = 0.9f)
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFF8B5CF6).copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            "Eval",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = if (cc.isDark) Color(0xFFA78BFA) else Color(0xFF7C3AED),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
                 }
             }
 

@@ -113,6 +113,15 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("POST /api/v1/projects/{id}/graph/edges", s.requireAuth(s.handleUpsertEdge))
 	mux.HandleFunc("POST /api/v1/graph/decay", s.requireAuth(s.handleTriggerDecay))
 
+	// Null Hypothesis Benchmark & Arena APIs
+	mux.HandleFunc("GET /api/v1/benchmarks/cases", s.requireAuth(s.handleListBenchmarkCases))
+	mux.HandleFunc("POST /api/v1/benchmarks/cases", s.requireAuth(s.handleCreateBenchmarkCase))
+	mux.HandleFunc("POST /api/v1/benchmarks/run", s.requireAuth(s.handleRunBenchmark))
+	mux.HandleFunc("GET /api/v1/benchmarks/runs", s.requireAuth(s.handleListBenchmarkRuns))
+	mux.HandleFunc("GET /api/v1/benchmarks/runs/{id}", s.requireAuth(s.handleGetBenchmarkRun))
+	mux.HandleFunc("GET /api/v1/benchmarks/summary", s.requireAuth(s.handleGetBenchmarkSummary))
+	mux.HandleFunc("GET /api/v1/benchmarks/export", s.requireAuth(s.handleExportBenchmarks))
+
 	return mux
 }
 

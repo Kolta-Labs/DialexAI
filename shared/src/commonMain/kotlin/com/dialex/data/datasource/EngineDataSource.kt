@@ -147,6 +147,29 @@ class EngineDataSource(private val client: EngineClient) {
     ): com.dialex.domain.model.ProblemDecomposition =
         wrap { client.decomposeProblem(topic, context, model, provider) }
 
+    // ── Null Hypothesis Benchmarks ─────────────────────────────────────────────
+
+    suspend fun listBenchmarkCases(): List<com.dialex.domain.model.BenchmarkCase> =
+        wrap { client.listBenchmarkCases() }
+
+    suspend fun createBenchmarkCase(case: com.dialex.domain.model.BenchmarkCase): com.dialex.domain.model.BenchmarkCase =
+        wrap { client.createBenchmarkCase(case) }
+
+    suspend fun runBenchmark(request: com.dialex.domain.model.RunBenchmarkRequest): com.dialex.domain.model.BenchmarkRun =
+        wrap { client.runBenchmark(request) }
+
+    suspend fun listBenchmarkRuns(): List<com.dialex.domain.model.BenchmarkRun> =
+        wrap { client.listBenchmarkRuns() }
+
+    suspend fun getBenchmarkRun(id: String): com.dialex.domain.model.BenchmarkRun =
+        wrap { client.getBenchmarkRun(id) }
+
+    suspend fun getBenchmarkSummary(): com.dialex.domain.model.BenchmarkSummary =
+        wrap { client.getBenchmarkSummary() }
+
+    suspend fun exportBenchmarks(format: String = "markdown"): String =
+        wrap { client.exportBenchmarks(format) }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**
