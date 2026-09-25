@@ -80,7 +80,6 @@ class PersonaBuilderViewModel(
             is PersonaBuilderIntent.CoreExpertiseChanged -> setState { copy(draft = draft.copy(coreExpertise = intent.value)) }
             is PersonaBuilderIntent.ToneAndVoiceChanged -> setState { copy(draft = draft.copy(toneAndVoice = intent.value)) }
             is PersonaBuilderIntent.ObjectiveChanged -> setState { copy(draft = draft.copy(objective = intent.value)) }
-            is PersonaBuilderIntent.CavemanToggled -> setState { copy(draft = draft.copy(caveman = intent.enabled)) }
             is PersonaBuilderIntent.PonytailToggled -> setState { copy(draft = draft.copy(ponytail = intent.enabled)) }
             is PersonaBuilderIntent.AutoComposePrompt -> {
                 val composed = buildComposedSystemPrompt(

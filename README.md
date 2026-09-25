@@ -118,7 +118,7 @@ flowchart TD
     </td>
     <td width="50%" align="center">
       <img src="docs/screenshots/08_persona_studio_ai_builder.png" alt="Persona Studio and AI Prompt Builder" width="100%" />
-      <br/><em>Figure 6: Persona Studio with Caveman/Ponytail style switches and AI Persona Builder.</em>
+      <br/><em>Figure 6: Persona Studio with Ponytail style switch and AI Persona Builder.</em>
     </td>
   </tr>
 </table>
@@ -134,7 +134,7 @@ flowchart TD
 ### 2. 🎭 Two-Tab Persona Registry & Live Customization
 - **10 Universal Debate Archetypes**: Plain-language roles including *The Facilitator*, *Devil's Advocate*, *The Optimist*, *The Pragmatist*, *The Contrarian*, *The Expert*, *The Risk Analyst*, *The Ethicist*, *The Historian*, and *The Futurist*.
 - **40+ Specialized Domain Personas**: Expandable domains covering Software Engineering, Scientific Research, Journalism, Product Strategy, Legal, and Healthcare.
-- **PersonaBadge & Live Edit Sheet**: Selected personas attach as clean chips without polluting context fields. Tap the pencil icon to modify instructions on the fly, toggle **Caveman Mode** (extreme brevity) or **Ponytail Mode** (executive structure), and save as a `(Custom)` persona.
+- **PersonaBadge & Live Edit Sheet**: Selected personas attach as clean chips without polluting context fields. Tap the pencil icon to modify instructions on the fly, toggle **Ponytail Mode** (executive structure), and save as a `(Custom)` persona.
 
 ### 3. 🛡️ 3-Tier Anti-Fluff & Anti-Rabbit-Hole Guardrails
 - **Human Dialogue Mode**: Enforces concise turns (2–4 sentences), eliminates sycophantic pleasantries (*"I agree with my colleague"*), and requires direct technical challenges.

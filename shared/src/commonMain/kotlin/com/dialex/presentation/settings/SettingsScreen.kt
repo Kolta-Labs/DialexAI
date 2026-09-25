@@ -2645,7 +2645,7 @@ private fun PersonasTab(state: SettingsState, onIntent: (SettingsIntent) -> Unit
             }
 
             // Behavioral Modifiers Section
-            if (currentViewingPersona.caveman || currentViewingPersona.ponytail) {
+            if (currentViewingPersona.ponytail) {
                 Surface(
                     color = cc.panelAlt,
                     shape = RoundedCornerShape(12.dp),
@@ -2660,19 +2660,17 @@ private fun PersonasTab(state: SettingsState, onIntent: (SettingsIntent) -> Unit
                         )
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (currentViewingPersona.caveman) {
-                                Surface(
-                                    color = cc.panelAlt,
-                                    shape = RoundedCornerShape(6.dp),
-                                    border = BorderStroke(0.75.dp, cc.border)
-                                ) {
-                                    Text(
-                                        "Caveman (Ultra-terse communication)",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = cc.textPrimary,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                    )
-                                }
+                            Surface(
+                                color = cc.panelAlt,
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(0.75.dp, cc.border)
+                            ) {
+                                Text(
+                                    "Ponytail (Structured executive communication)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = cc.textPrimary,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
                             }
                         }
                     }
@@ -3294,13 +3292,13 @@ private fun PersonaTile(
                         )
                     }
 
-                    if (persona.caveman) {
+                    if (persona.ponytail) {
                         Surface(
                             color = cc.agentThird.copy(alpha = 0.12f),
                             shape = RoundedCornerShape(4.dp)
                         ) {
                             Text(
-                                "Caveman",
+                                "Ponytail",
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Medium),
                                 color = cc.agentThird,
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)

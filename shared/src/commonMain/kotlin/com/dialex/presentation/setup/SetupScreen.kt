@@ -1849,7 +1849,6 @@ private fun ParticipantCard(
                 name = agent.displayName.ifBlank { "Custom Role" },
                 role = agent.role,
                 systemPrompt = agent.systemPrompt,
-                caveman = agent.caveman,
                 ponytail = agent.ponytail
             ) ?: PredefinedPersona(
                 id = agent.personaId,
@@ -2294,7 +2293,7 @@ private fun ParticipantCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left bottom: PersonaBadge and Style Toggles (Caveman & Ponytail Ultra Mode)
+                // Left bottom: PersonaBadge and Toggles
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -2318,40 +2317,11 @@ private fun ParticipantCard(
                                 personaId = null,
                                 role = "",
                                 systemPrompt = "",
-                                caveman = false,
                                 ponytail = false,
                                 displayName = "Agent $seatIndex"
                             ))
                         }
                     )
-
-                    // Caveman Style Chip
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = if (agent.caveman) cc.accent.copy(alpha = 0.14f) else cc.panelAlt,
-                        border = BorderStroke(0.75.dp, if (agent.caveman) cc.accent else cc.border.copy(alpha = 0.4f)),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable { onAgentChange(agent.copy(caveman = !agent.caveman)) }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            if (agent.caveman) {
-                                Icon(Icons.Default.Check, null, tint = cc.accent, modifier = Modifier.size(11.dp))
-                            }
-                            Text(
-                                "Caveman",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 11.sp,
-                                    fontWeight = if (agent.caveman) FontWeight.SemiBold else FontWeight.Normal
-                                ),
-                                color = if (agent.caveman) cc.accent else cc.textPrimary
-                            )
-                        }
-                    }
 
                     // Web Search Toggle Chip
                     val isWebSearchActive = agent.allowWebSearch ?: true
@@ -2706,14 +2676,12 @@ private fun ParticipantCard(
                         personaId = null,
                         role = "",
                         systemPrompt = "",
-                        caveman = false,
                         ponytail = false,
                         displayName = "Agent $seatIndex"
                     ))
                     is PersonaSelectionResult.Stock -> onAgentChange(agent.copy(
                         personaId = result.persona.id,
                         role = result.persona.role,
-                        caveman = result.persona.caveman,
                         ponytail = result.persona.ponytail,
                         systemPrompt = "",
                         displayName = result.persona.name
@@ -2721,7 +2689,6 @@ private fun ParticipantCard(
                     is PersonaSelectionResult.Custom -> onAgentChange(agent.copy(
                         personaId = "${result.basePersonaId}_custom",
                         role = result.role,
-                        caveman = result.caveman,
                         ponytail = result.ponytail,
                         systemPrompt = result.systemPrompt,
                         displayName = if (result.displayName.endsWith("(Custom)")) result.displayName else "${result.displayName} (Custom)"

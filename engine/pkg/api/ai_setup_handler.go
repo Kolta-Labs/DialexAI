@@ -33,7 +33,6 @@ type aiSetupAgentPlan struct {
 	Role         string `json:"role"`
 	DisplayName  string `json:"displayName"`
 	SystemPrompt string `json:"systemPrompt"`
-	Caveman      bool   `json:"caveman"`
 	Ponytail     bool   `json:"ponytail"`
 }
 
@@ -198,7 +197,6 @@ Output ONLY a single valid JSON object matching this schema:
     "role": "Lead Moderator / Facilitator Title",
     "displayName": "Lead Architect",
     "systemPrompt": "Directive instructing how to moderate, weigh trade-offs, and seek consensus",
-    "caveman": false,
     "ponytail": false
   },
   "peerAgents": [
@@ -206,21 +204,18 @@ Output ONLY a single valid JSON object matching this schema:
       "role": "Proponent / Strategic Advocate",
       "displayName": "Proponent Lead",
       "systemPrompt": "Directives advocating for the ambitious / upside perspective",
-      "caveman": false,
       "ponytail": false
     },
     {
       "role": "Adversary / Risk Analyst / Devil's Advocate",
       "displayName": "Risk & Compliance",
       "systemPrompt": "Directives relentlessly stress-testing risks, failure modes, and downsides",
-      "caveman": false,
       "ponytail": false
     },
     {
       "role": "Pragmatist / Cost & Resource Auditor",
       "displayName": "Pragmatist",
       "systemPrompt": "Directives focusing on realistic timelines, budgets, headcount, and migration friction",
-      "caveman": false,
       "ponytail": false
     }
   ]
@@ -328,7 +323,6 @@ func fallbackPlan(prompt string) aiSetupPlan {
 			Role:         "Council Facilitator",
 			DisplayName:  "Facilitator",
 			SystemPrompt: "You are the Lead Facilitator. Keep the debate focused, structure rounds, balance competing viewpoints, and synthesize actionable consensus.",
-			Caveman:      false,
 			Ponytail:     false,
 		},
 		PeerAgents: []aiSetupAgentPlan{
@@ -372,7 +366,6 @@ func (s *Server) buildDiscussionFromPlan(
 			DisplayName:  dispName,
 			Role:         planAgent.Role,
 			SystemPrompt: planAgent.SystemPrompt,
-			Caveman:      planAgent.Caveman,
 			Ponytail:     false,
 		}
 	}

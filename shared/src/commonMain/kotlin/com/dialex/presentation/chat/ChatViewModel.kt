@@ -233,7 +233,12 @@ class ChatViewModel(
         viewModelScope.launch {
             try {
                 val currentDisc = state.value.discussion ?: return@launch
-                val currentRound = currentDisc.transcript.maxOfOrNull { it.round } ?: 1
+                val isPriorCompleted = currentDisc.status.isCompleted
+                val currentRound = if (isPriorCompleted) {
+                    (currentDisc.transcript.maxOfOrNull { it.round } ?: 1) + 1
+                } else {
+                    currentDisc.transcript.maxOfOrNull { it.round } ?: 1
+                }
                 val userMsg = com.dialex.model.DebateMessage(
                     seatId = "observer",
                     provider = Provider.CUSTOM,
@@ -244,7 +249,24 @@ class ChatViewModel(
                     timestampMs = System.currentTimeMillis()
                 )
                 val updatedTranscript = currentDisc.transcript + userMsg
-                val updatedDisc = currentDisc.copy(transcript = updatedTranscript)
+                val snapshottedArts = if (isPriorCompleted) {
+                    val prevRound = currentDisc.transcript.maxOfOrNull { it.round } ?: 1
+                    (currentDisc.artifacts + currentDisc.resolveAllArtifacts(snapshotRound = prevRound)).distinctBy { it.id }
+                } else {
+                    currentDisc.artifacts
+                }
+                val updatedDisc = if (isPriorCompleted) {
+                    currentDisc.copy(
+                        status = DiscussionStatus.RUNNING,
+                        transcript = updatedTranscript,
+                        artifacts = snapshottedArts,
+                        conclusion = null,
+                        deliverable = null,
+                        summary = null
+                    )
+                } else {
+                    currentDisc.copy(transcript = updatedTranscript)
+                }
                 // Immediately show in chat UI feed
                 setState { copy(discussion = updatedDisc) }
 
@@ -512,7 +534,10 @@ class ChatViewModel(
                         config = updatedConfig,
                         transcript = updatedTranscript,
                         status = DiscussionStatus.RUNNING,
-                        artifacts = existingArtifacts
+                        artifacts = existingArtifacts,
+                        conclusion = null,
+                        deliverable = null,
+                        summary = null
                     )
                     setState { copy(discussion = updatedDisc, pauseRequested = false) }
                     updateNextSpeaker(updatedDisc)

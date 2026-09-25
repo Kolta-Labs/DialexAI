@@ -67,7 +67,6 @@ sealed interface PersonaBuilderIntent {
     data class CoreExpertiseChanged(val value: String) : PersonaBuilderIntent
     data class ToneAndVoiceChanged(val value: String) : PersonaBuilderIntent
     data class ObjectiveChanged(val value: String) : PersonaBuilderIntent
-    data class CavemanToggled(val enabled: Boolean) : PersonaBuilderIntent
     data class PonytailToggled(val enabled: Boolean) : PersonaBuilderIntent
     data object AutoComposePrompt : PersonaBuilderIntent
     data object Save : PersonaBuilderIntent

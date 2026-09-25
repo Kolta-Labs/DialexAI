@@ -317,7 +317,7 @@ To establish scientific legitimacy and enterprise ROI, Dialex AI must empiricall
 > **Component**: KMP Shared (`model`, `domain`), Go Engine (`pkg/model`).
 
 ### 7.1 Problem Statement
-Currently, personas are defined via markdown prompts and style toggles (Caveman/Ponytail). To support deeper psychological and domain fidelity, structured persona schemas are needed.
+Currently, personas are defined via markdown prompts and style toggles (e.g. Ponytail). To support deeper psychological and domain fidelity, structured persona schemas are needed.
 
 ### 7.2 Proposed Architecture & Specifications
 Adopt an **8-Layer Cognitive Schema** (compatible with MMOS exports):

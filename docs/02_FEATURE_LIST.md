@@ -48,7 +48,6 @@ This document details all user-facing capabilities, unique selling propositions 
 - **Deliberation Style Modifiers**:
   - **Standard**: Deep dialectic rigor with code citations and nuance.
   - **Ponytail Mode**: Structured executive bullet points with trade-off matrices.
-  - **Caveman Mode**: Extreme telegraphic brevity without conversational fluff.
 
 <table align="center" width="100%">
   <tr>
@@ -58,7 +57,7 @@ This document details all user-facing capabilities, unique selling propositions 
     </td>
     <td width="50%" align="center">
       <img src="screenshots/08_persona_studio_ai_builder.png" alt="Persona Studio AI Builder" width="100%" />
-      <br/><em>Figure 3.2: Persona Studio & AI Prompt Builder with Caveman/Ponytail brevity controls.</em>
+      <br/><em>Figure 3.2: Persona Studio & AI Prompt Builder with Ponytail brevity controls.</em>
     </td>
   </tr>
 </table>

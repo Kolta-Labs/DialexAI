@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Two-Tab Persona Registry & Style Modifiers**:
   - 10 Universal General Debate Archetypes (*The Facilitator*, *Devil's Advocate*, *The Optimist*, *The Pragmatist*, *The Contrarian*, *The Expert*, *The Risk Analyst*, *The Ethicist*, *The Historian*, *The Futurist*).
   - 40+ Domain-Specific Personas spanning Distributed Systems, Cybersecurity, AI Infrastructure, FinTech, Legal Compliance, and Product Strategy.
-  - Interactive `PersonaBadge` chip system with inline edit sheet, `(Custom)` persona tags, and *Caveman* / *Ponytail* style modifiers.
+  - Interactive `PersonaBadge` chip system with inline edit sheet, `(Custom)` persona tags, and *Ponytail* style modifiers.
 - **3-Tier Anti-Fluff & Topic Drift Cascade Guardrails**:
   - Global Settings &rarr; Project Settings &rarr; Discussion Setup hierarchy.
   - Human Dialogue Mode enforcing 2–4 crisp sentences and eliminating sycophantic conversational pleasantries.

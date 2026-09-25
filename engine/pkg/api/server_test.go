@@ -731,7 +731,6 @@ func TestChatPersona(t *testing.T) {
   "role": "IAM & OAuth Auditor",
   "description": "Scrutinizes access policies and token lifetimes.",
   "systemPrompt": "Focus strictly on IAM least privilege.",
-  "caveman": true,
   "ponytail": false
 }` + "\n```\nLet me know if you need tweaks."
 				return runner.AgentReply{Content: replyText}, nil
@@ -771,9 +770,6 @@ func TestChatPersona(t *testing.T) {
 	}
 	if chatResp.ParsedPersona.Name != "Cloud Security Lead" {
 		t.Errorf("expected persona name 'Cloud Security Lead', got '%s'", chatResp.ParsedPersona.Name)
-	}
-	if !chatResp.ParsedPersona.Caveman {
-		t.Errorf("expected caveman=true")
 	}
 }
 

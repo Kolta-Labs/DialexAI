@@ -9,7 +9,6 @@ type Persona struct {
 	Role           string `json:"role"`
 	Icon           string `json:"icon,omitempty"`
 	SystemPrompt   string `json:"systemPrompt"`
-	Caveman        bool   `json:"caveman"`
 	Ponytail       bool   `json:"ponytail"`
 	IsSystem       bool   `json:"isSystem"`
 	RoleAndPersona string `json:"roleAndPersona,omitempty"`

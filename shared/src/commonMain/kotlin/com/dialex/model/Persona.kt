@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 /**
  * A predefined AI persona that can be applied to any agent seat in the setup screen.
- * Personas pre-populate the agent's systemPrompt, role, caveman/ponytail style modifiers,
+ * Personas pre-populate the agent's systemPrompt, role, ponytail style modifiers,
  * and display name. The user can also create custom personas via the Persona Builder.
  */
 @Serializable
@@ -20,8 +20,6 @@ data class PredefinedPersona(
     val icon: String = "",
     /** The full system prompt injected for this persona. */
     val systemPrompt: String = "",
-    /** Whether this persona speaks in Caveman (ultra-terse) style by default. */
-    val caveman: Boolean = false,
     /** Whether this persona speaks in Ponytail (structured, formal) style by default. */
     val ponytail: Boolean = false,
     /** True for built-in system personas from the spec catalog. False for user-created ones. */

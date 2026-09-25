@@ -283,7 +283,7 @@ object DiscussionPresets {
     /**
      * Applies an archetype calibration to an existing config while preserving:
      * - topic, commonContext, commonInfo
-     * - existing agent roster (including Caveman / Ponytail settings)
+     * - existing agent roster (including Ponytail settings)
      * - attached files
      */
     fun applyArchetype(existing: DebateConfig, archetype: PresetArchetype): DebateConfig {

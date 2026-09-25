@@ -16,11 +16,10 @@ import kotlin.test.assertTrue
 
 class CognitiveDepthTest {
 
-    private fun testAgent(id: String, caveman: Boolean = false, ponytail: Boolean = false) = Agent(
+    private fun testAgent(id: String, ponytail: Boolean = false) = Agent(
         id = id,
         provider = Provider.ANTHROPIC,
         model = "claude-sonnet-5",
-        caveman = caveman,
         ponytail = ponytail
     )
 
@@ -155,7 +154,7 @@ class CognitiveDepthTest {
     }
 
     @Test
-    fun test_caveman_and_ponytail_ultra_adherence_with_depth_modes() = runTest {
+    fun test_depth_modes_adherence() = runTest {
         val capturedPrompts = mutableListOf<String>()
 
         val runner = object : AgentRunner {
@@ -172,12 +171,11 @@ class CognitiveDepthTest {
             }
         }
 
-        // Agent has Caveman enabled
-        val cavemanAgent = testAgent("seat_caveman", caveman = true, ponytail = false)
+        val testAgent = testAgent("seat_exec", ponytail = true)
 
         val config = DebateConfig(
             topic = "Can AI replace product managers",
-            primary = cavemanAgent,
+            primary = testAgent,
             maxRounds = 1,
             depth = DepthConfig.preset(DepthMode.EXECUTIVE)
         )
@@ -186,8 +184,6 @@ class CognitiveDepthTest {
         orchestrator.run(config)
 
         val turnPrompt = capturedPrompts.first()
-        // Verifies synergy: Depth mode sets conceptual tone, while Caveman sets syntax compression
         assertTrue(turnPrompt.contains("[COGNITIVE LOAD DIRECTIVE: EXECUTIVE / STRATEGIC]"))
-        assertTrue(turnPrompt.contains("ultra-terse"))
     }
 }

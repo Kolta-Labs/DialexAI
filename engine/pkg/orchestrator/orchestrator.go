@@ -20,8 +20,6 @@ import (
 var consensusPrefixRegex = regexp.MustCompile(`(?mi)^(?:>\s*)*(?:#{1,6}\s*)?(?:\[\s*)?(?:\*{1,2}|_{1,2})?\s*(?:AGREED|CONCUR|CONSENSUS REACHED|UNANIMOUS AGREEMENT|I AGREE)\b\s*(?:\])?\s*[:—\-]?(?:\*{1,2}|_{1,2})?`)
 
 const (
-	cavemanDirective = "[STYLE MODIFIER: CAVEMAN MODE ACTIVE]\n- You MUST answer in compressed, blunt, ultra-terse caveman style.\n- Maximum 3 to 5 short sentences total per turn.\n- Remove all filler words, pleasantries, polite preambles, and fluff.\n- Use simple, direct, forceful language (\"X bad. Y good because Z.\").\n- Focus strictly on core thesis, main risk, and immediate counter-argument."
-
 	consensusDirective = "[DELIBERATION CONVERGENCE RULES]\n" +
 		"1. If the arguments presented by other participants have resolved the core contentions and you have no substantially new empirical data, theoretical models, or counter-arguments to introduce:\n" +
 		"   - Begin your reply immediately with the single token: AGREED:\n" +
@@ -341,9 +339,6 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 		var modifierParts []string
 		if effective.SystemPrompt != "" {
 			modifierParts = append(modifierParts, effective.SystemPrompt)
-		}
-		if effective.Caveman {
-			modifierParts = append(modifierParts, cavemanDirective)
 		}
 
 		// Evaluate WebSearch permission for this agent seat

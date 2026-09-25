@@ -595,13 +595,13 @@ private fun PersonaBuilderFormContent(
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(
-                checked = draft.caveman,
-                onCheckedChange = { onIntent(PersonaBuilderIntent.CavemanToggled(it)) },
+                checked = draft.ponytail,
+                onCheckedChange = { onIntent(PersonaBuilderIntent.PonytailToggled(it)) },
                 colors = CheckboxDefaults.colors(checkedColor = cc.accent),
             )
             Column {
-                Text("Caveman Mode", style = MaterialTheme.typography.bodyMedium, color = cc.textPrimary)
-                Text("Ultra-terse, compressed style by default", style = MaterialTheme.typography.bodySmall, color = cc.textMuted)
+                Text("Ponytail Mode", style = MaterialTheme.typography.bodyMedium, color = cc.textPrimary)
+                Text("Structured, formal executive style by default", style = MaterialTheme.typography.bodySmall, color = cc.textMuted)
             }
         }
 
@@ -798,7 +798,7 @@ private fun PersonaAiChatPanel(
 
     val suggestionPrompts = listOf(
         "Adversarial IAM Penetration Tester",
-        "Caveman Distributed Systems Lead",
+        "Pragmatic Distributed Systems Lead",
         "Socratic Epistemologist",
         "Contrarian Venture Capitalist"
     )
@@ -1065,7 +1065,7 @@ private fun PersonaAiChatPanel(
             OutlinedTextField(
                 value = inputText,
                 onValueChange = { inputText = it },
-                placeholder = { Text("E.g. Make them skeptical and enable Caveman mode...", fontSize = 12.sp, color = cc.textMuted.copy(alpha = 0.6f)) },
+                placeholder = { Text("E.g. Make them skeptical and analytical...", fontSize = 12.sp, color = cc.textMuted.copy(alpha = 0.6f)) },
                 minLines = 1,
                 maxLines = 4,
                 modifier = Modifier.weight(1f)
@@ -1186,12 +1186,12 @@ private fun ChatMessageBubble(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (message.parsedPersona.caveman) {
+                        if (message.parsedPersona.ponytail) {
                             Surface(
                                 color = cc.accent.copy(alpha = 0.2f),
                                 shape = RoundedCornerShape(4.dp)
                             ) {
-                                Text("[CAVEMAN]", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = cc.accent, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                                Text("[PONYTAIL]", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = cc.accent, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
                             }
                         }
                     }

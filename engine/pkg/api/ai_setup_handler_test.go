@@ -111,7 +111,6 @@ func TestAISetupHandler_SuccessWithStructuredLLMResponse(t *testing.T) {
     "role": "Principal Solutions Architect",
     "displayName": "Solutions Architect",
     "systemPrompt": "Moderate the architectural trade-offs.",
-    "caveman": false,
     "ponytail": true
   },
   "peerAgents": [
@@ -119,21 +118,18 @@ func TestAISetupHandler_SuccessWithStructuredLLMResponse(t *testing.T) {
       "role": "Cloud Security Lead",
       "displayName": "Security Lead",
       "systemPrompt": "Advocate for managed security and compliance guarantees.",
-      "caveman": false,
       "ponytail": false
     },
     {
       "role": "Devil's Advocate",
       "displayName": "Adversary",
       "systemPrompt": "Stress-test vendor lock-in and pricing escalations.",
-      "caveman": false,
       "ponytail": false
     },
     {
       "role": "Startup Pragmatist",
       "displayName": "Pragmatist",
       "systemPrompt": "Focus on engineering velocity and headcount limits.",
-      "caveman": false,
       "ponytail": false
     }
   ]

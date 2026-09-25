@@ -47,8 +47,7 @@ class CopySettingsTest {
                 primary = Agent(
                     provider = Provider.ANTHROPIC,
                     model = "claude-3-7-sonnet",
-                    displayName = "Chief Strategist",
-                    caveman = true
+                    displayName = "Chief Strategist"
                 ),
                 secondary = Agent(
                     provider = Provider.GEMINI,
@@ -165,10 +164,8 @@ class CopySettingsTest {
         assertEquals("", disc.config.topic, "Topic must be empty, not copied from source!")
         assertNotEquals(sampleSourceDiscussion.config.topic, disc.config.topic)
 
-        // All other settings must be successfully copied
         assertEquals(3, disc.config.agents.size)
         assertEquals("claude-3-7-sonnet", disc.config.primary.model)
-        assertEquals(true, disc.config.primary.caveman)
         assertEquals("gemini-2.5-pro", disc.config.secondary?.model)
         assertEquals(true, disc.config.secondary?.ponytail)
         assertEquals("grok-3", disc.config.tertiary?.model)
@@ -225,10 +222,8 @@ class CopySettingsTest {
         assertEquals(userTopic, updatedDisc.config.topic)
         assertNotEquals(sampleSourceDiscussion.config.topic, updatedDisc.config.topic)
 
-        // Other settings are copied
         assertEquals(3, updatedDisc.config.agents.size)
         assertEquals("claude-3-7-sonnet", updatedDisc.config.primary.model)
-        assertEquals(true, updatedDisc.config.primary.caveman)
         assertEquals(true, updatedDisc.config.secondary?.ponytail)
         assertEquals(6, updatedDisc.config.maxRounds)
         assertEquals(DepthMode.ACADEMIC, updatedDisc.config.depth.mode)

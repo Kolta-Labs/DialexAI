@@ -4,7 +4,7 @@ package com.dialex.model
  * Represents the outcome of a persona selection interaction.
  * - [None]: no persona, use baseline model.
  * - [Stock]: a built-in catalog persona selected with no edits.
- *   Only personaId, role, caveman, ponytail, and displayName are written to the Agent.
+ *   Only personaId, role, ponytail, and displayName are written to the Agent.
  *   systemPrompt is NOT written — it is resolved from the catalog at runtime.
  * - [Custom]: user has edited the persona (name or instructions).
  *   All fields including systemPrompt are written. personaId gets a "_custom" suffix.
@@ -18,7 +18,6 @@ sealed interface PersonaSelectionResult {
         val displayName: String,
         val role: String,
         val systemPrompt: String,
-        val caveman: Boolean,
         val ponytail: Boolean,
         val roleAndPersona: String = "",
         val coreExpertise: String = "",

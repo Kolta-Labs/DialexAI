@@ -113,33 +113,27 @@ class CognitiveSettingsAndPresetsTest {
     }
 
     @Test
-    fun testCavemanAndPonytailUltraModesPreservedWithPresets() {
+    fun testPonytailModePreservedWithPresets() {
         val initialConfig = DebateConfig(
             topic = "Should we adopt Kotlin Multiplatform?",
             primary = Agent(
                 provider = Provider.ANTHROPIC,
                 model = Provider.ANTHROPIC.defaultModel(),
-                caveman = true,
                 ponytail = false
             ),
             secondary = Agent(
                 provider = Provider.OPENAI,
                 model = Provider.OPENAI.defaultModel(),
-                caveman = true,
-                ponytail = true // Hybrid Ultra mode
+                ponytail = true
             )
         )
 
         // Apply archetype preset
         val updatedConfig = DiscussionPresets.applyArchetype(initialConfig, PresetArchetype.RED_TEAM_STRESS_TEST)
 
-        // Verify agents and their special modes (Caveman, Ponytail, and Ultra hybrid) are retained
+        // Verify agents and their special modes (Ponytail) are retained
         assertEquals(2, updatedConfig.agents.size)
-        assertTrue(updatedConfig.agents[0].caveman)
         assertEquals(false, updatedConfig.agents[0].ponytail)
-
-        // Agent 2 should have both caveman and ponytail active (Ultra mode)
-        assertTrue(updatedConfig.agents[1].caveman)
         assertTrue(updatedConfig.agents[1].ponytail)
     }
 }

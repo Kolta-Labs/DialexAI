@@ -20,7 +20,7 @@ class AppStateSerializationTest {
             topic = "Is a hot dog a sandwich?",
             commonContext = "context",
             commonInfo = "info",
-            primary = Agent(Provider.ANTHROPIC, "claude-x", cliCommand = "claude --print", caveman = true),
+            primary = Agent(Provider.ANTHROPIC, "claude-x", cliCommand = "claude --print", ponytail = true),
             secondary = Agent(Provider.GEMINI, "gemini-x"),
             tertiary = Agent(Provider.CUSTOM, "", displayName = "Aider"),
             roundMode = RoundMode.UNLIMITED,

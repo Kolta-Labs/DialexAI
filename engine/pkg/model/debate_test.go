@@ -68,7 +68,7 @@ func TestAppStateRoundTrips(t *testing.T) {
 		Topic:         "Is a hot dog a sandwich?",
 		CommonContext: "context",
 		CommonInfo:    "info",
-		Primary:       Agent{Provider: ProviderAnthropic, Model: "claude-sonnet-5", RunMode: RunModeCLI, CliCommand: strPtr("claude --print"), Caveman: true},
+		Primary:       Agent{Provider: ProviderAnthropic, Model: "claude-sonnet-5", RunMode: RunModeCLI, CliCommand: strPtr("claude --print")},
 		Secondary:     ptr(NewAgent(ProviderGemini, "gemini-3.7-flash")),
 		Tertiary:      ptr(Agent{Provider: ProviderCustom, DisplayName: "Aider", RunMode: RunModeCLI}),
 		RoundMode:     RoundModeUnlimited,

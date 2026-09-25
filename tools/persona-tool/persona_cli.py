@@ -18,7 +18,7 @@ import re
 
 REQUIRED_FIELDS = ["id", "name", "description", "category", "role", "systemPrompt"]
 OPTIONAL_SPEC_FIELDS = ["roleAndPersona", "coreExpertise", "toneAndVoice", "objective"]
-ALL_FIELDS = REQUIRED_FIELDS + OPTIONAL_SPEC_FIELDS + ["icon", "caveman", "ponytail", "isSystem"]
+ALL_FIELDS = REQUIRED_FIELDS + OPTIONAL_SPEC_FIELDS + ["icon", "ponytail", "isSystem"]
 
 VALID_ICONS = [
     "code", "database", "security", "terminal", "analytics", "science",
@@ -94,7 +94,6 @@ def cmd_generate(args):
         "objective": objective,
         "systemPrompt": prompt_input,
         "icon": icon,
-        "caveman": False,
         "ponytail": False,
         "isSystem": False
     }
@@ -238,8 +237,6 @@ def cmd_import(args):
             item["category"] = "General Debate"
         if "role" not in item:
             item["role"] = name
-        if "caveman" not in item:
-            item["caveman"] = False
         if "ponytail" not in item:
             item["ponytail"] = False
 
@@ -286,7 +283,6 @@ A Dialex Persona has these fields:
 - "toneAndVoice": Directives for tone (e.g. "Incisive, empirical, skeptical of hype")
 - "objective": Fiduciary goal or mandate in debates
 - "systemPrompt": Full composed prompt instructions
-- "caveman": boolean (true for ultra-terse, compressed telegraphic reasoning)
 - "ponytail": boolean (true for structured, bullet-driven executive takeaways)
 
 Output ONLY valid JSON wrapped in a ```json code block so it can be loaded directly into the Dialex Persona Editor.

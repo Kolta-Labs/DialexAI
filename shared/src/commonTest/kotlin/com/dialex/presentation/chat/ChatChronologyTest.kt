@@ -65,10 +65,13 @@ class ChatChronologyTest {
         override suspend fun deleteDiscussion(id: String) {}
         override suspend fun duplicateDiscussion(id: String): Discussion = currentDiscussion
         override suspend fun startDiscussion(id: String) {}
-        override suspend fun pauseDiscussion(id: String) {}
+        override suspend fun pauseDiscussion(id: String) {
+            currentDiscussion = currentDiscussion.copy(status = DiscussionStatus.PAUSED)
+        }
         override suspend fun stopDiscussion(id: String) {}
         override suspend fun resumeDiscussion(id: String) {
             resumeCallCount++
+            currentDiscussion = currentDiscussion.copy(status = DiscussionStatus.PAUSED)
         }
         override fun streamDiscussion(id: String): Flow<Discussion> = emptyFlow()
         override suspend fun generateHandoffPrompt(id: String): String = ""

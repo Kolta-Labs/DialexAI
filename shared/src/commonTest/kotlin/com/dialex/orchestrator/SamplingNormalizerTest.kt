@@ -63,42 +63,4 @@ class SamplingNormalizerTest {
         assertNotNull(openAiNorm.frequencyPenalty)
         assertNotNull(openAiNorm.presencePenalty)
     }
-
-    @Test
-    fun test_caveman_mode_directive() = runTest {
-        val observedPrompts = mutableListOf<String>()
-        val runner = object : AgentRunner {
-            override suspend fun respond(
-                agent: Agent,
-                topic: String,
-                commonContext: String,
-                commonInstructions: String,
-                transcript: List<DebateMessage>,
-                modelOverride: String?
-            ): AgentReply {
-                observedPrompts.add(agent.systemPrompt)
-                return AgentReply("Caveman mode reply")
-            }
-        }
-
-        val cavemanAgent = Agent(
-            provider = Provider.ANTHROPIC,
-            model = "claude-3-5-sonnet",
-            caveman = true,
-            ponytail = false
-        )
-
-        val config = DebateConfig(
-            topic = "Caveman mode test",
-            primary = cavemanAgent,
-            maxRounds = 1
-        )
-
-        val orchestrator = DebateOrchestrator { runner }
-        orchestrator.run(config)
-
-        val cavemanTurnPrompt = observedPrompts.firstOrNull { it.contains("ultra-terse") }
-        assertNotNull(cavemanTurnPrompt, "Must inject ultra-terse directive in agent turn")
-        assertTrue(cavemanTurnPrompt.contains("filler words"), "Caveman mode must specify filler words")
-    }
 }

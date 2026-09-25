@@ -44,12 +44,11 @@ class FakePersonaRepository : PersonaRepository {
                 category = "Software Engineering",
                 role = "Adversarial IAM Auditor",
                 description = "Uncovers IAM flaws and zero-trust vulnerabilities.",
-                caveman = true,
-                ponytail = false,
+                ponytail = true,
                 systemPrompt = "You are an AI Security Lead."
             )
             PersonaChatResponse(
-                reply = "I crafted this persona for you:\n\n```json\n{\"name\": \"AI Security Lead\", \"role\": \"Adversarial IAM Auditor\", \"caveman\": true}\n```",
+                reply = "I crafted this persona for you:\n\n```json\n{\"name\": \"AI Security Lead\", \"role\": \"Adversarial IAM Auditor\", \"ponytail\": true}\n```",
                 parsedPersona = p
             )
         }
@@ -135,7 +134,6 @@ class PersonaBuilderViewModelTest {
               "role": "Epistemic Auditor",
               "description": "Questions foundational axioms.",
               "systemPrompt": "Scrutinize every unproven assumption.",
-              "caveman": false,
               "ponytail": true
             }
         """.trimIndent()
@@ -147,7 +145,6 @@ class PersonaBuilderViewModelTest {
         assertEquals("Philosophy", state.draft.category)
         assertEquals("Epistemic Auditor", state.draft.role)
         assertEquals("Scrutinize every unproven assumption.", state.draft.systemPrompt)
-        assertFalse(state.draft.caveman)
         assertTrue(state.draft.ponytail)
         assertFalse(state.isImportDialogOpen)
         assertNull(state.importError)
@@ -171,7 +168,7 @@ class PersonaBuilderViewModelTest {
               "role": "Fault Injection Lead",
               "description": "Injects synthetic failures.",
               "systemPrompt": "Simulate partition and packet loss scenarios.",
-              "caveman": true
+              "ponytail": true
             }
             ```
             Let me know if you need changes.
@@ -182,8 +179,7 @@ class PersonaBuilderViewModelTest {
         val state = viewModel.state.value
         assertEquals("Chaos Engineer", state.draft.name)
         assertEquals("Fault Injection Lead", state.draft.role)
-        assertTrue(state.draft.caveman)
-        assertFalse(state.draft.ponytail)
+        assertTrue(state.draft.ponytail)
         assertNull(state.importError)
     }
 
@@ -252,7 +248,7 @@ class PersonaBuilderViewModelTest {
         val finalState = viewModel.state.value
         assertEquals("AI Security Lead", finalState.draft.name)
         assertEquals("Adversarial IAM Auditor", finalState.draft.role)
-        assertTrue(finalState.draft.caveman)
+        assertTrue(finalState.draft.ponytail)
 
         val effect = viewModel.effect.first()
         assertTrue(effect is PersonaBuilderEffect.ShowSnackbar)

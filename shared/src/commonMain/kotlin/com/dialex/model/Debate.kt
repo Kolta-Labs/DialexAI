@@ -92,11 +92,7 @@ data class Agent(
     val personaId: String? = null,
     /** This agent's functional role label (e.g. "Devil's Advocate", "Optimist"). */
     val role: String = "",
-    /** When true, this agent responds in ultra-terse, compressed Caveman style. Takes effect
-     * per-agent — replaces the old global DebateConfig.caveman toggle. */
-    val caveman: Boolean = false,
-    /** When true, this agent responds in Ponytail style — structured, bulleted, formal.
-     * Can be combined with [caveman] for Caveman+Ponytail Hybrid mode. */
+    /** When true, this agent responds in Ponytail style — structured, bulleted, formal. */
     val ponytail: Boolean = false,
     /** Model sampling temperature (e.g. 0.0 to 2.0). Null = inherits global provider default. */
     val temperature: Double? = null,

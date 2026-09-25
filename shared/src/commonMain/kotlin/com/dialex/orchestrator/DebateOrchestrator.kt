@@ -17,11 +17,6 @@ import com.dialex.runner.AgentRunner
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
-private const val CAVEMAN_DIRECTIVE =
-    "Respond in ultra-terse, compressed style: drop articles and filler words, use fragments, " +
-        "no preamble, no hedging. Keep every technical fact and number exact — compress the " +
-        "wording, never the substance."
-
 private const val LENGTH_BUDGET_DIRECTIVE = """
 [LENGTH & BUDGET CONSTRAINT]
 - Your response MUST NOT exceed 350 words.
@@ -419,11 +414,6 @@ class DebateOrchestrator(
 
                 if (useCostEff) parts.add(LENGTH_BUDGET_DIRECTIVE)
                 if (normalizedSampling.styleDirective != null) parts.add(normalizedSampling.styleDirective)
-
-                // Adhere strictly to Caveman mode
-                if (agent.caveman) {
-                    parts.add(CAVEMAN_DIRECTIVE)
-                }
 
                 // WebSearch permission directive
                 val webSearchAllowed = agent.allowWebSearch ?: config.permissions.isWebSearchAllowedFor(agent.id)
@@ -1060,9 +1050,7 @@ class DebateOrchestrator(
                     "Eliminate all conversational fluff, preamble, and filler words. Keep it ultra-crisp, high-signal, and actionable."
             }
         }
-
-        // Adhere strictly to Caveman mode for conclusion
-        val wrapUp = if (moderatorAgent.caveman) "$baseWrapUp\n\n$CAVEMAN_DIRECTIVE" else baseWrapUp
+        val wrapUp = baseWrapUp
 
         val conclusionNorm = SamplingNormalizer.normalize(
             config = config.sampling,

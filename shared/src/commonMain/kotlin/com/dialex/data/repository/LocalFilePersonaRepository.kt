@@ -79,7 +79,6 @@ class LocalFilePersonaRepository(
             coreExpertise = "First-principles reasoning, trade-off analysis, systematic verification",
             toneAndVoice = "Objective, incisive, and structured",
             objective = "Challenge hidden assumptions and evaluate alternatives",
-            caveman = cleaned.contains("caveman", ignoreCase = true) || (draft?.caveman == true),
             ponytail = cleaned.contains("ponytail", ignoreCase = true) || (draft?.ponytail == true),
             systemPrompt = com.dialex.model.buildComposedSystemPrompt(
                 roleAndPersona = "Expert practitioner focused on rigorous analysis of: $cleaned",

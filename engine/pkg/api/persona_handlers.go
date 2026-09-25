@@ -168,7 +168,6 @@ A Dialex Persona has these fields:
 - "toneAndVoice": Directives for their tone (e.g. "Incisive, empirical, skeptical of hype").
 - "objective": Their core fiduciary goal or debate mandate.
 - "systemPrompt": Full composed system instructions for the LLM when debating as this persona.
-- "caveman": boolean (true if the persona should default to ultra-compressed, telegraphic brevity).
 - "ponytail": boolean (true if the persona should default to structured, bullet-driven executive analysis).
 
 When you output or refine a persona, ALWAYS provide a conversational response followed by a JSON markdown code block containing the complete persona object, for example:
@@ -184,7 +183,6 @@ When you output or refine a persona, ALWAYS provide a conversational response fo
   "toneAndVoice": "Pragmatic, direct, relentlessly empirical.",
   "objective": "Prevent cascading failure modes and unrecoverable state divergence.",
   "systemPrompt": "### ROLE & PERSONA\nPrincipal engineer...\n\n### CORE EXPERTISE\nJepsen testing...",
-  "caveman": false,
   "ponytail": true
 }` + "\n```\n" + `The user interface will automatically detect this JSON block and render a one-click "Load into Editor" button!`
 

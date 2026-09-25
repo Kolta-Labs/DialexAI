@@ -76,11 +76,7 @@ suspend fun runHeadless(args: Array<String>): Int {
         System.err.println("At least one --agent is required (the first one is the Primary Agent).")
         return 1
     }
-    val agents = if (opts.caveman) {
-        opts.agents.map { it.copy(caveman = true) }
-    } else {
-        opts.agents
-    }
+    val agents = opts.agents
     val config = DebateConfig(
         topic = opts.topic,
         commonContext = opts.context,
@@ -174,7 +170,6 @@ private class HeadlessOptions {
     val agents = mutableListOf<Agent>()
     var rounds = 3
     var unlimited = false
-    var caveman = false
     var quiet = false
     var output: String? = null
     var project: String? = null
@@ -201,7 +196,6 @@ private fun parseArgs(args: Array<String>): HeadlessOptions {
             "--agent" -> opts.agents += parseAgent(next(arg))
             "--rounds" -> opts.rounds = next(arg).toIntOrNull() ?: throw IllegalArgumentException("--rounds must be a number")
             "--unlimited" -> opts.unlimited = true
-            "--caveman" -> opts.caveman = true
             "--quiet" -> opts.quiet = true
             "--output" -> opts.output = next(arg)
             "--project" -> opts.project = next(arg)
@@ -273,7 +267,6 @@ private fun printUsage() {
                                      no forced cutoff. Careful with cost.
           --token-budget N          Hard stop once API-mode usage crosses N tokens (default
                                      1000000, 0 disables it).
-          --caveman                 Ultra-terse responses from every agent.
           --quiet                   Only print the final result, not each turn live.
           --output path.md          Write the formatted transcript there.
           --project "name"          Save this run as a discussion under this project in the

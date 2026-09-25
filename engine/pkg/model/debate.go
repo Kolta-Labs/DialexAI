@@ -127,8 +127,6 @@ type Agent struct {
 	Role string `json:"role"`
 	// PersonaID is the predefined-persona ID this agent was seeded from, or empty.
 	PersonaID string `json:"personaId"`
-	// Caveman: when true, agent responds in ultra-terse Caveman style (per-agent).
-	Caveman bool `json:"caveman"`
 	// Ponytail: when true, agent responds in structured Ponytail style (per-agent).
 	Ponytail bool `json:"ponytail"`
 	// Temperature: optional model sampling temperature.

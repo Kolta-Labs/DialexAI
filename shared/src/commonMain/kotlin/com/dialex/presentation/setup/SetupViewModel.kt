@@ -432,14 +432,12 @@ class SetupViewModel(
                             personaId = null,
                             role = "",
                             systemPrompt = "",
-                            caveman = false,
                             ponytail = false,
                             displayName = "Agent ${intent.agentIndex + 1}"
                         )
                         is PersonaSelectionResult.Stock -> agent.copy(
                             personaId = result.persona.id,
                             role = result.persona.role,
-                            caveman = result.persona.caveman,
                             ponytail = result.persona.ponytail,
                             systemPrompt = "",
                             displayName = result.persona.name
@@ -447,7 +445,6 @@ class SetupViewModel(
                         is PersonaSelectionResult.Custom -> agent.copy(
                             personaId = "${result.basePersonaId}_custom",
                             role = result.role,
-                            caveman = result.caveman,
                             ponytail = result.ponytail,
                             systemPrompt = result.systemPrompt,
                             displayName = "${result.displayName} (Custom)"

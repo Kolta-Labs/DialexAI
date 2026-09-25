@@ -56,7 +56,6 @@ fun PersonaEditSheet(
     var editedToneAndVoice by remember(basePersona) { mutableStateOf(basePersona?.toneAndVoice ?: "") }
     var editedObjective by remember(basePersona) { mutableStateOf(basePersona?.objective ?: "") }
     var editedSystemPrompt by remember(basePersona) { mutableStateOf(basePersona?.systemPrompt ?: "") }
-    var editedCaveman by remember(basePersona) { mutableStateOf(basePersona?.caveman ?: false) }
     var editedPonytail by remember(basePersona) { mutableStateOf(basePersona?.ponytail ?: false) }
     var advancedExpanded by remember { mutableStateOf(false) }
 
@@ -319,7 +318,7 @@ fun PersonaEditSheet(
 
             // Style toggles
             Row(modifier = Modifier.fillMaxWidth()) {
-                StyleToggleChip("Caveman", "Ultra-terse communication style", editedCaveman, { editedCaveman = it }, Modifier.fillMaxWidth(), cc)
+                StyleToggleChip("Ponytail", "Structured executive communication style", editedPonytail, { editedPonytail = it }, Modifier.fillMaxWidth(), cc)
             }
 
             // Advanced (collapsible note)
@@ -377,8 +376,7 @@ fun PersonaEditSheet(
                                 displayName = editedName.trim().ifBlank { basePersona?.name ?: "Custom Role" },
                                 role = editedRole.trim().ifBlank { editedRoleAndPersona.lines().firstOrNull { it.isNotBlank() }?.take(50).orEmpty() },
                                 systemPrompt = effectivePrompt,
-                                caveman = editedCaveman,
-                                ponytail = false,
+                                ponytail = editedPonytail,
                                 roleAndPersona = editedRoleAndPersona.trim(),
                                 coreExpertise = editedCoreExpertise.trim(),
                                 toneAndVoice = editedToneAndVoice.trim(),

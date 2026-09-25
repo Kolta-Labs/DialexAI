@@ -83,7 +83,7 @@ Clicking **+ Add a Role** opens the 2-tab Persona Picker:
 - Click the pencil icon on any badge to open the **Persona Edit Sheet**:
   - Edit the persona name or instructions on the fly.
   - Edited personas automatically receive a `(Custom)` badge suffix.
-  - Toggle **Caveman Mode** (extreme brevity, direct sentences) or **Ponytail Mode** (structured executive analysis with bullet points).
+  - Toggle **Ponytail Mode** (structured executive analysis with bullet points).
   - Stock persona system prompts are resolved lazily at debate start time.
 
 <div align="center">
@@ -95,7 +95,7 @@ Clicking **+ Add a Role** opens the 2-tab Persona Picker:
 
 <div align="center">
   <img src="screenshots/08_persona_studio_ai_builder.png" alt="Persona Studio AI Builder" width="85%" />
-  <p><em>Figure 3.2: Persona Studio & AI Persona Assistant prompt generator with Caveman/Ponytail brevity controls.</em></p>
+  <p><em>Figure 3.2: Persona Studio & AI Persona Assistant prompt generator with Ponytail brevity controls.</em></p>
 </div>
 
 ---
