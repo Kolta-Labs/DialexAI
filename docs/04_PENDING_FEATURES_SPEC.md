@@ -14,7 +14,7 @@ This document serves as the formal specification for pending features slated for
 3. [Explicit Contradiction & Tension Pair Detection Engine (COMPLETED)](features/03_CONTRADICTION_AND_TENSION_DETECTION.md)
 4. [Round-Aware Dynamic Graph Retrieval (In-Debate RAG) (COMPLETED)](features/04_ROUND_AWARE_DYNAMIC_RETRIEVAL.md)
 5. [Dedicated 1-on-1 Socratic Interview Mode (COMPLETED)](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md)
-6. [Null Hypothesis Benchmarking & Quantitative Evaluation Suite](#6-null-hypothesis-benchmarking--quantitative-evaluation-suite)
+6. [Null Hypothesis Benchmarking & Quantitative Evaluation Suite (APPROVED SPEC)](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md)
 7. [8-Layer DNA Mental & Structured Persona Ingestion](#7-8-layer-dna-mental--structured-persona-ingestion)
 
 ---
@@ -291,9 +291,9 @@ Convening a 4-to-6-model council is resource-intensive when a user merely wants 
 
 ## 6. Null Hypothesis Benchmarking & Quantitative Evaluation Suite
 
-> [!IMPORTANT]
-> **Priority**: High  
-> **Component**: Tooling (`tools/evaluator`, Go test suite), Web Admin Dashboard (`/admin/benchmarks`).
+> [!NOTE]
+> **Status**: **APPROVED ARCHITECTURAL SPECIFICATION** (v1.6) — Detailed spec: [**docs/features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md**](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md)  
+> **Component**: Go Engine (`pkg/benchmark`, `pkg/api`), CLI (`cmd/dialexbench`), KMP Shared (`domain`, `data`, `presentation/arena`), Web Admin Dashboard (`:8080/admin/benchmarks`).
 
 ### 6.1 Problem Statement
 To establish scientific legitimacy and enterprise ROI, Dialex AI must empirically prove that multi-agent deliberation yields superior, less hallucinated outcomes than a single well-prompted frontier model.

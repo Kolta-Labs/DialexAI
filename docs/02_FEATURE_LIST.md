@@ -183,7 +183,11 @@ The following advanced capabilities have been implemented or are queued for impl
    - 📖 **Full Architectural Specification**: [**docs/features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md**](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md)
 
 ### Pending Roadmap Capabilities
-6. **Null Hypothesis Benchmarking & Evaluation Suite**: Automated testing framework validating multi-agent debate superiority against single-model baselines across hallucination and trade-off metrics.
+6. **Null Hypothesis Benchmarking & Evaluation Suite (SPEC APPROVED)**:
+   - Automated testing framework validating multi-agent debate superiority against single-model baselines across hallucination, blind spot coverage, trade-off depth, and actionability metrics ($p < 0.05$).
+   - Full-stack execution: Native Desktop KMP UI (Sidebar "Arena & Benchmarks") + Web Admin (`:8080/admin/benchmarks`) + CLI runner (`dialexbench`).
+   - Includes embedded **DialexBench-10** canonical dilemma dataset plus custom dilemma authoring.
+   - 📖 **Full Architectural Specification**: [**docs/features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md**](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md)
 7. **8-Layer DNA Mental & Structured Persona Ingestion**: Standardized cognitive schema (epistemic bias, communication vector, taboo spaces, heuristics) with MMOS export compatibility.
 
 ---
