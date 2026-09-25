@@ -1,5 +1,7 @@
 package com.dialex.presentation.chat
 
+import com.dialex.domain.model.TensionFilter
+import com.dialex.domain.model.TensionPair
 import com.dialex.model.Discussion
 import com.dialex.model.DeliverableFormat
 import com.dialex.model.Provider
@@ -45,6 +47,12 @@ data class ChatState(
      *  poll are failing — the engine is unreachable. Clears automatically once a poll
      *  or stream update succeeds again. */
     val engineConnectionLost: Boolean = false,
+    /** Identified dialectic tension pairs (thesis vs antithesis). */
+    val tensionPairs: ImmutableList<TensionPair> = persistentListOf(),
+    /** Whether the Tension Matrix drawer is open. */
+    val isTensionDrawerOpen: Boolean = false,
+    /** Current active filter for the Tension Matrix drawer. */
+    val tensionFilter: TensionFilter = TensionFilter.ALL,
 )
 
 /** One row in the token usage modal — one entry per agent seat. */
@@ -89,6 +97,9 @@ sealed interface ChatIntent {
     data object GenerateSummaryTitle : ChatIntent
     data class RemoveInvalidFolder(val path: String) : ChatIntent
     data object RetryFolderValidation : ChatIntent
+    data object ToggleTensionDrawer : ChatIntent
+    data class SetTensionDrawerOpen(val open: Boolean) : ChatIntent
+    data class SetTensionFilter(val filter: TensionFilter) : ChatIntent
 }
 
 sealed interface ChatEffect {

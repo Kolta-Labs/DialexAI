@@ -168,7 +168,8 @@ class ChatViewModel(
             lastLoggedErrorMsg = null
         }
 
-        setState { copy(discussion = mergedDiscussion, isActionInProgress = false) }
+        val activeTensions = (updatedDiscussion.tensionPairs.ifEmpty { currentDisc?.tensionPairs.orEmpty() }).toImmutableList()
+        setState { copy(discussion = mergedDiscussion, tensionPairs = activeTensions, isActionInProgress = false) }
         computeTokenWarning(mergedDiscussion)
         updateNextSpeaker(mergedDiscussion)
         validateWorkspaceFolders(mergedDiscussion)
@@ -745,6 +746,15 @@ class ChatViewModel(
             is ChatIntent.RetryFolderValidation -> {
                 val current = state.value.discussion ?: return
                 validateWorkspaceFolders(current)
+            }
+            is ChatIntent.ToggleTensionDrawer -> {
+                setState { copy(isTensionDrawerOpen = !isTensionDrawerOpen) }
+            }
+            is ChatIntent.SetTensionDrawerOpen -> {
+                setState { copy(isTensionDrawerOpen = intent.open) }
+            }
+            is ChatIntent.SetTensionFilter -> {
+                setState { copy(tensionFilter = intent.filter) }
             }
         }
     }

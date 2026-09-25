@@ -98,6 +98,7 @@ import com.dialex.model.brandName
 import com.dialex.model.label
 import io.github.koltalabs.kolt.utils.state.AsyncState
 import com.dialex.presentation.setup.TokenWarningLevel
+import com.dialex.domain.model.TensionStatus
 import com.dialex.theme.CcPalette
 import com.dialex.theme.LocalCcColors
 import com.dialex.ui.MarkdownText
@@ -1219,6 +1220,42 @@ fun ChatScreen(
                                     }
                                 }
                             }
+
+                            if (state.tensionPairs.isNotEmpty()) {
+                                Spacer(Modifier.width(8.dp))
+                                val openTensions = state.tensionPairs.count { it.status == TensionStatus.OPEN || it.status == TensionStatus.EXPLORED }
+                                val badgeBg = if (openTensions > 0) Color(0xFFFEF3C7) else Color(0xFFD1FAE5)
+                                val badgeText = if (openTensions > 0) Color(0xFFD97706) else Color(0xFF059669)
+                                val badgeIcon = if (openTensions > 0) Icons.Outlined.ElectricBolt else Icons.Outlined.CheckCircle
+                                val tooltip = if (openTensions > 0) {
+                                    "$openTensions active dialectic tension(s) detected\nClick to inspect Tension Matrix"
+                                } else {
+                                    "All dialectic tensions synthesized\nClick to inspect Tension Matrix"
+                                }
+                                ThemedTooltipBox(tooltip) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(5.dp))
+                                            .background(badgeBg)
+                                            .clickable { onIntent(ChatIntent.ToggleTensionDrawer) }
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(
+                                            badgeIcon,
+                                            contentDescription = "Tension Matrix",
+                                            tint = badgeText,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = if (openTensions > 0) "$openTensions Tension${if (openTensions > 1) "s" else ""}" else "Tensions Resolved",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                                            color = badgeText
+                                        )
+                                    }
+                                }
+                            }
                         }
 
                         // Right: Live Debate Controls
@@ -1741,6 +1778,15 @@ fun ChatScreen(
                     usageBreakdown = state.usageBreakdown,
                     onDismiss = { onIntent(ChatIntent.DismissUsageModal) },
                     cc = cc
+                )
+            }
+
+            if (state.isTensionDrawerOpen) {
+                TensionMatrixDrawer(
+                    tensions = state.tensionPairs,
+                    filter = state.tensionFilter,
+                    onFilterSelect = { onIntent(ChatIntent.SetTensionFilter(it)) },
+                    onDismiss = { onIntent(ChatIntent.SetTensionDrawerOpen(false)) }
                 )
             }
 

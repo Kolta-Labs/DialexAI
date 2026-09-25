@@ -356,6 +356,7 @@ type DebateResult struct {
 	Warning            *string         `json:"warning,omitempty"`
 	IsConsensusReached bool            `json:"isConsensusReached,omitempty"`
 	EarlyExitReason    *string         `json:"earlyExitReason,omitempty"`
+	TensionPairs       []TensionPair   `json:"tensionPairs,omitempty"`
 }
 
 var ProviderMaxInputLimits = map[Provider]int{

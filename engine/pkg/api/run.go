@@ -78,6 +78,7 @@ func (s *Server) runDiscussion(w http.ResponseWriter, r *http.Request, resetTran
 		discussion.Conclusion = nil
 		discussion.Deliverable = nil
 		discussion.Summary = nil
+		discussion.TensionPairs = nil
 	} else {
 		// Dropping trailing error entries mirrors the desktop app's resume(): they're not
 		// fed back to the agents as context and shouldn't skew the resume point.
@@ -262,6 +263,7 @@ func (s *Server) executeRun(ctx context.Context, controller *runController, id s
 						st.Discussions[i].Transcript = append(st.Discussions[i].Transcript, msg)
 					}
 					st.Discussions[i].Status = model.DiscussionRunning
+					st.Discussions[i].TensionPairs = discussion.TensionPairs
 					discussion.Transcript = st.Discussions[i].Transcript
 					discussion.Name = d.Name
 					discussion.ProjectID = d.ProjectID
@@ -282,6 +284,20 @@ func (s *Server) executeRun(ctx context.Context, controller *runController, id s
 	result, runErr := orch.Run(ctx, orchestrator.RunOptions{
 		Config:            discussion.Config,
 		InitialTranscript: discussion.Transcript,
+		InitialTensions:   discussion.TensionPairs,
+		OnTensionsUpdated: func(t []model.TensionPair) {
+			discussion.TensionPairs = t
+			st, err := s.Store.Load()
+			if err == nil {
+				for i, d := range st.Discussions {
+					if d.ID == id {
+						st.Discussions[i].TensionPairs = t
+						_ = s.Store.Save(st)
+						break
+					}
+				}
+			}
+		},
 		IsStopped:         controller.isPaused,
 		GetInjected:       controller.drainInjected,
 		CompactionModel:   compactionModel,
@@ -294,6 +310,11 @@ func (s *Server) executeRun(ctx context.Context, controller *runController, id s
 	discussion.Transcript = result.Transcript
 	discussion.Conclusion = result.Conclusion
 	discussion.Warning = result.Warning
+	discussion.IsConsensusReached = result.IsConsensusReached
+	discussion.EarlyExitReason = result.EarlyExitReason
+	if len(result.TensionPairs) > 0 {
+		discussion.TensionPairs = result.TensionPairs
+	}
 	if result.Conclusion != nil {
 		discussion.Summary = result.Conclusion
 	}

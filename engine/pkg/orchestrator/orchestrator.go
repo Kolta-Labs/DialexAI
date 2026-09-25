@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"dialex/pkg/consensus"
 	"dialex/pkg/model"
 	"dialex/pkg/runner"
 )
@@ -75,6 +76,8 @@ type RunOptions struct {
 	OnMessage           func(model.DebateMessage)
 	AttachedFolders     []model.FolderScope
 	Permissions         *model.PermissionConfig
+	InitialTensions     []model.TensionPair
+	OnTensionsUpdated   func([]model.TensionPair)
 }
 
 // Run executes the round-robin turn loop: config.Primary always speaks first each round
@@ -110,6 +113,10 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 		compactionModel = model.DefaultCompactionModel
 	}
 	tokenBudget := opts.TokenBudget
+
+	currentTensions := append([]model.TensionPair{}, opts.InitialTensions...)
+	onTensionsUpdated := opts.OnTensionsUpdated
+	tensionDetector := consensus.NewTensionDetector()
 
 	transcript := append([]model.DebateMessage{}, opts.InitialTranscript...)
 
@@ -401,7 +408,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 			}
 		}
 		if round <= 1 || round1Turns < len(config.Agents()) {
-			return model.DebateResult{Transcript: transcript, Error: &errorMessage}, nil
+			return model.DebateResult{Transcript: transcript, Error: &errorMessage, TensionPairs: currentTensions}, nil
 		}
 
 		emergencyWrapUpPrompt := fmt.Sprintf("You are the Deliberation Moderator. A late participant turn was interrupted by a connection error.\n"+
@@ -429,15 +436,16 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 		conclusionReply, err := respondWithRetry(ctx, o.RunnerFor(modCopy), modCopy, effectiveTopic, effectiveContext, "", contextView(modCopy), "")
 		if err != nil {
 			if isCancellation(err) {
-				return model.DebateResult{Transcript: transcript}, err
+				return model.DebateResult{Transcript: transcript, TensionPairs: currentTensions}, err
 			}
-			return model.DebateResult{Transcript: transcript, Error: &errorMessage}, nil
+			return model.DebateResult{Transcript: transcript, Error: &errorMessage, TensionPairs: currentTensions}, nil
 		}
 		warning := fmt.Sprintf("Discussion concluded with emergency synthesis due to provider timeout in Round %d: %s", round, errorMessage)
 		return model.DebateResult{
-			Transcript: transcript,
-			Conclusion: &conclusionReply.Content,
-			Warning:    &warning,
+			Transcript:   transcript,
+			Conclusion:   &conclusionReply.Content,
+			Warning:      &warning,
+			TensionPairs: currentTensions,
 		}, nil
 	}
 
@@ -539,6 +547,21 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 		case model.ConsensusModeSimpleMajority:
 			isConsensus = ratio > 0.50
 		}
+		// Paraconsistent Invariant: cannot conclude consensus if there are active OPEN or EXPLORED tensions!
+		if isConsensus && model.HasOpenTensions(currentTensions) {
+			var curRoundMessages []model.DebateMessage
+			for _, m := range transcript {
+				if m.Round == curRound && !m.IsError && !m.IsSystem && !m.IsUserComment {
+					curRoundMessages = append(curRoundMessages, m)
+				}
+			}
+			if len(curRoundMessages) > 0 {
+				currentTensions = tensionDetector.HeuristicAnalyzeRound(config.Topic, curRound, curRoundMessages, currentTensions)
+			}
+			if model.HasOpenTensions(currentTensions) {
+				isConsensus = false
+			}
+		}
 		return isConsensus, ratio
 	}
 
@@ -592,15 +615,15 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 		for _, agent := range agents[resumeIndex:] {
 			checkInjected()
 			if isStopped() {
-				return model.DebateResult{Transcript: transcript, Paused: true}, nil
+				return model.DebateResult{Transcript: transcript, Paused: true, TensionPairs: currentTensions}, nil
 			}
 			// Dynamic mid-loop compaction check before every turn
 			if err := maybeCompact(); err != nil && isCancellation(err) {
-				return model.DebateResult{Transcript: transcript}, err
+				return model.DebateResult{Transcript: transcript, TensionPairs: currentTensions}, err
 			}
 			turnErr, hardStop := speak(agent, round)
 			if hardStop != nil {
-				return model.DebateResult{Transcript: transcript}, hardStop
+				return model.DebateResult{Transcript: transcript, TensionPairs: currentTensions}, hardStop
 			}
 			if turnErr != "" {
 				return handleTurnFailureGracefully(agent, round, turnErr)
@@ -610,7 +633,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 				if used >= tokenBudget && (config.TokenBudgetAction == model.TokenBudgetActionHardStop || config.TokenBudgetAction == "") {
 					msg := fmt.Sprintf("Token budget of %d reached (%d used so far). Raise it in Settings > Limits, then Resume to continue.", tokenBudget, used)
 					exitReason := "TOKEN_BUDGET"
-					return model.DebateResult{Transcript: transcript, Error: &msg, EarlyExitReason: &exitReason}, nil
+					return model.DebateResult{Transcript: transcript, Error: &msg, EarlyExitReason: &exitReason, TensionPairs: currentTensions}, nil
 				}
 			}
 
@@ -641,11 +664,42 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 		// Shared Memory update at round boundary
 		if useSharedMem {
 			if err := updateSharedMemory(); err != nil && isCancellation(err) {
-				return model.DebateResult{Transcript: transcript}, err
+				return model.DebateResult{Transcript: transcript, TensionPairs: currentTensions}, err
 			}
 		}
+
+		// Dialectic Tension Evaluation at round boundary
+		var roundMessages []model.DebateMessage
+		for _, m := range transcript {
+			if m.Round == round && !m.IsError && !m.IsSystem && !m.IsUserComment {
+				roundMessages = append(roundMessages, m)
+			}
+		}
+		if len(roundMessages) >= 2 {
+			analysisAgent := config.Primary
+			ctxTension, cancelTension := context.WithTimeout(ctx, 12*time.Second)
+			updatedTensions, err := tensionDetector.AnalyzeRound(
+				ctxTension,
+				o.RunnerFor(analysisAgent),
+				analysisAgent,
+				config.Topic,
+				round,
+				roundMessages,
+				currentTensions,
+				"",
+			)
+			cancelTension()
+			if err == nil && len(updatedTensions) > 0 {
+				currentTensions = updatedTensions
+				if onTensionsUpdated != nil {
+					onTensionsUpdated(currentTensions)
+				}
+			}
+		}
+
 		if !allowMidRound {
-			if reached, ratio := evaluateConsensus(round); reached {
+			reached, ratio := evaluateConsensus(round)
+			if reached {
 				agreedEarly = true
 				percent := int(ratio * 100)
 				marker := model.DebateMessage{
@@ -660,6 +714,19 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 				transcript = append(transcript, marker)
 				onMessage(marker)
 				break
+			} else if ratio >= 1.0 && model.HasOpenTensions(currentTensions) {
+				openCount := model.OpenTensionCount(currentTensions)
+				marker := model.DebateMessage{
+					SeatID:            "system",
+					Provider:          config.Primary.Provider,
+					AuthorDisplayName: "System",
+					AgentID:           config.Primary.Provider,
+					Round:             round,
+					Content:           fmt.Sprintf("⚠️ Superficial consensus detected: Agreement signaled by participants, but %d active dialectic tension(s) remain open. Paraconsistent consensus invariant requires all tensions to be synthesized or logged as accepted trade-offs before conclusion.", openCount),
+					IsSystem:          true,
+				}
+				transcript = append(transcript, marker)
+				onMessage(marker)
 			}
 		}
 		round++
@@ -708,7 +775,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 	}
 	if err != nil {
 		if isCancellation(err) {
-			return model.DebateResult{Transcript: transcript}, err
+			return model.DebateResult{Transcript: transcript, TensionPairs: currentTensions}, err
 		}
 		message := err.Error()
 		msg := model.DebateMessage{AgentID: moderatorAgent.Provider, Round: round, Content: message, IsError: true}
@@ -719,6 +786,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 			Error:              &message,
 			IsConsensusReached: agreedEarly,
 			EarlyExitReason:    earlyExitReason,
+			TensionPairs:       currentTensions,
 		}, nil
 	}
 	return model.DebateResult{
@@ -726,6 +794,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 		Conclusion:         &conclusion.Content,
 		IsConsensusReached: agreedEarly,
 		EarlyExitReason:    earlyExitReason,
+		TensionPairs:       currentTensions,
 	}, nil
 }
 

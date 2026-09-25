@@ -1,5 +1,6 @@
 package com.dialex.model
 
+import com.dialex.domain.model.TensionPair
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -95,6 +96,8 @@ data class Discussion(
     val artifacts: List<DiscussionArtifact> = emptyList(),
     /** Artifact banner IDs dismissed by the user so they are never shown again in this discussion. */
     val dismissedArtifactIds: List<String> = emptyList(),
+    /** Dialectic tension pairs identified across rounds. */
+    val tensionPairs: List<TensionPair> = emptyList(),
     /** Creation timestamp in epoch milliseconds. */
     val createdAt: Long = 0L,
     /** Last updated timestamp in epoch milliseconds. */

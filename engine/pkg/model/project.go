@@ -88,9 +88,12 @@ type Discussion struct {
 	TotalTokensUsed int64                `json:"totalTokensUsed,omitempty"`
 	Artifacts       []DiscussionArtifact `json:"artifacts,omitempty"`
 	DismissedArtifactIds []string        `json:"dismissedArtifactIds,omitempty"`
+	TensionPairs    []TensionPair        `json:"tensionPairs,omitempty"`
 	CreatedAt       int64                `json:"createdAt,omitempty"`
 	UpdatedAt       int64                `json:"updatedAt,omitempty"`
-	Warning         *string              `json:"warning,omitempty"`
+	Warning            *string              `json:"warning,omitempty"`
+	IsConsensusReached bool                 `json:"isConsensusReached,omitempty"`
+	EarlyExitReason    *string              `json:"earlyExitReason,omitempty"`
 }
 
 // DiscussionArtifact is a saved artifact (deliverable, summary, or transcript).

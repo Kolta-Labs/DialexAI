@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"dialex/pkg/model"
@@ -410,3 +411,56 @@ func containsStr(s, sub string) bool {
 }
 
 func agentPtr(a model.Agent) *model.Agent { return &a }
+
+func TestParaconsistentConsensusGatekeeper_BlocksSuperficialConsensus(t *testing.T) {
+	fakeR := &fakeRunner{respond: func(agent model.Agent, transcript []model.DebateMessage, _ string) (runner.AgentReply, error) {
+		return runner.AgentReply{Content: "AGREED: superficial agreement"}, nil
+	}}
+	o := &Orchestrator{RunnerFor: func(model.Agent) runner.AgentRunner { return fakeR }}
+	config := model.DebateConfig{
+		Topic:     "Storage Architecture",
+		Primary:   claudeAgent(),
+		Secondary: agentPtr(geminiAgent()),
+		RoundMode: model.RoundModeFixed,
+		MaxRounds: 2,
+		Consensus: &model.ConsensusConfig{
+			Mode:                     model.ConsensusModeUnanimous,
+			MinRoundsBeforeExit:      2,
+			AllowMidRoundTermination: false,
+		},
+	}
+
+	// Given an initial OPEN tension pair that is never synthesized or accepted as a trade-off
+	openTension := model.TensionPair{
+		ID:                 "tension_acid_vs_latency",
+		UnderlyingConflict: "ACID Quorum vs Low-Latency SLA",
+		Status:             model.TensionStatusOpen,
+		Severity:           0.9,
+		DetectedInRound:    1,
+	}
+
+	result, err := o.Run(context.Background(), RunOptions{
+		Config:          config,
+		InitialTensions: []model.TensionPair{openTension},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Invariant: Consensus must NOT be certified because the tension remained OPEN!
+	if result.IsConsensusReached {
+		t.Errorf("IsConsensusReached should be false due to open paraconsistent tension, got true")
+	}
+
+	hasWarningPill := false
+	for _, m := range result.Transcript {
+		if m.IsSystem && strings.Contains(m.Content, "Superficial consensus detected") {
+			hasWarningPill = true
+			break
+		}
+	}
+	if !hasWarningPill {
+		t.Errorf("expected moderator system intervention for superficial consensus with open tensions")
+	}
+}
+

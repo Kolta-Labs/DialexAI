@@ -69,8 +69,8 @@ Introduce a preliminary **Decomposition Phase** prior to Round 1:
 
 ## 3. Explicit Contradiction & Tension Pair Detection Engine
 
-> [!IMPORTANT]
-> **Priority**: Critical / High Value  
+> [!NOTE]
+> **Status**: **COMPLETED** (v1.3)  
 > **Component**: Go Engine (`pkg/consensus`, `pkg/model`), KMP Presentation (`chat`, `deliverables`).
 
 ### 3.1 Problem Statement
