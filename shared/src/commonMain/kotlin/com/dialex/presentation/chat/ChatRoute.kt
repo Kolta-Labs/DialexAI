@@ -46,8 +46,19 @@ fun ChatRoute(
     isCompact: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val conductSocraticTurnUseCase = remember(discussionRepository) { com.dialex.domain.usecase.ConductSocraticTurnUseCase(discussionRepository) }
+    val generateSocraticDigestUseCase = remember(discussionRepository) { com.dialex.domain.usecase.GenerateSocraticDigestUseCase(discussionRepository) }
+    val elevateSocraticToCouncilUseCase = remember(discussionRepository) { com.dialex.domain.usecase.ElevateSocraticToCouncilUseCase(discussionRepository) }
+
     val viewModel: ChatViewModel = viewModel(key = "chat_$discussionId") {
-        ChatViewModel(discussionRepository, discussionId, tokenBudget)
+        ChatViewModel(
+            discussionRepository = discussionRepository,
+            discussionId = discussionId,
+            tokenBudget = tokenBudget,
+            conductSocraticTurnUseCase = conductSocraticTurnUseCase,
+            generateSocraticDigestUseCase = generateSocraticDigestUseCase,
+            elevateSocraticToCouncilUseCase = elevateSocraticToCouncilUseCase,
+        )
     }
 
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -70,6 +81,7 @@ fun ChatRoute(
                 is ChatEffect.ExportMarkdown -> onExportMarkdown(effect.markdown, effect.suggestedFileName)
                 is ChatEffect.ShowSnackbar -> snackbarMessage = effect.message
                 is ChatEffect.ScrollToBottom -> {}
+                is ChatEffect.ElevateSuccess -> backStack.add(Setup(effect.newDiscussionId))
             }
         }
     }

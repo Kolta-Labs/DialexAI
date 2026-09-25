@@ -67,6 +67,14 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("POST /api/v1/discussions/decompose", s.requireAuth(s.handleDecomposeProblem))
 	mux.HandleFunc("POST /api/v1/debates/decompose", s.requireAuth(s.handleDecomposeProblem))
 
+	// Socratic Interview APIs
+	mux.HandleFunc("POST /api/v1/debates/{id}/socratic/turn", s.requireAuth(s.handleSocraticTurn))
+	mux.HandleFunc("POST /api/v1/discussions/{id}/socratic/turn", s.requireAuth(s.handleSocraticTurn))
+	mux.HandleFunc("POST /api/v1/debates/{id}/socratic/digest", s.requireAuth(s.handleSocraticDigest))
+	mux.HandleFunc("POST /api/v1/discussions/{id}/socratic/digest", s.requireAuth(s.handleSocraticDigest))
+	mux.HandleFunc("POST /api/v1/debates/{id}/socratic/elevate", s.requireAuth(s.handleSocraticElevate))
+	mux.HandleFunc("POST /api/v1/discussions/{id}/socratic/elevate", s.requireAuth(s.handleSocraticElevate))
+
 	mux.HandleFunc("GET /settings", s.requireAuth(s.handleGetSettings))
 	mux.HandleFunc("PUT /settings", s.requireAuth(s.handleUpdateSettings))
 

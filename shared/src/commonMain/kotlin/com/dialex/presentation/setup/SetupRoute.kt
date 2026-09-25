@@ -35,6 +35,7 @@ fun SetupRoute(
     discussionId: String?,
     initialProjectId: String? = null,
     copyFromDiscussionId: String? = null,
+    initialMode: com.dialex.domain.model.DiscussionMode = com.dialex.domain.model.DiscussionMode.COUNCIL,
     supportsCli: Boolean,
     projectRepository: ProjectRepository,
     discussionRepository: DiscussionRepository,
@@ -46,7 +47,7 @@ fun SetupRoute(
     isCompact: Boolean = false,
 ) {
     val viewModel: SetupViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
-        key = "setup_${discussionId}_${initialProjectId}_${copyFromDiscussionId}"
+        key = "setup_${discussionId}_${initialProjectId}_${copyFromDiscussionId}_${initialMode}"
     ) {
         SetupViewModel(
             projectRepository = projectRepository,
@@ -57,6 +58,7 @@ fun SetupRoute(
             discussionId = discussionId,
             initialProjectId = initialProjectId,
             copyFromDiscussionId = copyFromDiscussionId,
+            initialMode = initialMode,
             supportsCli = supportsCli
         )
     }

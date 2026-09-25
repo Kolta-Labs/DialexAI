@@ -296,7 +296,7 @@ fun SetupScreen(
                 }
 
                 GradientButton(
-                    text = if (isEditing) "Update" else "Start Discussion",
+                    text = if (isEditing) "Update" else if (state.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) "Begin Interview 🎯" else "Start Discussion",
                     height = 32.dp,
                     onClick = {
                     val missing = mutableListOf<String>()
@@ -306,8 +306,14 @@ fun SetupScreen(
                     if (config.topic.isBlank()) {
                         missing.add("Discussion Objective & Topic is required")
                     }
-                    if (config.agents.size < 2) {
-                        missing.add("At least 2 participant agents are required to start (currently ${config.agents.size})")
+                    if (state.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) {
+                        if (config.primary.model.isBlank()) {
+                            missing.add("Interviewer agent must have a model selected")
+                        }
+                    } else {
+                        if (config.agents.size < 2) {
+                            missing.add("At least 2 participant agents are required to start (currently ${config.agents.size})")
+                        }
                     }
 
                     for (err in state.validationErrors) {
@@ -451,6 +457,93 @@ fun SetupScreen(
                                             modifier = Modifier.size(14.dp)
                                         )
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Mode Switcher Pill: [ ⚔️ Council Debate | 🎯 Socratic Interview ] ──
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = cc.panelAlt,
+                    border = BorderStroke(1.dp, cc.border.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        // Council Debate Pill
+                        val isCouncil = state.mode == com.dialex.domain.model.DiscussionMode.COUNCIL
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isCouncil) cc.panel else Color.Transparent,
+                            border = if (isCouncil) BorderStroke(1.dp, cc.border) else null,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(38.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onIntent(SetupIntent.SetDiscussionMode(com.dialex.domain.model.DiscussionMode.COUNCIL)) }
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text("⚔️", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp))
+                                Spacer(Modifier.width(8.dp))
+                                Column(verticalArrangement = Arrangement.Center) {
+                                    Text(
+                                        "Council Debate",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontWeight = if (isCouncil) FontWeight.SemiBold else FontWeight.Normal,
+                                            fontSize = 12.5.sp
+                                        ),
+                                        color = if (isCouncil) cc.textPrimary else cc.textMuted
+                                    )
+                                    Text(
+                                        "Multi-agent dialectic",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        color = cc.textMuted.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Socratic Interview Pill
+                        val isSocratic = state.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSocratic) (if (cc.isDark) Color(0xFF2E2616) else Color(0xFFFEF3C7)) else Color.Transparent,
+                            border = if (isSocratic) BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.6f)) else null,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(38.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onIntent(SetupIntent.SetDiscussionMode(com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW)) }
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text("🎯", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp))
+                                Spacer(Modifier.width(8.dp))
+                                Column(verticalArrangement = Arrangement.Center) {
+                                    Text(
+                                        "Socratic Interview",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontWeight = if (isSocratic) FontWeight.SemiBold else FontWeight.Normal,
+                                            fontSize = 12.5.sp
+                                        ),
+                                        color = if (isSocratic) (if (cc.isDark) Color(0xFFFBBF24) else Color(0xFFD97706)) else cc.textMuted
+                                    )
+                                    Text(
+                                        "1-on-1 thesis stress-test",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        color = if (isSocratic) (if (cc.isDark) Color(0xFFFBBF24).copy(alpha = 0.8f) else Color(0xFFD97706).copy(alpha = 0.8f)) else cc.textMuted.copy(alpha = 0.7f)
+                                    )
                                 }
                             }
                         }
@@ -1028,99 +1121,249 @@ fun SetupScreen(
                     }
                 }
 
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Seat 1: Primary Moderator Participant Card
-                    ParticipantCard(
-                        seatIndex = 1,
-                        seatLabel = "Primary Moderator",
-                        agent = config.primary,
-                        availablePersonas = state.availablePersonas,
-                        availableModels = state.availableModels,
-                        configuredApiProviders = state.configuredApiProviders,
-                        availableCliProviders = state.availableCliProviders,
-                        supportsCli = state.supportsCli,
-                        onAgentChange = ::updatePrimary,
-                        onOpenPersonaPicker = { onIntent(SetupIntent.OpenPersonaPicker(0)) },
-                        filePicker = filePicker,
-                        attachedFiles = discussion.attachedFiles,
-                        onAttachFile = { fileName, content, scope -> onIntent(SetupIntent.AttachFile(fileName, content, scope)) },
-                        onRemoveFile = { fileId -> onIntent(SetupIntent.RemoveFile(fileId)) },
-                        onManagePersonas = onManagePersonas,
-                        onOpenSettings = { onIntent(SetupIntent.OpenSettings) },
-                        onShowToast = showToast
-                    )
+                if (state.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Socratic Interrogator (Sole Opponent)
+                        ParticipantCard(
+                            seatIndex = 1,
+                            seatLabel = "Socratic Interrogator",
+                            agent = config.primary,
+                            availablePersonas = state.availablePersonas,
+                            availableModels = state.availableModels,
+                            configuredApiProviders = state.configuredApiProviders,
+                            availableCliProviders = state.availableCliProviders,
+                            supportsCli = state.supportsCli,
+                            onAgentChange = ::updatePrimary,
+                            onOpenPersonaPicker = { onIntent(SetupIntent.OpenPersonaPicker(0)) },
+                            filePicker = filePicker,
+                            attachedFiles = discussion.attachedFiles,
+                            onAttachFile = { fileName, content, scope -> onIntent(SetupIntent.AttachFile(fileName, content, scope)) },
+                            onRemoveFile = { fileId -> onIntent(SetupIntent.RemoveFile(fileId)) },
+                            onManagePersonas = onManagePersonas,
+                            onOpenSettings = { onIntent(SetupIntent.OpenSettings) },
+                            onShowToast = showToast
+                        )
 
-                    // Seats 2-6: Additional Participants
-                    additionalAgents.forEachIndexed { idx, agent ->
-                        AnimatedVisibility(
-                            visible = true,
-                            enter = fadeIn() + expandVertically(),
-                            exit = fadeOut() + shrinkVertically()
-                        ) {
-                            ParticipantCard(
-                                seatIndex = idx + 2,
-                                seatLabel = "Participant ${idx + 2}",
-                                agent = agent,
-                                availablePersonas = state.availablePersonas,
-                                availableModels = state.availableModels,
-                                configuredApiProviders = state.configuredApiProviders,
-                                availableCliProviders = state.availableCliProviders,
-                                supportsCli = state.supportsCli,
-                                onAgentChange = { updated ->
-                                    val list = additionalAgents.toMutableList()
-                                    list[idx] = updated
-                                    updateAdditionalAgents(list)
-                                },
-                                onOpenPersonaPicker = { onIntent(SetupIntent.OpenPersonaPicker(idx + 1)) },
-                                onRemove = {
-                                    val list = additionalAgents.toMutableList()
-                                    list.removeAt(idx)
-                                    updateAdditionalAgents(list)
-                                },
-                                filePicker = filePicker,
-                                attachedFiles = discussion.attachedFiles,
-                                onAttachFile = { fileName, content, scope -> onIntent(SetupIntent.AttachFile(fileName, content, scope)) },
-                                onRemoveFile = { fileId -> onIntent(SetupIntent.RemoveFile(fileId)) },
-                                onManagePersonas = onManagePersonas,
-                                onOpenSettings = { onIntent(SetupIntent.OpenSettings) },
-                                onShowToast = showToast
-                            )
-                        }
-                    }
-
-                    // Add Participant Button
-                    if (additionalAgents.size < 5) {
+                        // Socratic Stance & Epistemic Method Card
                         Surface(
                             color = cc.panel,
-                            shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(0.75.dp, cc.border.copy(alpha = 0.45f)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    val nextProvider = Provider.entries.firstOrNull { p -> config.agents.none { it.provider == p } } ?: Provider.OPENAI
-                                    val newAgent = Agent(
-                                        provider = nextProvider,
-                                        model = nextProvider.defaultModel(),
-                                        runMode = if (state.supportsCli) RunMode.CLI else RunMode.API
-                                    )
-                                    updateAdditionalAgents(additionalAgents + newAgent)
-                                }
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, cc.border.copy(alpha = 0.6f)),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Icon(Icons.Outlined.PersonAdd, contentDescription = null, tint = cc.textMuted, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    "Add Participant",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-                                    color = cc.textPrimary
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                "🎯 Epistemic Stance",
+                                                style = MaterialTheme.typography.titleSmall.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                                                color = cc.textPrimary
+                                            )
+                                            Surface(
+                                                color = Color(0xFFF59E0B).copy(alpha = 0.12f),
+                                                shape = RoundedCornerShape(4.dp),
+                                                border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.3f))
+                                            ) {
+                                                Text(
+                                                    "Brevis Interrogatio",
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium),
+                                                    color = Color(0xFFF59E0B)
+                                                )
+                                            }
+                                        }
+                                        Text(
+                                            "Governs probe style, brevity constraint (≤2 sentences), and concession tracking.",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                            color = cc.textMuted
+                                        )
+                                    }
+
+                                    Surface(
+                                        color = cc.panel,
+                                        shape = RoundedCornerShape(6.dp),
+                                        border = BorderStroke(0.75.dp, cc.border),
+                                        modifier = Modifier.clickable {
+                                            onIntent(SetupIntent.AutoSuggestSocraticSetup)
+                                        }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.AutoAwesome,
+                                                contentDescription = null,
+                                                tint = Color(0xFFF59E0B),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                "Auto-Suggest",
+                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+                                                color = cc.textPrimary
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // 5 Stance Options
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    com.dialex.domain.model.SocraticStance.entries.forEach { stance ->
+                                        val isSelected = state.socraticStance == stance
+                                        Surface(
+                                            color = if (isSelected) Color(0xFFF59E0B).copy(alpha = 0.08f) else cc.panel,
+                                            shape = RoundedCornerShape(8.dp),
+                                            border = BorderStroke(
+                                                width = if (isSelected) 1.5.dp else 1.dp,
+                                                color = if (isSelected) Color(0xFFF59E0B) else cc.border.copy(alpha = 0.4f)
+                                            ),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { onIntent(SetupIntent.SelectSocraticStance(stance)) }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            ) {
+                                                RadioButton(
+                                                    selected = isSelected,
+                                                    onClick = { onIntent(SetupIntent.SelectSocraticStance(stance)) },
+                                                    colors = RadioButtonDefaults.colors(
+                                                        selectedColor = Color(0xFFF59E0B),
+                                                        unselectedColor = cc.textMuted
+                                                    ),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        stance.displayName,
+                                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium),
+                                                        color = if (isSelected) Color(0xFFF59E0B) else cc.textPrimary
+                                                    )
+                                                    Text(
+                                                        stance.subtitle,
+                                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                                        color = cc.textMuted
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Seat 1: Primary Moderator Participant Card
+                        ParticipantCard(
+                            seatIndex = 1,
+                            seatLabel = "Primary Moderator",
+                            agent = config.primary,
+                            availablePersonas = state.availablePersonas,
+                            availableModels = state.availableModels,
+                            configuredApiProviders = state.configuredApiProviders,
+                            availableCliProviders = state.availableCliProviders,
+                            supportsCli = state.supportsCli,
+                            onAgentChange = ::updatePrimary,
+                            onOpenPersonaPicker = { onIntent(SetupIntent.OpenPersonaPicker(0)) },
+                            filePicker = filePicker,
+                            attachedFiles = discussion.attachedFiles,
+                            onAttachFile = { fileName, content, scope -> onIntent(SetupIntent.AttachFile(fileName, content, scope)) },
+                            onRemoveFile = { fileId -> onIntent(SetupIntent.RemoveFile(fileId)) },
+                            onManagePersonas = onManagePersonas,
+                            onOpenSettings = { onIntent(SetupIntent.OpenSettings) },
+                            onShowToast = showToast
+                        )
+
+                        // Seats 2-6: Additional Participants
+                        additionalAgents.forEachIndexed { idx, agent ->
+                            AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn() + expandVertically(),
+                                exit = fadeOut() + shrinkVertically()
+                            ) {
+                                ParticipantCard(
+                                    seatIndex = idx + 2,
+                                    seatLabel = "Participant ${idx + 2}",
+                                    agent = agent,
+                                    availablePersonas = state.availablePersonas,
+                                    availableModels = state.availableModels,
+                                    configuredApiProviders = state.configuredApiProviders,
+                                    availableCliProviders = state.availableCliProviders,
+                                    supportsCli = state.supportsCli,
+                                    onAgentChange = { updated ->
+                                        val list = additionalAgents.toMutableList()
+                                        list[idx] = updated
+                                        updateAdditionalAgents(list)
+                                    },
+                                    onOpenPersonaPicker = { onIntent(SetupIntent.OpenPersonaPicker(idx + 1)) },
+                                    onRemove = {
+                                        val list = additionalAgents.toMutableList()
+                                        list.removeAt(idx)
+                                        updateAdditionalAgents(list)
+                                    },
+                                    filePicker = filePicker,
+                                    attachedFiles = discussion.attachedFiles,
+                                    onAttachFile = { fileName, content, scope -> onIntent(SetupIntent.AttachFile(fileName, content, scope)) },
+                                    onRemoveFile = { fileId -> onIntent(SetupIntent.RemoveFile(fileId)) },
+                                    onManagePersonas = onManagePersonas,
+                                    onOpenSettings = { onIntent(SetupIntent.OpenSettings) },
+                                    onShowToast = showToast
                                 )
+                            }
+                        }
+
+                        // Add Participant Button
+                        if (additionalAgents.size < 5) {
+                            Surface(
+                                color = cc.panel,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(0.75.dp, cc.border.copy(alpha = 0.45f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val nextProvider = Provider.entries.firstOrNull { p -> config.agents.none { it.provider == p } } ?: Provider.OPENAI
+                                        val newAgent = Agent(
+                                            provider = nextProvider,
+                                            model = nextProvider.defaultModel(),
+                                            runMode = if (state.supportsCli) RunMode.CLI else RunMode.API
+                                        )
+                                        updateAdditionalAgents(additionalAgents + newAgent)
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Outlined.PersonAdd, contentDescription = null, tint = cc.textMuted, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "Add Participant",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                                        color = cc.textPrimary
+                                    )
+                                }
                             }
                         }
                     }

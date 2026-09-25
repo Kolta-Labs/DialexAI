@@ -60,6 +60,13 @@ data class ChatState(
     val isEvidenceDrawerOpen: Boolean = false,
     /** Selected round for evidence drawer inspection (null = all rounds). */
     val selectedEvidenceRound: Int? = null,
+    /** Socratic 1-on-1 interview state */
+    val isSocraticProcessing: Boolean = false,
+    val activeProbe: String? = null,
+    val socraticStage: com.dialex.domain.model.SocraticStage? = null,
+    val socraticDigest: com.dialex.domain.model.SocraticDigest? = null,
+    val isGeneratingDigest: Boolean = false,
+    val isElevatingToCouncil: Boolean = false,
 )
 
 /** One row in the token usage modal — one entry per agent seat. */
@@ -109,6 +116,9 @@ sealed interface ChatIntent {
     data class SetTensionFilter(val filter: TensionFilter) : ChatIntent
     data class ToggleEvidenceDrawer(val round: Int? = null) : ChatIntent
     data class SetEvidenceDrawerOpen(val open: Boolean, val round: Int? = null) : ChatIntent
+    // ── Socratic Interview ─────────────────────────────────────────────────────
+    data object GenerateSocraticDigest : ChatIntent
+    data class ElevateSocraticToCouncil(val targetProjectId: String? = null) : ChatIntent
 }
 
 sealed interface ChatEffect {
@@ -117,4 +127,5 @@ sealed interface ChatEffect {
     data class ExportMarkdown(val markdown: String, val suggestedFileName: String) : ChatEffect
     data class ShowSnackbar(val message: String) : ChatEffect
     data object ScrollToBottom : ChatEffect
+    data class ElevateSuccess(val newDiscussionId: String) : ChatEffect
 }

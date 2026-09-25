@@ -90,6 +90,10 @@ type Discussion struct {
 	DismissedArtifactIds []string        `json:"dismissedArtifactIds,omitempty"`
 	TensionPairs    []TensionPair        `json:"tensionPairs,omitempty"`
 	RetrievedEvidence []RoundEvidence    `json:"retrievedEvidence,omitempty"`
+	Mode            DiscussionMode       `json:"mode,omitempty"`
+	SocraticConfig  *SocraticConfig      `json:"socraticConfig,omitempty"`
+	SocraticDigest  *SocraticDigest      `json:"socraticDigest,omitempty"`
+	SocraticLedger  []SocraticLedgerItem `json:"socraticLedger,omitempty"`
 	CreatedAt       int64                `json:"createdAt,omitempty"`
 	UpdatedAt       int64                `json:"updatedAt,omitempty"`
 	Warning            *string              `json:"warning,omitempty"`

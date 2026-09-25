@@ -1,6 +1,10 @@
 package com.dialex.model
 
+import com.dialex.domain.model.DiscussionMode
 import com.dialex.domain.model.RoundEvidence
+import com.dialex.domain.model.SocraticConfig
+import com.dialex.domain.model.SocraticDigest
+import com.dialex.domain.model.SocraticLedgerItem
 import com.dialex.domain.model.TensionPair
 import kotlinx.serialization.Serializable
 
@@ -105,6 +109,14 @@ data class Discussion(
     val createdAt: Long = 0L,
     /** Last updated timestamp in epoch milliseconds. */
     val updatedAt: Long = 0L,
+    /** Operating mode: COUNCIL (multi-agent) vs SOCRATIC_INTERVIEW (1-on-1). */
+    val mode: DiscussionMode = DiscussionMode.COUNCIL,
+    /** Configuration and active stage for Socratic sessions. */
+    val socraticConfig: SocraticConfig? = null,
+    /** Crystallized architectural digest produced at the end of a Socratic interview. */
+    val socraticDigest: SocraticDigest? = null,
+    /** Live Epistemic Ledger tracking validated invariants, conceded axioms, and active questions. */
+    val socraticLedger: List<SocraticLedgerItem> = emptyList(),
     /** Emergency synthesis warning or non-fatal issue description. */
     val warning: String? = null,
     /** True when early consensus termination was triggered. */

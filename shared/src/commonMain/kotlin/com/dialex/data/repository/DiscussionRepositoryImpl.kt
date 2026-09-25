@@ -17,7 +17,15 @@ class DiscussionRepositoryImpl(private val dataSource: EngineDataSource) : Discu
         projectId: String,
         name: String,
         config: DebateConfig,
-    ): Discussion = dataSource.createDiscussion(projectId, name, config)
+    ): Discussion = dataSource.createDiscussion(projectId, name, config, com.dialex.domain.model.DiscussionMode.COUNCIL, null)
+
+    override suspend fun createDiscussion(
+        projectId: String,
+        name: String,
+        config: DebateConfig,
+        mode: com.dialex.domain.model.DiscussionMode,
+        socraticConfig: com.dialex.domain.model.SocraticConfig?,
+    ): Discussion = dataSource.createDiscussion(projectId, name, config, mode, socraticConfig)
 
     override suspend fun updateDiscussion(discussion: Discussion): Discussion =
         dataSource.updateDiscussion(discussion)
@@ -45,6 +53,23 @@ class DiscussionRepositoryImpl(private val dataSource: EngineDataSource) : Discu
 
     override suspend fun setupDiscussionWithAi(request: com.dialex.domain.model.AiSetupRequest): Discussion =
         dataSource.setupDiscussionWithAi(request)
+
+    override suspend fun socraticTurn(
+        discussionId: String,
+        request: com.dialex.domain.model.SocraticTurnRequest,
+    ): com.dialex.domain.model.SocraticTurnResponse =
+        dataSource.socraticTurn(discussionId, request)
+
+    override suspend fun socraticDigest(
+        discussionId: String,
+    ): com.dialex.domain.model.SocraticDigest =
+        dataSource.socraticDigest(discussionId)
+
+    override suspend fun socraticElevate(
+        discussionId: String,
+        request: com.dialex.domain.model.SocraticElevateRequest,
+    ): com.dialex.domain.model.ElevateResult =
+        dataSource.socraticElevate(discussionId, request)
 
     override suspend fun getUsage(id: String): DiscussionUsage {
         val resp = dataSource.getDiscussionUsage(id)

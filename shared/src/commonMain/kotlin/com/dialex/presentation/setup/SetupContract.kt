@@ -97,9 +97,19 @@ data class SetupState(
     val showDecompositionSheet: Boolean = false,
     /** Set of selected axis IDs to be included in the debate agenda. */
     val selectedAxisIds: ImmutableSet<String> = persistentSetOf(),
+    /** Operating mode: COUNCIL (multi-agent) vs SOCRATIC_INTERVIEW (1-on-1). */
+    val mode: com.dialex.domain.model.DiscussionMode = com.dialex.domain.model.DiscussionMode.COUNCIL,
+    /** Active Socratic stance when in SOCRATIC_INTERVIEW mode. */
+    val socraticStance: com.dialex.domain.model.SocraticStance = com.dialex.domain.model.SocraticStance.RUTHLESS_ELENCHUS,
+    /** Preselected interviewer persona for Socratic mode. */
+    val socraticInterviewer: PredefinedPersona? = null,
 )
 
 sealed interface SetupIntent {
+    data class SetDiscussionMode(val mode: com.dialex.domain.model.DiscussionMode) : SetupIntent
+    data class SelectSocraticStance(val stance: com.dialex.domain.model.SocraticStance) : SetupIntent
+    data class SelectSocraticInterviewer(val persona: PredefinedPersona) : SetupIntent
+    data object AutoSuggestSocraticSetup : SetupIntent
     data class SelectProject(val projectId: String) : SetupIntent
     data class CreateProject(val name: String) : SetupIntent
     data class UpdateProjectContext(val sharedContext: String, val sharedInstructions: String) : SetupIntent

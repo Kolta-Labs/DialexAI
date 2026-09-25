@@ -1,6 +1,11 @@
 package com.dialex.data.datasource
 
 import com.dialex.domain.model.DomainException
+import com.dialex.domain.model.ElevateResult
+import com.dialex.domain.model.SocraticDigest
+import com.dialex.domain.model.SocraticElevateRequest
+import com.dialex.domain.model.SocraticTurnRequest
+import com.dialex.domain.model.SocraticTurnResponse
 import com.dialex.engine.EngineClient
 import com.dialex.engine.EngineException
 import com.dialex.model.ApiKeys
@@ -39,8 +44,14 @@ class EngineDataSource(private val client: EngineClient) {
 
     suspend fun getDiscussion(id: String): Discussion = wrap { client.getDebate(id) }
 
-    suspend fun createDiscussion(projectId: String, name: String, config: DebateConfig): Discussion =
-        wrap { client.createDebate(projectId, name, config) }
+    suspend fun createDiscussion(
+        projectId: String,
+        name: String,
+        config: DebateConfig,
+        mode: com.dialex.domain.model.DiscussionMode = com.dialex.domain.model.DiscussionMode.COUNCIL,
+        socraticConfig: com.dialex.domain.model.SocraticConfig? = null,
+    ): Discussion =
+        wrap { client.createDebate(projectId, name, config, mode, socraticConfig) }
 
     suspend fun updateDiscussion(discussion: Discussion): Discussion =
         wrap { client.updateDebate(discussion) }
@@ -82,6 +93,17 @@ class EngineDataSource(private val client: EngineClient) {
     suspend fun exportPersonas(): String = wrap { client.exportPersonas() }
     suspend fun chatPersona(request: com.dialex.domain.model.PersonaChatRequest): com.dialex.domain.model.PersonaChatResponse =
         wrap { client.chatPersona(request) }
+
+    // ── Socratic Interview ─────────────────────────────────────────────────────
+
+    suspend fun socraticTurn(discussionId: String, request: SocraticTurnRequest): SocraticTurnResponse =
+        wrap { client.socraticTurn(discussionId, request) }
+
+    suspend fun socraticDigest(discussionId: String): SocraticDigest =
+        wrap { client.socraticDigest(discussionId) }
+
+    suspend fun socraticElevate(discussionId: String, request: SocraticElevateRequest): ElevateResult =
+        wrap { client.socraticElevate(discussionId, request) }
 
 
     // ── Settings ──────────────────────────────────────────────────────────────

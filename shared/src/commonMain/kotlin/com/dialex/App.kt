@@ -92,6 +92,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+import com.dialex.data.datasource.LegalConsentLocalDataSource
+import com.dialex.data.repository.LegalConsentRepositoryImpl
+import com.dialex.domain.repository.LegalConsentRepository
+import com.dialex.domain.usecase.GetLegalConsentUseCase
+import com.dialex.domain.usecase.RecordLegalConsentUseCase
+import com.dialex.presentation.legal.TermsConsentDialog
+import com.dialex.domain.model.LegalConsent
+
 /**
  * Root composable for the entire application.
  * Implements an adaptive two-pane workspace on wide screens
@@ -123,6 +131,7 @@ fun App(
     val profileLocalDataSource = remember(platformDb) { ProfileLocalDataSource(platformDb) }
     val secureKeyDataSource = remember(platformDb) { SecureKeyDataSource(platformDb) }
     val localDatabaseSource = remember(platformDb) { LocalDatabaseSource(platformDb) }
+    val legalConsentLocalDataSource = remember(platformDb) { LegalConsentLocalDataSource(platformDb) }
 
     val profileRepository: ProfileRepository = remember(profileLocalDataSource) {
         ProfileRepositoryImpl(profileLocalDataSource)
@@ -136,6 +145,25 @@ fun App(
     val templateLocalDataSource = remember(platformDb) { TemplateLocalDataSource(platformDb) }
     val templateRepository: TemplateRepository = remember(templateLocalDataSource) {
         TemplateRepositoryImpl(templateLocalDataSource)
+    }
+    val legalConsentRepository: LegalConsentRepository = remember(legalConsentLocalDataSource) {
+        LegalConsentRepositoryImpl(legalConsentLocalDataSource)
+    }
+    val getLegalConsentUseCase = remember(legalConsentRepository) {
+        GetLegalConsentUseCase(legalConsentRepository)
+    }
+    val recordLegalConsentUseCase = remember(legalConsentRepository) {
+        RecordLegalConsentUseCase(legalConsentRepository)
+    }
+
+    var legalConsent by remember { mutableStateOf<LegalConsent?>(null) }
+    var isLegalConsentRequired by remember { mutableStateOf(false) }
+
+    LaunchedEffect(legalConsentRepository) {
+        getLegalConsentUseCase.observe().collect { consent ->
+            legalConsent = consent
+            isLegalConsentRequired = !consent.isAccepted || consent.termsVersion != LegalConsent.CURRENT_LEGAL_VERSION
+        }
     }
 
     var activeProfile by remember { mutableStateOf<ConnectionProfile?>(null) }
@@ -386,6 +414,9 @@ fun App(
                             onSwitchConnection = onSwitchConnection,
                             recheckCli = recheckCli,
                             initialTab = currentRoute.initialTab,
+                            profileRepository = profileRepository,
+                            apiKeyRepository = apiKeyRepository,
+                            legalConsentRepository = legalConsentRepository,
                             extraTabLabel = extraSettingsTabLabel,
                             extraTabContent = extraSettingsTabContent,
                             isCompact = false,
@@ -444,6 +475,19 @@ fun App(
                                 selectedProjectId = targetProjId
                                 selectedDiscussionId = null
                                 backStack.add(Setup(discussionId = null, initialProjectId = targetProjId))
+                            },
+                            onNewSocraticInterview = { projId: String? ->
+                                val ungroupedId = projects.firstOrNull { it.name.equals("Ungrouped", ignoreCase = true) }?.id
+                                val targetProjId = projId ?: selectedProjectId ?: ungroupedId ?: projects.firstOrNull()?.id
+                                selectedProjectId = targetProjId
+                                selectedDiscussionId = null
+                                backStack.add(
+                                    Setup(
+                                        discussionId = null,
+                                        initialProjectId = targetProjId,
+                                        initialMode = com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW
+                                    )
+                                )
                             },
                             onCopyDiscussionSettings = { sourceDisc ->
                                 selectedProjectId = sourceDisc.projectId
@@ -675,6 +719,7 @@ fun App(
                                                 discussionId = targetRoute.discussionId,
                                                 initialProjectId = targetRoute.initialProjectId,
                                                 copyFromDiscussionId = targetRoute.copyFromDiscussionId,
+                                                initialMode = targetRoute.initialMode,
                                                 supportsCli = supportsCli,
                                                 projectRepository = projectRepository,
                                                 discussionRepository = discussionRepository,
@@ -741,6 +786,7 @@ fun App(
                                                 initialTab = targetRoute.initialTab,
                                                 profileRepository = profileRepository,
                                                 apiKeyRepository = apiKeyRepository,
+                                                legalConsentRepository = legalConsentRepository,
                                                 extraTabLabel = extraSettingsTabLabel,
                                                 extraTabContent = extraSettingsTabContent,
                                                 isCompact = false,
@@ -855,6 +901,7 @@ fun App(
                                         discussionId = targetRoute.discussionId,
                                         initialProjectId = targetRoute.initialProjectId,
                                         copyFromDiscussionId = targetRoute.copyFromDiscussionId,
+                                        initialMode = targetRoute.initialMode,
                                         supportsCli = supportsCli,
                                         projectRepository = projectRepository,
                                         discussionRepository = discussionRepository,
@@ -902,6 +949,7 @@ fun App(
                                         initialTab = targetRoute.initialTab,
                                         profileRepository = profileRepository,
                                         apiKeyRepository = apiKeyRepository,
+                                        legalConsentRepository = legalConsentRepository,
                                         extraTabLabel = extraSettingsTabLabel,
                                         extraTabContent = extraSettingsTabContent,
                                         isCompact = true,
@@ -1084,6 +1132,20 @@ fun App(
                 selectedProjectId = disc.projectId
                 selectedDiscussionId = disc.id
                 backStack.set(listOf(Setup(disc.id)))
+            }
+        )
+    }
+
+    if (isLegalConsentRequired) {
+        TermsConsentDialog(
+            onAccept = {
+                coroutineScope.launch {
+                    recordLegalConsentUseCase()
+                    isLegalConsentRequired = false
+                }
+            },
+            onDecline = {
+                // User declined consent
             }
         )
     }

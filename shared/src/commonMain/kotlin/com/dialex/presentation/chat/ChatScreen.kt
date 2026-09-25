@@ -2,6 +2,9 @@
 
 package com.dialex.presentation.chat
 
+import com.dialex.domain.model.DiscussionMode
+import com.dialex.domain.model.SocraticStance
+import com.dialex.domain.model.SocraticStage
 import androidx.compose.animation.core.*
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -664,6 +667,24 @@ fun ChatScreen(
                             }
                         }
 
+                        if (discussion.mode == DiscussionMode.SOCRATIC_INTERVIEW) {
+                            item(key = "socratic_epistemic_hud") {
+                                Column(Modifier.widthIn(max = maxContentWidth).fillMaxWidth()) {
+                                    val stance = discussion.socraticConfig?.stance ?: SocraticStance.RUTHLESS_ELENCHUS
+                                    val stage = state.socraticStage ?: discussion.socraticConfig?.stage ?: SocraticStage.HYPOTHESIS_EXTRACTION
+                                    SocraticHud(
+                                        stance = stance,
+                                        stage = stage,
+                                        interviewerName = discussion.socraticConfig?.interviewerName?.ifBlank { "Socratic Examiner" } ?: "Socratic Examiner",
+                                        activeProbe = state.activeProbe,
+                                        ledger = discussion.socraticLedger,
+                                        isGeneratingDigest = state.isGeneratingDigest,
+                                        onGenerateDigest = { onIntent(ChatIntent.GenerateSocraticDigest) }
+                                    )
+                                }
+                            }
+                        }
+
                         if (state.invalidFolders.isNotEmpty()) {
                             item(key = "invalid_folders_blocking_banner") {
                                 Column(Modifier.widthIn(max = maxContentWidth).fillMaxWidth()) {
@@ -1023,6 +1044,36 @@ fun ChatScreen(
                                             )
                                         }
                                     }
+                                }
+                            }
+                        }
+
+                        // Socratic Processing Indicator
+                        if (state.isSocraticProcessing) {
+                            item(key = "socratic_thinking_ticker") {
+                                Column(Modifier.widthIn(max = maxContentWidth).fillMaxWidth()) {
+                                    AgentThinkingTicker(
+                                        cc = cc,
+                                        agent = discussion.config.primary,
+                                        tokens = 0,
+                                        action = "Interrogator is formulating probe..."
+                                    )
+                                }
+                            }
+                        }
+
+                        // Socratic Digest Bubble (rendered if available)
+                        val socraticDigest = state.socraticDigest ?: discussion.socraticDigest
+                        if (socraticDigest != null) {
+                            item(key = "socratic_digest_bubble") {
+                                Column(Modifier.widthIn(max = maxContentWidth).fillMaxWidth()) {
+                                    SocraticDigestBubble(
+                                        digest = socraticDigest,
+                                        isElevating = state.isElevatingToCouncil,
+                                        onElevateToCouncil = {
+                                            onIntent(ChatIntent.ElevateSocraticToCouncil())
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -1574,6 +1625,82 @@ fun ChatScreen(
                         .border(BorderStroke(1.dp, cc.border), RoundedCornerShape(14.dp))
                         .padding(horizontal = 14.dp, vertical = 10.dp)
                 ) {
+                    // Socratic Dialogue Assist Chips
+                    if (discussion.mode == DiscussionMode.SOCRATIC_INTERVIEW) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = cc.panel,
+                                border = BorderStroke(0.75.dp, cc.border),
+                                modifier = Modifier.clickable {
+                                    inputPrompt = (if (inputPrompt.isBlank()) "" else "$inputPrompt ") + "Consider the failure mode where "
+                                }
+                            ) {
+                                Text(
+                                    "⚡ Expose failure mode",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                                    color = cc.textPrimary,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = cc.panel,
+                                border = BorderStroke(0.75.dp, cc.border),
+                                modifier = Modifier.clickable {
+                                    inputPrompt = (if (inputPrompt.isBlank()) "" else "$inputPrompt ") + "The non-negotiable invariant is that "
+                                }
+                            ) {
+                                Text(
+                                    "🛡️ Defend invariant",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                                    color = cc.textPrimary,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = cc.panel,
+                                border = BorderStroke(0.75.dp, cc.border),
+                                modifier = Modifier.clickable {
+                                    inputPrompt = (if (inputPrompt.isBlank()) "" else "$inputPrompt ") + "I concede that under extreme load, "
+                                }
+                            ) {
+                                Text(
+                                    "🏳️ Concede constraint",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                                    color = cc.textPrimary,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFFF59E0B).copy(alpha = 0.12f),
+                                border = BorderStroke(0.75.dp, Color(0xFFF59E0B).copy(alpha = 0.4f)),
+                                modifier = Modifier.clickable(enabled = !state.isGeneratingDigest) {
+                                    onIntent(ChatIntent.GenerateSocraticDigest)
+                                }
+                            ) {
+                                Text(
+                                    if (state.isGeneratingDigest) "⏳ Synthesizing..." else "📜 Synthesize Digest",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold),
+                                    color = Color(0xFFF59E0B),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+
                     // Input Text Field
                     BasicTextField(
                         value = inputPrompt,
@@ -1586,7 +1713,9 @@ fun ChatScreen(
                         decorationBox = { innerTextField ->
                             if (inputPrompt.isEmpty()) {
                                 Text(
-                                    if (discussion.config.userInterventionPolicy == com.dialex.model.UserInterventionPolicy.AUTONOMOUS_AUTOPILOT)
+                                    if (discussion.mode == DiscussionMode.SOCRATIC_INTERVIEW)
+                                        "Articulate your thesis, defend an invariant, or answer probe..."
+                                    else if (discussion.config.userInterventionPolicy == com.dialex.model.UserInterventionPolicy.AUTONOMOUS_AUTOPILOT)
                                         "⚡ Autopilot active — type here to inject a human comment or override..."
                                     else
                                         "Add a comment or inject a point for the agents...",
@@ -1606,48 +1735,74 @@ fun ChatScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Left: Mode / Target Agent Pill
-                        Box {
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .clickable { agentModeDropdownOpen = true }
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                        if (discussion.mode == DiscussionMode.SOCRATIC_INTERVIEW) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFFF59E0B).copy(alpha = 0.12f),
+                                border = BorderStroke(0.75.dp, Color(0xFFF59E0B).copy(alpha = 0.35f))
                             ) {
-                                Text(
-                                    selectedAgentMode,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium),
-                                    color = cc.textMuted
-                                )
-                                Spacer(Modifier.width(2.dp))
-                                Icon(
-                                    Icons.Default.KeyboardArrowDown,
-                                    contentDescription = null,
-                                    tint = cc.textMuted,
-                                    modifier = Modifier.size(14.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.TipsAndUpdates,
+                                        contentDescription = null,
+                                        tint = Color(0xFFF59E0B),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Text(
+                                        "1-on-1 Socratic Turn",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold),
+                                        color = Color(0xFFF59E0B)
+                                    )
+                                }
                             }
+                        } else {
+                            // Left: Mode / Target Agent Pill
+                            Box {
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable { agentModeDropdownOpen = true }
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        selectedAgentMode,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+                                        color = cc.textMuted
+                                    )
+                                    Spacer(Modifier.width(2.dp))
+                                    Icon(
+                                        Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = cc.textMuted,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
 
-                            DropdownMenu(
-                                expanded = agentModeDropdownOpen,
-                                onDismissRequest = { agentModeDropdownOpen = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("All Agents (Open Comment)") },
-                                    onClick = {
-                                        selectedAgentMode = "All Agents"
-                                        agentModeDropdownOpen = false
-                                    }
-                                )
-                                discussion.config.agents.forEach { agent ->
+                                DropdownMenu(
+                                    expanded = agentModeDropdownOpen,
+                                    onDismissRequest = { agentModeDropdownOpen = false }
+                                ) {
                                     DropdownMenuItem(
-                                        text = { Text(agent.label()) },
+                                        text = { Text("All Agents (Open Comment)") },
                                         onClick = {
-                                            selectedAgentMode = agent.label()
+                                            selectedAgentMode = "All Agents"
                                             agentModeDropdownOpen = false
                                         }
                                     )
+                                    discussion.config.agents.forEach { agent ->
+                                        DropdownMenuItem(
+                                            text = { Text(agent.label()) },
+                                            onClick = {
+                                                selectedAgentMode = agent.label()
+                                                agentModeDropdownOpen = false
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1670,7 +1825,7 @@ fun ChatScreen(
                             Spacer(Modifier.width(2.dp))
 
                             // Round Send Button with Right Arrow (User Comments)
-                            val canSendComment = inputPrompt.isNotBlank() && state.invalidFolders.isEmpty()
+                            val canSendComment = inputPrompt.isNotBlank() && state.invalidFolders.isEmpty() && !state.isSocraticProcessing
                             Surface(
                                 shape = CircleShape,
                                 color = if (canSendComment) cc.accent else cc.panelAlt,
@@ -1684,12 +1839,20 @@ fun ChatScreen(
                                     }
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.ArrowForward,
-                                        contentDescription = "Send User Comment",
-                                        tint = if (canSendComment) Color.White else cc.textMuted.copy(alpha = 0.5f),
-                                        modifier = Modifier.size(if (isCompact) 18.dp else 14.dp)
-                                    )
+                                    if (state.isSocraticProcessing) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(if (isCompact) 18.dp else 14.dp),
+                                            strokeWidth = 2.dp,
+                                            color = Color.White
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.ArrowForward,
+                                            contentDescription = "Send User Comment",
+                                            tint = if (canSendComment) Color.White else cc.textMuted.copy(alpha = 0.5f),
+                                            modifier = Modifier.size(if (isCompact) 18.dp else 14.dp)
+                                        )
+                                    }
                                 }
                             }
                         }

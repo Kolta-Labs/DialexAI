@@ -118,5 +118,14 @@ object DatabaseSchema {
                 is_deleted INTEGER NOT NULL DEFAULT 0
             )
         """.trimIndent())
+
+        db.exec("""
+            CREATE TABLE IF NOT EXISTS legal_consent (
+                id TEXT PRIMARY KEY,
+                terms_version TEXT NOT NULL,
+                privacy_version TEXT NOT NULL,
+                accepted_at INTEGER NOT NULL
+            )
+        """.trimIndent())
     }
 }

@@ -37,12 +37,14 @@ class SetupViewModel(
     private val discussionId: String?,
     private val initialProjectId: String? = null,
     private val copyFromDiscussionId: String? = null,
+    private val initialMode: com.dialex.domain.model.DiscussionMode = com.dialex.domain.model.DiscussionMode.COUNCIL,
     supportsCli: Boolean,
     private val ollamaService: com.dialex.service.OllamaService = com.dialex.service.OllamaService()
 ) : MviViewModel<SetupState, SetupIntent, SetupEffect>(
     SetupState(
         supportsCli = supportsCli,
-        step = if (discussionId != null || copyFromDiscussionId != null) SetupStep.ConfigForm else SetupStep.FrontPage
+        step = if (discussionId != null || copyFromDiscussionId != null || initialMode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) SetupStep.ConfigForm else SetupStep.FrontPage,
+        mode = initialMode
     )
 ) {
 
@@ -69,6 +71,7 @@ class SetupViewModel(
                         id = "",
                         projectId = defaultProjectId,
                         name = "New Discussion",
+                        mode = initialMode,
                         config = DebateConfig(
                             topic = "",
                             commonContext = proj?.sharedContext ?: "",
@@ -164,14 +167,41 @@ class SetupViewModel(
                 val templates = try { templateRepository.getTemplates() } catch (e: Exception) { emptyList() }
                 val archetype = DiscussionPresets.detectArchetype(discussion.config)
                 val estimate = DeliberationEstimator.estimate(discussion.config)
+                val allPersonas = (SystemPersonas + settings.personas).distinctBy { it.id }.toImmutableList()
+
+                val effectiveMode = if (discussion.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW || initialMode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) {
+                    com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW
+                } else {
+                    com.dialex.domain.model.DiscussionMode.COUNCIL
+                }
+
+                val defaultInterviewer = allPersonas.firstOrNull { it.id == "devils_advocate" }
+                    ?: allPersonas.firstOrNull { it.name.contains("Devil", ignoreCase = true) }
+                    ?: allPersonas.firstOrNull()
+
+                val finalDiscussion = if (effectiveMode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) {
+                    val primaryAgent = if (defaultInterviewer != null) {
+                        discussion.config.primary.copy(
+                            displayName = defaultInterviewer.name,
+                            role = defaultInterviewer.role,
+                            systemPrompt = defaultInterviewer.systemPrompt
+                        )
+                    } else discussion.config.primary
+                    discussion.copy(
+                        mode = effectiveMode,
+                        config = discussion.config.copy(primary = primaryAgent)
+                    )
+                } else discussion
 
                 setState { 
                     copy(
                         projects = projects.toImmutableList(),
                         selectedProject = selectedProject,
-                        discussion = discussion,
+                        discussion = finalDiscussion,
+                        mode = effectiveMode,
+                        socraticInterviewer = defaultInterviewer,
                         templates = templates.toImmutableList(),
-                        availablePersonas = (SystemPersonas + settings.personas).distinctBy { it.id }.toImmutableList(),
+                        availablePersonas = allPersonas,
                         availableModels = allModels,
                         configuredApiProviders = configuredProviders,
                         availableCliProviders = cliProviders,
@@ -182,7 +212,7 @@ class SetupViewModel(
                         runEstimate = estimate
                     )
                 }
-                validateConfig(discussion.config)
+                validateConfig(finalDiscussion.config)
             } catch (e: Exception) {
                 setState { copy(loadAsync = AsyncState.Error(e)) }
             }
@@ -221,9 +251,8 @@ class SetupViewModel(
                 
                 if (config.topic.isBlank()) errors.add("Discussion Objective & Topic is required.")
                 if (config.primary.model.isBlank()) errors.add("Primary agent must have a model.")
-                if (config.agents.size < 2) errors.add("At least 2 participant agents are required to start (currently ${config.agents.size})")
-                
-                for (agent in config.agents) {
+                if (state.value.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) {
+                    val agent = config.primary
                     if (agent.runMode == com.dialex.model.RunMode.API) {
                         val hasKey = configuredProviders.contains(agent.provider)
                         if (!hasKey) {
@@ -233,6 +262,21 @@ class SetupViewModel(
                         val hasCli = cliProviders.contains(agent.provider)
                         if (!hasCli) {
                             errors.add("CLI not available on engine system for ${agent.provider.brandName()}")
+                        }
+                    }
+                } else {
+                    if (config.agents.size < 2) errors.add("At least 2 participant agents are required to start (currently ${config.agents.size})")
+                    for (agent in config.agents) {
+                        if (agent.runMode == com.dialex.model.RunMode.API) {
+                            val hasKey = configuredProviders.contains(agent.provider)
+                            if (!hasKey) {
+                                errors.add("API key missing for ${agent.provider.brandName()}")
+                            }
+                        } else if (agent.runMode == com.dialex.model.RunMode.CLI) {
+                            val hasCli = cliProviders.contains(agent.provider)
+                            if (!hasCli) {
+                                errors.add("CLI not available on engine system for ${agent.provider.brandName()}")
+                            }
                         }
                     }
                 }
@@ -297,6 +341,62 @@ class SetupViewModel(
                             showProjectContextBanner = project.sharedContext.isNotBlank() || project.sharedInstructions.isNotBlank()
                         ) 
                     }
+                }
+            }
+            is SetupIntent.SetDiscussionMode -> {
+                val newMode = intent.mode
+                val disc = state.value.discussion
+                val interviewer = if (newMode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW && state.value.socraticInterviewer == null) {
+                    state.value.availablePersonas.firstOrNull { it.id == "devils_advocate" }
+                        ?: state.value.availablePersonas.firstOrNull { it.name.contains("Devil", ignoreCase = true) }
+                        ?: state.value.availablePersonas.firstOrNull()
+                } else state.value.socraticInterviewer
+                val updatedDisc = if (disc != null && newMode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW && interviewer != null) {
+                    val primary = disc.config.primary.copy(displayName = interviewer.name, role = interviewer.role, systemPrompt = interviewer.systemPrompt)
+                    disc.copy(mode = newMode, config = disc.config.copy(primary = primary))
+                } else if (disc != null) {
+                    disc.copy(mode = newMode)
+                } else null
+                setState { copy(mode = newMode, socraticInterviewer = interviewer, discussion = updatedDisc) }
+                if (updatedDisc != null) validateConfig(updatedDisc.config)
+            }
+            is SetupIntent.SelectSocraticStance -> {
+                setState { copy(socraticStance = intent.stance) }
+            }
+            is SetupIntent.SelectSocraticInterviewer -> {
+                val disc = state.value.discussion
+                val updatedDisc = if (disc != null) {
+                    val primary = disc.config.primary.copy(displayName = intent.persona.name, role = intent.persona.role, systemPrompt = intent.persona.systemPrompt)
+                    disc.copy(config = disc.config.copy(primary = primary))
+                } else null
+                setState { copy(socraticInterviewer = intent.persona, discussion = updatedDisc) }
+                if (updatedDisc != null) validateConfig(updatedDisc.config)
+            }
+            is SetupIntent.AutoSuggestSocraticSetup -> {
+                val topic = state.value.discussion?.config?.topic.orEmpty().lowercase()
+                val (stance, personaId, reason) = when {
+                    topic.contains("arch") || topic.contains("scale") || topic.contains("database") || topic.contains("infra") || topic.contains("system") ->
+                        Triple(com.dialex.domain.model.SocraticStance.RUTHLESS_ELENCHUS, "devils_advocate", "Technical architecture detected — Ruthless Elenchus selected to rigorously stress-test hidden assumptions.")
+                    topic.contains("risk") || topic.contains("secur") || topic.contains("vulnerab") || topic.contains("fail") || topic.contains("threat") ->
+                        Triple(com.dialex.domain.model.SocraticStance.ADVERSARIAL_RED_TEAM, "risk_analyst", "High risk profile detected — Adversarial Red-Team selected to reconstruct worst-case scenarios.")
+                    topic.contains("value") || topic.contains("pric") || topic.contains("moral") || topic.contains("ethic") || topic.contains("priorit") ->
+                        Triple(com.dialex.domain.model.SocraticStance.APORIA_BOUNDARY_PUSHER, "ethicist", "Normative tradeoffs detected — Aporia Boundary-Pusher selected to unmask competing value irreconcilabilities.")
+                    topic.contains("data") || topic.contains("metric") || topic.contains("proof") || topic.contains("test") ->
+                        Triple(com.dialex.domain.model.SocraticStance.FIRST_PRINCIPLES, "sceptic", "Empirical topic detected — Radical First Principles selected to demand proof.")
+                    else ->
+                        Triple(com.dialex.domain.model.SocraticStance.MAIEUTIC_ARCHITECT, "first_principles", "Exploratory topic — Maieutic Architecture selected for gentle conceptual unpacking.")
+                }
+                val matchedPersona = state.value.availablePersonas.firstOrNull { it.id == personaId }
+                    ?: state.value.availablePersonas.firstOrNull()
+                val disc = state.value.discussion
+                val updatedDisc = if (disc != null && matchedPersona != null) {
+                    val primary = disc.config.primary.copy(displayName = matchedPersona.name, role = matchedPersona.role, systemPrompt = matchedPersona.systemPrompt)
+                    disc.copy(config = disc.config.copy(primary = primary))
+                } else disc
+                setState { copy(socraticStance = stance, socraticInterviewer = matchedPersona, discussion = updatedDisc) }
+                if (updatedDisc != null) validateConfig(updatedDisc.config)
+                viewModelScope.launch {
+                    sendEffect(SetupEffect.ShowSnackbar(reason))
                 }
             }
             is SetupIntent.CreateProject -> {
@@ -601,7 +701,11 @@ class SetupViewModel(
                 val discussion = state.value.discussion ?: return
                 if (discussion.name.isBlank()) return
                 if (discussion.config.topic.isBlank() && discussion.attachedFiles.none { it.scope == "topic" }) return
-                if (discussion.config.agents.size < 2) return
+                if (state.value.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) {
+                    if (discussion.config.primary.model.isBlank()) return
+                } else {
+                    if (discussion.config.agents.size < 2) return
+                }
                 if (state.value.invalidFolders.isNotEmpty()) {
                     sendEffect(SetupEffect.ShowSnackbar("Cannot start discussion: One or more workspace folders are removed or invalid."))
                     return
@@ -632,8 +736,20 @@ class SetupViewModel(
                             )
                         )
 
+                        val socraticConf = com.dialex.domain.model.SocraticConfig(
+                            stance = state.value.socraticStance,
+                            interviewerPersonaId = state.value.socraticInterviewer?.id ?: "",
+                            interviewerName = state.value.socraticInterviewer?.name ?: resolvedConfig.primary.displayName.ifBlank { "Socratic Examiner" }
+                        )
+
                         val savedDiscussion = if (discussionId == null) {
-                            val created = discussionRepository.createDiscussion(discussion.projectId, discussion.name, resolvedConfig)
+                            val created = discussionRepository.createDiscussion(
+                                discussion.projectId,
+                                discussion.name,
+                                resolvedConfig,
+                                mode = state.value.mode,
+                                socraticConfig = if (state.value.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) socraticConf else null
+                            )
                             val withFiles = if (discussion.attachedFiles.isNotEmpty()) {
                                 val updated = created.copy(
                                     attachedFiles = discussion.attachedFiles,
@@ -644,7 +760,13 @@ class SetupViewModel(
                             discussionRepository.startDiscussion(withFiles.id)
                             withFiles
                         } else {
-                            val updated = discussionRepository.updateDiscussion(discussion.copy(config = resolvedConfig))
+                            val updated = discussionRepository.updateDiscussion(
+                                discussion.copy(
+                                    config = resolvedConfig,
+                                    mode = state.value.mode,
+                                    socraticConfig = if (state.value.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) socraticConf else null
+                                )
+                            )
                             if (discussion.status == DiscussionStatus.DRAFT) {
                                 try {
                                     discussionRepository.startDiscussion(updated.id)

@@ -1,5 +1,6 @@
 package com.dialex.presentation.nav
 
+import com.dialex.domain.model.DiscussionMode
 import com.dialex.presentation.settings.SettingsTab
 import kotlinx.serialization.Serializable
 
@@ -22,7 +23,8 @@ data object Connect : AppRoute
 data class Setup(
     val discussionId: String? = null,
     val initialProjectId: String? = null,
-    val copyFromDiscussionId: String? = null
+    val copyFromDiscussionId: String? = null,
+    val initialMode: DiscussionMode = DiscussionMode.COUNCIL
 ) : AppRoute
 
 /** Live debate chat view. The discussion must exist and be non-DRAFT. */

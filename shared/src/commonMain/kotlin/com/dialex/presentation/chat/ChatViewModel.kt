@@ -26,7 +26,10 @@ import kotlin.math.roundToInt
 class ChatViewModel(
     private val discussionRepository: DiscussionRepository,
     private val discussionId: String,
-    private val tokenBudget: Int
+    private val tokenBudget: Int,
+    private val conductSocraticTurnUseCase: com.dialex.domain.usecase.ConductSocraticTurnUseCase? = null,
+    private val generateSocraticDigestUseCase: com.dialex.domain.usecase.GenerateSocraticDigestUseCase? = null,
+    private val elevateSocraticToCouncilUseCase: com.dialex.domain.usecase.ElevateSocraticToCouncilUseCase? = null,
 ) : MviViewModel<ChatState, ChatIntent, ChatEffect>(ChatState()) {
 
     private var streamJob: Job? = null
@@ -37,6 +40,16 @@ class ChatViewModel(
             try {
                 val discussion = discussionRepository.getDiscussion(discussionId)
                 applyUpdatedDiscussion(discussion)
+                if (discussion.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) {
+                    val lastExaminerMsg = discussion.transcript.lastOrNull { !it.isUserComment && !it.isError && !it.isSystem }
+                    setState {
+                        copy(
+                            socraticDigest = discussion.socraticDigest,
+                            activeProbe = lastExaminerMsg?.content,
+                            socraticStage = discussion.socraticConfig?.stage ?: com.dialex.domain.model.SocraticStage.HYPOTHESIS_EXTRACTION
+                        )
+                    }
+                }
                 setState { copy(loadAsync = AsyncState.Success(Unit)) }
                 if (discussion.status == DiscussionStatus.RUNNING) {
                     startStreamingOrPolling()
@@ -494,6 +507,10 @@ class ChatViewModel(
                     return
                 }
                 val currentDisc = state.value.discussion ?: return
+                if (currentDisc.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) {
+                    handleSocraticUserTurn(text, currentDisc)
+                    return
+                }
                 if (currentDisc.status == DiscussionStatus.RUNNING) {
                     setState { copy(queuedUserComment = text) }
                 } else if (currentDisc.status.isCompleted || currentDisc.status == DiscussionStatus.PAUSED || currentDisc.status.isFailed) {
@@ -797,6 +814,134 @@ class ChatViewModel(
                         selectedEvidenceRound = if (intent.open) intent.round else null
                     )
                 }
+            }
+            is ChatIntent.GenerateSocraticDigest -> {
+                if (state.value.isGeneratingDigest) return
+                setState { copy(isGeneratingDigest = true) }
+                viewModelScope.launch {
+                    try {
+                        val digest = if (generateSocraticDigestUseCase != null) {
+                            generateSocraticDigestUseCase.invoke(discussionId)
+                        } else {
+                            discussionRepository.socraticDigest(discussionId)
+                        }
+                        val currentDisc = state.value.discussion ?: return@launch
+                        val updated = currentDisc.copy(socraticDigest = digest, status = DiscussionStatus.DONE)
+                        discussionRepository.updateDiscussion(updated)
+                        setState {
+                            copy(
+                                discussion = updated,
+                                socraticDigest = digest,
+                                isGeneratingDigest = false
+                            )
+                        }
+                        sendEffect(ChatEffect.ScrollToBottom)
+                        sendEffect(ChatEffect.ShowSnackbar("Socratic Epistemic Digest generated & synced to Knowledge Graph!"))
+                    } catch (e: Exception) {
+                        setState { copy(isGeneratingDigest = false) }
+                        val msg = e.message ?: "Failed to generate digest"
+                        sendEffect(ChatEffect.ShowSnackbar(msg))
+                    }
+                }
+            }
+            is ChatIntent.ElevateSocraticToCouncil -> {
+                if (state.value.isElevatingToCouncil) return
+                val digest = state.value.socraticDigest ?: return
+                setState { copy(isElevatingToCouncil = true) }
+                viewModelScope.launch {
+                    try {
+                        val req = com.dialex.domain.model.SocraticElevateRequest(
+                            projectId = intent.targetProjectId ?: (state.value.discussion?.projectId?.ifBlank { "default" } ?: "default"),
+                            digest = digest,
+                            parentDiscussionId = discussionId
+                        )
+                        val result = if (elevateSocraticToCouncilUseCase != null) {
+                            elevateSocraticToCouncilUseCase.invoke(discussionId, req)
+                        } else {
+                            discussionRepository.socraticElevate(discussionId, req)
+                        }
+                        setState { copy(isElevatingToCouncil = false) }
+                        sendEffect(ChatEffect.ElevateSuccess(result.newDiscussionId))
+                        sendEffect(ChatEffect.NavigateToSetup(result.newDiscussionId))
+                    } catch (e: Exception) {
+                        setState { copy(isElevatingToCouncil = false) }
+                        val msg = e.message ?: "Failed to elevate to council"
+                        sendEffect(ChatEffect.ShowSnackbar(msg))
+                    }
+                }
+            }
+        }
+    }
+
+    private fun handleSocraticUserTurn(statement: String, currentDisc: Discussion) {
+        if (state.value.isSocraticProcessing) return
+        val currentRound = (currentDisc.transcript.maxOfOrNull { it.round } ?: 0) + 1
+        val userMsg = com.dialex.model.DebateMessage(
+            seatId = "interlucotor",
+            provider = Provider.CUSTOM,
+            authorDisplayName = "You (Interlocutor)",
+            round = currentRound,
+            content = statement,
+            isUserComment = true,
+            timestampMs = System.currentTimeMillis()
+        )
+        val updatedDisc = currentDisc.copy(
+            transcript = currentDisc.transcript + userMsg,
+            status = DiscussionStatus.RUNNING
+        )
+        setState {
+            copy(
+                discussion = updatedDisc,
+                isSocraticProcessing = true,
+                nextSpeakerProvider = currentDisc.config.primary.provider
+            )
+        }
+        sendEffect(ChatEffect.ScrollToBottom)
+
+        viewModelScope.launch {
+            try {
+                discussionRepository.updateDiscussion(updatedDisc)
+                val turnRequest = com.dialex.domain.model.SocraticTurnRequest(
+                    message = statement,
+                    topic = currentDisc.config.topic.ifBlank { currentDisc.name },
+                    stance = currentDisc.socraticConfig?.stance ?: com.dialex.domain.model.SocraticStance.RUTHLESS_ELENCHUS,
+                    stage = state.value.socraticStage ?: currentDisc.socraticConfig?.stage ?: com.dialex.domain.model.SocraticStage.HYPOTHESIS_EXTRACTION,
+                    context = currentDisc.config.commonContext,
+                    attachedFiles = currentDisc.attachedFiles
+                )
+                val response = if (conductSocraticTurnUseCase != null) {
+                    conductSocraticTurnUseCase.invoke(discussionId, turnRequest)
+                } else {
+                    discussionRepository.socraticTurn(discussionId, turnRequest)
+                }
+                val examinerMsg = com.dialex.model.DebateMessage(
+                    seatId = "interviewer",
+                    provider = currentDisc.config.primary.provider,
+                    authorDisplayName = currentDisc.socraticConfig?.interviewerName?.ifBlank { "Socratic Examiner" } ?: "Socratic Examiner",
+                    round = currentRound + 1,
+                    content = response.probeQuestion,
+                    timestampMs = System.currentTimeMillis()
+                )
+                val withExaminer = updatedDisc.copy(
+                    transcript = updatedDisc.transcript + examinerMsg,
+                    socraticLedger = (updatedDisc.socraticLedger + response.ledgerUpdates).distinctBy { it.id },
+                    status = DiscussionStatus.PAUSED
+                )
+                discussionRepository.updateDiscussion(withExaminer)
+                setState {
+                    copy(
+                        discussion = withExaminer,
+                        isSocraticProcessing = false,
+                        nextSpeakerProvider = null,
+                        activeProbe = response.probeQuestion,
+                        socraticStage = response.newStage
+                    )
+                }
+                sendEffect(ChatEffect.ScrollToBottom)
+            } catch (e: Exception) {
+                setState { copy(isSocraticProcessing = false, nextSpeakerProvider = null) }
+                val msg = e.message ?: "Failed to conduct Socratic turn"
+                sendEffect(ChatEffect.ShowSnackbar(msg))
             }
         }
     }

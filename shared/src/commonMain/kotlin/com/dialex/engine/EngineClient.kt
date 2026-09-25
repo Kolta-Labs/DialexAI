@@ -1,5 +1,10 @@
 package com.dialex.engine
 
+import com.dialex.domain.model.ElevateResult
+import com.dialex.domain.model.SocraticDigest
+import com.dialex.domain.model.SocraticElevateRequest
+import com.dialex.domain.model.SocraticTurnRequest
+import com.dialex.domain.model.SocraticTurnResponse
 import com.dialex.model.ApiKeys
 import com.dialex.model.AppState
 import com.dialex.model.CliCommands
@@ -178,8 +183,21 @@ class EngineClient(
     suspend fun listDebates(projectId: String? = null): List<Discussion> =
         if (projectId != null) get("/debates?projectId=$projectId") else get("/debates")
 
-    suspend fun createDebate(projectId: String, name: String, config: DebateConfig): Discussion {
-        val payload = Discussion(id = "", projectId = projectId, name = name, config = config)
+    suspend fun createDebate(
+        projectId: String,
+        name: String,
+        config: DebateConfig,
+        mode: com.dialex.domain.model.DiscussionMode = com.dialex.domain.model.DiscussionMode.COUNCIL,
+        socraticConfig: com.dialex.domain.model.SocraticConfig? = null,
+    ): Discussion {
+        val payload = Discussion(
+            id = "",
+            projectId = projectId,
+            name = name,
+            config = config,
+            mode = mode,
+            socraticConfig = socraticConfig
+        )
         return post("/debates", payload)
     }
 
@@ -335,6 +353,17 @@ class EngineClient(
 
     suspend fun chatPersona(request: com.dialex.domain.model.PersonaChatRequest): com.dialex.domain.model.PersonaChatResponse =
         post("/api/v1/personas/chat", request)
+
+    // ── Socratic Interview ─────────────────────────────────────────────────────
+
+    suspend fun socraticTurn(discussionId: String, request: SocraticTurnRequest): SocraticTurnResponse =
+        post("/api/v1/discussions/$discussionId/socratic/turn", request)
+
+    suspend fun socraticDigest(discussionId: String): SocraticDigest =
+        post("/api/v1/discussions/$discussionId/socratic/digest", emptyMap<String, String>())
+
+    suspend fun socraticElevate(discussionId: String, request: SocraticElevateRequest): ElevateResult =
+        post("/api/v1/discussions/$discussionId/socratic/elevate", request)
 
 
     // ── Settings ──────────────────────────────────────────────────────────────

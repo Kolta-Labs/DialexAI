@@ -115,6 +115,7 @@ fun WorkspaceSidebar(
     onSelectProject: (String) -> Unit,
     onSelectDiscussion: (String) -> Unit,
     onNewDiscussion: (projectId: String?) -> Unit,
+    onNewSocraticInterview: ((projectId: String?) -> Unit)? = null,
     onCopyDiscussionSettings: ((Discussion) -> Unit)? = null,
     onCreateProject: (String) -> Unit,
     onUpdateProject: ((Project) -> Unit)? = null,
@@ -387,7 +388,54 @@ fun WorkspaceSidebar(
                     }
                 }
 
-                // Item 2: Distinct AI Setup Capsule for "Setup with AI"
+                // Item 2: Standalone Amber Capsule for "🎯 New Interview" (1-on-1 Socratic Mode)
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFF59E0B).copy(alpha = 0.10f),
+                    border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(36.dp)
+                        .clickable { onNewSocraticInterview?.invoke(selectedProjectId) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Outlined.TipsAndUpdates,
+                            contentDescription = "New Socratic Interview",
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            "New Interview",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = if (cc.isDark) Color(0xFFFBBF24) else Color(0xFFD97706)
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFFF59E0B).copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                "1-on-1",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = if (cc.isDark) Color(0xFFFBBF24) else Color(0xFFD97706),
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Item 3: Distinct AI Setup Capsule for "Setup with AI"
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = cc.accent.copy(alpha = 0.09f),
@@ -1861,12 +1909,23 @@ private fun SidebarDiscussionRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (showProjectIndent) {
-            Spacer(Modifier.width(21.dp))
+            if (disc.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) {
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    Icons.Outlined.TipsAndUpdates,
+                    contentDescription = "Socratic Interview",
+                    tint = Color(0xFFF59E0B),
+                    modifier = Modifier.size(13.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+            } else {
+                Spacer(Modifier.width(21.dp))
+            }
         } else {
             Icon(
-                Icons.AutoMirrored.Outlined.Chat,
+                if (disc.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) Icons.Outlined.TipsAndUpdates else Icons.AutoMirrored.Outlined.Chat,
                 contentDescription = null,
-                tint = if (isSelected) cc.accent else cc.textMuted,
+                tint = if (disc.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) Color(0xFFF59E0B) else if (isSelected) cc.accent else cc.textMuted,
                 modifier = Modifier.size(14.dp)
             )
             Spacer(Modifier.width(8.dp))
