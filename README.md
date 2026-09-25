@@ -25,7 +25,7 @@ Dialex AI features exhaustive technical and user documentation organized in the 
 | 📱 **Client Applications Setup** | Desktop (macOS/Linux/Windows) packaging (DMG/DEB/MSI), Dialex AI Mobile (Android), JNI, and logging. | [**docs/CLIENT_SETUP.md**](docs/CLIENT_SETUP.md) |
 | 📖 **User & Deliberation Manual** | Council setup, 10 Universal Roles, 40+ Domain Personas, Anti-Fluff guardrails, and deliverables. | [**docs/USER_GUIDE.md**](docs/USER_GUIDE.md) |
 | 🛠️ **Developer & Kolt Guide** | Contributor setup, testing, and in-depth guide to the **Kolt / KoltLibs** ecosystem (`compose-kmp`, `AsyncState`). | [**docs/DEVELOPER_GUIDE.md**](docs/DEVELOPER_GUIDE.md) |
-| 🔮 **Pending Features Spec** | Formal specification for Knowledge Graph, Temporal Decay, Contradiction Detection, Decomposition, and Socratic Interview mode. | [**docs/04_PENDING_FEATURES_SPEC.md**](docs/04_PENDING_FEATURES_SPEC.md) |
+| 🔮 **Advanced Features Specs** | Architectural specifications for Knowledge Graph, Problem Decomposition, Tension Detection, Dynamic Retrieval, and Socratic Interview mode. | [**docs/04_PENDING_FEATURES_SPEC.md**](docs/04_PENDING_FEATURES_SPEC.md) · [**Socratic Spec**](docs/features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md) |
 | 🔌 **REST & SSE API Reference** | Complete HTTP REST endpoints, JWT authentication, and real-time Server-Sent Events specifications. | [**docs/API_REFERENCE.md**](docs/API_REFERENCE.md) |
 
 ---
@@ -154,6 +154,25 @@ flowchart TD
   - 📄 **Executive Memorandum (HTML)**
   - 📝 **Engineering Decision Summary**
   - ✨ **Custom Deliverable Format**
+
+### 6. 🎯 Dedicated 1-on-1 Socratic Interview Mode
+- **Forensic 1-on-1 Interrogation**: Conduct targeted, high-intensity Socratic dialogues directly with an individual persona (e.g., *The Risk Analyst*, *The Ethicist*, *Staff Systems Architect*) without spinning up a full 6-agent council.
+- **5 Epistemic Socratic Stances**:
+  - 🏛️ *Classic Elenchus*: Cross-examines consistency and exposes latent contradictions.
+  - 🔨 *Maieutic Architecture*: Midwives latent system architectures from fuzzy requirements.
+  - ⚛️ *Radical First Principles*: Strips away enterprise dogma down to fundamental physics/math.
+  - 🛡️ *Adversarial Red-Team*: Relentlessly attacks blast radiuses and zero-trust vulnerabilities.
+  - 🌌 *Aporia Boundary-Pusher*: Drives assumptions into intentional paradoxical deadlocks.
+- **Strict *Brevis Interrogatio* Guardrail**: Enforces $\le 2$ sentences per turn, completely eliminating LLM conversational bloat and forcing sharp dialectic tension.
+- **Live Epistemic Ledger**: Real-time sidebar ledger tracking green **Hardened Invariants** vs red strike-through **Surrendered Concessions**.
+- **Dialogue Assist Chips**: 3 reactive Socratic direction chips (*"Defend Invariant"*, *"Concede & Narrow"*, *"Expose Edge Case"*) for rapid iteration.
+- **1-Click Council Elevation**: Conclude interviews with a structured **Socratic Digest** and seamlessly elevate uncovered tensions into a multi-agent Council Debate seeded with the interview's invariants.
+
+### 7. 🧠 Compounding Epistemic Cognitive Engine
+- 🕸️ **Self-Organizing Knowledge Graph**: Embedded SQLite + FTS5 graph with activation decay ($W(t) = W_0 \cdot 2^{-\Delta t / t_{\text{half}}}$) and Hebbian co-reference reinforcement.
+- 🔀 **Pre-Debate Problem Decomposition**: Divergent dual-mind breakdown of user dilemmas into orthogonal sub-axes before convening the council.
+- ⚡ **Paraconsistent Tension Pair Detection**: Real-time extraction of thesis vs antithesis contradictions with unresolved conflict tracking.
+- 🔍 **Round-Aware Dynamic Graph Retrieval (In-Debate RAG)**: Dynamic per-round query expansion retrieving empirical evidence from graph nodes and attached documents.
 
 ---
 

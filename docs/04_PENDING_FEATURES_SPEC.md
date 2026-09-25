@@ -13,7 +13,7 @@ This document serves as the formal specification for pending features slated for
 2. [Pre-Debate Multi-Perspective Problem Decomposition (COMPLETED)](features/02_PROBLEM_DECOMPOSITION.md)
 3. [Explicit Contradiction & Tension Pair Detection Engine (COMPLETED)](features/03_CONTRADICTION_AND_TENSION_DETECTION.md)
 4. [Round-Aware Dynamic Graph Retrieval (In-Debate RAG) (COMPLETED)](features/04_ROUND_AWARE_DYNAMIC_RETRIEVAL.md)
-5. [Dedicated 1-on-1 Socratic Interview Mode](#5-dedicated-1-on-1-socratic-interview-mode)
+5. [Dedicated 1-on-1 Socratic Interview Mode (COMPLETED)](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md)
 6. [Null Hypothesis Benchmarking & Quantitative Evaluation Suite](#6-null-hypothesis-benchmarking--quantitative-evaluation-suite)
 7. [8-Layer DNA Mental & Structured Persona Ingestion](#7-8-layer-dna-mental--structured-persona-ingestion)
 
@@ -273,17 +273,19 @@ sequenceDiagram
 
 ## 5. Dedicated 1-on-1 Socratic Interview Mode
 
-> [!IMPORTANT]
-> **Priority**: Medium / High Value  
-> **Component**: Go Engine (`pkg/api`, `pkg/orchestrator`), KMP Presentation (`interview`).
+> [!NOTE]
+> **Status**: **COMPLETED** (v1.5) — Detailed architectural spec: [**docs/features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md**](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md)  
+> **Component**: Go Engine (`pkg/socratic`, `pkg/api`), KMP Shared (`domain`, `data`, `presentation/chat`, `presentation/setup`), Compose UI.
 
 ### 5.1 Problem Statement
-Convening a 4-to-6-model council is resource-intensive when a user merely wants to deep-dive an individual expert persona (e.g., interviewing *The Risk Analyst* on a specific zero-trust auth vulnerability).
+Convening a 4-to-6-model council is resource-intensive when a user merely wants to deep-dive an individual expert persona (e.g., interviewing *The Risk Analyst* on a specific zero-trust auth vulnerability) or stress-test an idea via classical *Elenchus* and *Maieutics*.
 
-### 5.2 Proposed Architecture & Specifications
-* **Command & UI Entrypoint**: `*interview {persona_id} {topic}` or a dedicated **"Socratic Interview"** button in the Persona Studio.
-* **Socratic Dialogue Protocol**: The selected persona adopts a structured Socratic extraction prompt—probing the user's constraints, challenging unstated assumptions, and producing a structured interview transcript.
-* **Output Deliverable**: Generates a 1-tap **Socratic Interview Digest** that can be directly converted into a seed problem for a subsequent multi-agent council deliberation.
+### 5.2 Implemented Architecture & Highlights
+* **Command & UI Entrypoint**: Dedicated 1-click `[ 🎯 Socratic Interview ]` capsule in the left sidebar, top mode switcher in `SetupScreen`, and Persona Studio actions.
+* **5 Deep Socratic Stances**: *Classic Elenchus*, *Maieutic Architecture*, *Radical First Principles*, *Adversarial Red-Team*, and *Aporia Boundary-Pusher*.
+* **Strict *Brevis Interrogatio* Guardrail**: Enforces $\le 2$ sentences per question turn to eliminate conversational bloat and sustain high dialectic pressure.
+* **Live Epistemic Ledger**: Interactive HUD tracking green **Hardened Invariants** vs red strike-through **Surrendered Concessions** with 3 reactive Dialogue Assist Chips.
+* **Socratic Digest & Council Bridge**: Concludes with a 5-part structured **Socratic Digest** deliverable and 1-tap elevation to a full multi-agent Council Debate.
 
 ---
 

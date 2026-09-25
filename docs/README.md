@@ -122,7 +122,7 @@ See [Developer Guide: Kolt Ecosystem Setup](DEVELOPER_GUIDE.md#2-kolt-ecosystem-
 | 📱 **Client Applications Setup (Desktop & Mobile)** | Native 1-click installer packaging (DMG/MSI/AppImage/APK), UI polish, Dialex AI Mobile (Android), and in-memory diagnostics (`AppLogStore`). | Application Engineers, Users | [**CLIENT_SETUP.md**](CLIENT_SETUP.md) |
 | 📖 **User Guide & Deliberation Manual** | Council topologies, 10 Universal Roles, 40+ Domain Personas, 3-Tier Anti-Fluff guardrails, human steering, and deliverables. | End Users, Researchers, Strategists | [**USER_GUIDE.md**](USER_GUIDE.md) |
 | 🛠️ **Developer Guide & Kolt Framework** | Developer workspace setup, **Kolt / KoltLibs** composite build (`compose-kmp`, `AsyncState`), adding AI model runners, and deliverable synthesizers. | Contributors, Extension Authors | [**DEVELOPER_GUIDE.md**](DEVELOPER_GUIDE.md) |
-| 🔮 **Pending Features & Advanced Cognitive Spec** | Formal specification for Knowledge Graph, Temporal Decay, Contradiction Detection, Decomposition, and Socratic Interview mode. | Core Contributors, Researchers, Architects | [**04_PENDING_FEATURES_SPEC.md**](04_PENDING_FEATURES_SPEC.md) |
+| 🔮 **Advanced Features & Epistemic Specs** | Formal architectural specifications for Knowledge Graph, Problem Decomposition, Tension Detection, Dynamic Retrieval, and Socratic Interview mode. | Core Contributors, Researchers, Architects | [**04_PENDING_FEATURES_SPEC.md**](04_PENDING_FEATURES_SPEC.md) · [**Socratic Spec**](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md) |
 | 🔌 **REST & SSE API Reference** | Complete HTTP endpoints, JWT authentication, real-time Server-Sent Events (SSE) schemas, error codes, and curl payloads. | API Developers, Integrators | [**API_REFERENCE.md**](API_REFERENCE.md) |
 
 ---
@@ -142,6 +142,7 @@ See [Developer Guide: Kolt Ecosystem Setup](DEVELOPER_GUIDE.md#2-kolt-ecosystem-
 - **3-Tier Anti-Fluff & Topic Drift Guardrails**: See [User Guide: Anti-Fluff Guardrails](USER_GUIDE.md#4-anti-fluff--topic-drift-guardrails).
 - **Live Human Interjections & Instant Interrupts**: See [User Guide: Live Interventions](USER_GUIDE.md#5-live-human-interjections--instant-interrupts).
 - **Consensus Outcome & Generative Deliverables**: See [User Guide: Deliverable Synthesis](USER_GUIDE.md#7-moderator-consensus--generative-deliverables).
+- **Dedicated 1-on-1 Socratic Interview Mode & Epistemic Ledger**: See [User Guide: Socratic Interview Mode](USER_GUIDE.md#23-dedicated-1-on-1-socratic-interview-mode) and [Socratic Architectural Spec](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md).
 
 ### 📐 Architecture, Clean Code & Developers
 - **Clean Architecture Strict Call Chain**: See [Architecture Guide: Domain Layer](ARCHITECTURE.md#4-domain-layer--clean-architecture).

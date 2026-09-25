@@ -157,7 +157,7 @@ This document details all user-facing capabilities, unique selling propositions 
 
 The following advanced capabilities have been implemented or are queued for implementation in [**docs/04_PENDING_FEATURES_SPEC.md**](04_PENDING_FEATURES_SPEC.md):
 
-### Completed Features (v1.1 – v1.4)
+### Completed Features (v1.1 – v1.5)
 1. **Self-Organizing Knowledge Graph & Drag-and-Drop Workspace Organization (COMPLETED)**:
    - Local-first pure-Go SQLite + FTS5 graph storage with activation energy mathematical decay ($W(t) = W_0 \cdot 2^{-\Delta t / t_{\text{half}}}$) and Hebbian edge reinforcement ($\Delta W = \eta (1 - W)$).
    - Interactive 2D force-directed canvas with pan/zoom and activation filters.
@@ -175,9 +175,14 @@ The following advanced capabilities have been implemented or are queued for impl
    - Dynamic per-round query expansion based on disputed claims from round $N$ to retrieve empirical evidence from knowledge graph nodes and attached project files.
    - Automated prompt injection of `[DYNAMIC GROUNDING EVIDENCE FOR ROUND N+1]` grounding blocks and slide-out `RoundEvidenceDrawer`.
    - 📖 **Full Architectural Specification**: [**docs/features/04_ROUND_AWARE_DYNAMIC_RETRIEVAL.md**](features/04_ROUND_AWARE_DYNAMIC_RETRIEVAL.md)
+5. **Dedicated 1-on-1 Socratic Interview Mode & Live Epistemic Ledger (COMPLETED)**:
+   - Targeted 1-on-1 forensic interrogation of individual expert personas without spinning up a full 6-agent council.
+   - 5 deep Socratic stances (*Classic Elenchus*, *Maieutic Architecture*, *Radical First Principles*, *Adversarial Red-Team*, *Aporia Boundary-Pusher*).
+   - *Brevis Interrogatio* rule ($\le 2$ sentences) forcing high-leverage tension and concise dialectic dialogue.
+   - Live Epistemic Ledger tracking green **Hardened Invariants** vs red strike-through **Surrendered Concessions**, reactive Dialogue Assist Chips, structured **Socratic Digest**, and 1-click **Council Elevation**.
+   - 📖 **Full Architectural Specification**: [**docs/features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md**](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md)
 
 ### Pending Roadmap Capabilities
-5. **Dedicated 1-on-1 Socratic Interview Mode**: Focused Socratic extraction and interrogation of an individual persona (`*interview {persona} {topic}`) without spinning up a full council.
 6. **Null Hypothesis Benchmarking & Evaluation Suite**: Automated testing framework validating multi-agent debate superiority against single-model baselines across hallucination and trade-off metrics.
 7. **8-Layer DNA Mental & Structured Persona Ingestion**: Standardized cognitive schema (epistemic bias, communication vector, taboo spaces, heuristics) with MMOS export compatibility.
 

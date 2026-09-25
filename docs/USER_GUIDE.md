@@ -53,6 +53,28 @@ Dialex AI supports up to 6 distinct agent seats in a single deliberation:
    - **Cloud API Mode**: Directly connects to cloud REST endpoints using encrypted API keys stored in your local AES-256 vault.
    - **Local CLI Mode ($0 Marginal Token Billing)**: Shells out to authenticated developer tools already installed on your workstation (`claude`, `codex`, `antigravity`/`agy`, or `ollama`). Zero per-token credit card fees.
 
+### 2.3 Dedicated 1-on-1 Socratic Interview Mode
+When you need to deeply cross-examine an architectural assumption, extract implicit design requirements, or test personal cognitive blind spots without convening a full 4-to-6 model council:
+
+1. **Starting an Interview**:
+   - Click the dedicated **`🎯 Socratic Interview`** button in the left sidebar under New Discussion, or
+   - Toggle the mode switcher at the top of the Setup Screen from **`⚔️ Council Debate`** to **`🎯 Socratic Interview`**.
+2. **Selecting Persona & Epistemic Stance**:
+   - Choose a single expert interviewer persona (e.g., *The Risk Analyst*, *The Pragmatist*, *The Ethicist*).
+   - Select one of **5 Socratic Epistemic Stances**:
+     - 🏛️ **Classic Elenchus**: Probes internal consistency and forces you to confront hidden contradictions.
+     - 🔨 **Maieutic Architecture**: Acts as an intellectual midwife to draw out latent, unformed architectures.
+     - ⚛️ **Radical First Principles**: Strips away legacy assumptions down to mathematical and physical axioms.
+     - 🛡️ **Adversarial Red-Team**: Relentlessly attacks failure modes, blast radiuses, and zero-trust vulnerabilities.
+     - 🌌 **Aporia Boundary-Pusher**: Drives assumptions to edge cases to demonstrate where your framework breaks down.
+3. **The Interrogation Experience (*Brevis Interrogatio*)**:
+   - The interviewer strictly abides by the *Brevis Interrogatio* rule ($\le 2$ sentences per turn) to avoid LLM monologue bloat and maintain forensic pressure.
+   - **Live Epistemic Ledger**: The header dynamically tracks green **Hardened Invariants** (propositions that survived scrutiny) and red strike-through **Surrendered Concessions**.
+   - **Dialogue Assist Chips**: 3 reactive suggestion chips (*"Defend Invariant"*, *"Concede & Narrow"*, *"Expose Edge Case"*) help guide your answers.
+4. **Digest Synthesis & Council Elevation**:
+   - Conclude the interview at any time to generate an authoritative **Socratic Interview Digest** summarizing tested hypotheses, validated invariants, surrendered concessions, and residual dilemmas.
+   - **1-Click Council Elevation**: Click **"Elevate to Full Council"** to instantly instantiate a multi-agent debate seeded with the hardened invariants and unresolved tensions from your interview!
+
 ---
 
 ## 3. The Persona Registry & Live Customization
