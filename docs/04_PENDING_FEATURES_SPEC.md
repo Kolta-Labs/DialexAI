@@ -96,18 +96,178 @@ Grounded in **Paraconsistent Logic** (da Costa, 1974), where contradictions are 
 
 ## 4. Round-Aware Dynamic Graph Retrieval (In-Debate RAG)
 
-> [!IMPORTANT]
-> **Priority**: High  
-> **Component**: Go Engine (`pkg/orchestrator`, `pkg/runner`), KMP Shared (`data`).
+> [!NOTE]
+> **Status**: **COMPLETED** (v1.4)  
+> **Component**: Go Engine (`pkg/retrieval`, `pkg/orchestrator`, `pkg/api`), KMP Shared (`domain`, `data`, `presentation/chat`), Compose UI.
 
-### 4.1 Problem Statement
-Standard RAG retrieves context once at the start of a prompt session. In a 4-round multi-agent debate, the conversation shifts dynamically into unexpected technical subtopics, making initial retrieval stale.
+### 4.1 Problem Statement & Theoretical Motivation
+Standard RAG frameworks perform context retrieval **statically once at deliberation initialization ($R_0$)**. In real-world dialectic debates lasting 3 to 10 rounds:
+1. **Semantic Drift & Emergent Subtopics**: Models frequently diverge into specialized, unpredicted architectural domains (e.g., SQLite WAL lock contention, Raft consensus heartbeat timeouts, SIMD vectorization pipelines, zero-trust token revocation). Initial $R_0$ retrieval becomes stale or irrelevant.
+2. **Ungrounded Hallucinations in Disputed Claims**: When opposing models disagree on empirical quantities (e.g., latency numbers, throughput ceilings, API signatures, compliance requirements), they argue hypotheticals without authoritative grounding.
+3. **The Dialectic Evidence Invariant**: Models must not be allowed to argue empirical claims in a vacuum when authoritative grounding exists within the project's **Knowledge Graph**, **Attached Documents**, or **Codebase Workspaces**.
 
-### 4.2 Proposed Architecture & Specifications
-Implement **Round-Aware Retrieval**:
-1. At the conclusion of Round $N$, the orchestrator inspects the delta of assertions, claims, and technical terms introduced in Round $N$.
-2. It generates focused retrieval queries against the local knowledge graph, indexed project files, and codebase embeddings.
-3. Relevant evidence nodes (e.g., benchmark numbers, past ADRs, API specs) are dynamically injected into the system context for Round $N+1$ with attribution badges (`[Evidence Retrieved for Round 2: SQLite vs Postgres Benchmarks]`).
+### 4.2 Algorithmic Formulation & Retrieval Mathematics
+
+Let $R_N = \{m_1, m_2, \dots, m_k\}$ denote the transcript of turns generated in Round $N$.
+1. **Delta Assertion & Disputed Claim Extraction**:
+   At the round boundary $N \to N+1$, compute the delta of technical assertions and empirical claims:
+   $$\Delta A_N = \text{ExtractAssertions}(R_N) \setminus \text{PriorClaims}(R_{1..N-1})$$
+   Extract $1 \le |Q_N| \le 3$ focused, high-information retrieval queries:
+   $$Q_N = \mathcal{F}_{\text{query}}(\Delta A_N, \text{Topic})$$
+
+2. **Dual-Source Hybrid Retrieval**:
+   For each query $q \in Q_N$:
+   - **Source 1: Local-First Epistemic Knowledge Graph (FTS5 + Temporal Decay)**:
+     Compute rank score combining BM25 full-text relevance with exponential memory decay:
+     $$S_{\text{graph}}(n, q, t) = \text{BM25}(n.\text{content}, q) \times \left(W_0 \cdot 2^{-\frac{t - t_0}{t_{\text{half}}}}\right)$$
+     Where $n \in \text{Nodes}$, $n.\text{type} \in \{\text{CONCEPT}, \text{ARGUMENT}, \text{CONSENSUS}, \text{SOURCE}\}$.
+   - **Source 2: Workspace Project & Attached Documents**:
+     Perform paragraph-level sliding-window lexical scoring across all attached documents and project scope files:
+     $$S_{\text{doc}}(d, q) = \text{TF-IDF}_{\text{passage}}(d, q)$$
+
+3. **Deduplication, Ranking & Token Budget Cap**:
+   Filter out nodes/passages already retrieved in earlier rounds:
+   $$\mathcal{E}_{\text{candidate}} = \left(\text{TopHits}_{\text{graph}} \cup \text{TopHits}_{\text{doc}}\right) \setminus \bigcup_{i=1}^{N} \mathcal{E}_i$$
+   Rank candidates by combined score and select top $K$ ($1 \le K \le 3$):
+   $$\mathcal{E}_{N+1} = \text{TopK}(\mathcal{E}_{\text{candidate}}, K=3)$$
+
+4. **System Context Injection for Round $N+1$**:
+   For each turn in Round $N+1$, format $\mathcal{E}_{N+1}$ into a high-priority grounding block:
+   ```markdown
+   [DYNAMIC GROUNDING EVIDENCE FOR ROUND N+1]
+   The following verified facts were retrieved based on claims raised in Round N:
+   - [Evidence: Graph Node "SQLite WAL Concurrency" (Score: 0.94)]:
+     "In WAL mode, readers do not block writers, and writers do not block readers..."
+   - [Evidence: Workspace File "docs/benchmarks.md" (Score: 0.88)]:
+     "PostgreSQL v16 sustained 14,200 write ops/sec under concurrent pgbouncer pooling..."
+   MANDATE: Anchor your Round N+1 arguments directly to this retrieved evidence.
+   When referencing these facts, cite using attribution tags like [Evidence: SQLite WAL Concurrency].
+   ```
+
+### 4.3 Data Contracts & Schema Specification
+
+#### Go Engine Models (`engine/pkg/model/evidence.go`)
+```go
+type EvidenceSourceType string
+
+const (
+    EvidenceSourceKnowledgeGraph EvidenceSourceType = "KNOWLEDGE_GRAPH"
+    EvidenceSourceAttachedFile   EvidenceSourceType = "ATTACHED_FILE"
+    EvidenceSourceWorkspaceDoc   EvidenceSourceType = "WORKSPACE_DOC"
+)
+
+type EvidenceItem struct {
+    ID               string             `json:"id"`
+    Round            int                `json:"round"`
+    Query            string             `json:"query"`
+    SourceType       EvidenceSourceType `json:"sourceType"`
+    SourceID         string             `json:"sourceId"`
+    SourceTitle      string             `json:"sourceTitle"`
+    Snippet          string             `json:"snippet"`
+    Score            float64            `json:"score"`
+    AttributionBadge string             `json:"attributionBadge"`
+    TimestampMs      int64              `json:"timestampMs"`
+}
+
+type RoundEvidence struct {
+    Round          int            `json:"round"`
+    TriggerQueries []string       `json:"triggerQueries"`
+    Items          []EvidenceItem `json:"items"`
+    SummaryContext string         `json:"summaryContext"`
+}
+```
+
+#### Discussion & Result Extensions (`engine/pkg/model/project.go`, `debate.go`)
+- `Discussion.RetrievedEvidence []RoundEvidence`
+- `DebateResult.RetrievedEvidence []RoundEvidence`
+
+#### KMP Shared Models (`shared/.../domain/model/EvidenceModels.kt`)
+```kotlin
+@Serializable
+enum class EvidenceSourceType {
+    KNOWLEDGE_GRAPH, ATTACHED_FILE, WORKSPACE_DOC
+}
+
+@Serializable
+data class EvidenceItem(
+    val id: String,
+    val round: Int,
+    val query: String,
+    val sourceType: EvidenceSourceType,
+    val sourceId: String,
+    val sourceTitle: String,
+    val snippet: String,
+    val score: Double = 0.0,
+    val attributionBadge: String = "",
+    val timestampMs: Long = 0L
+)
+
+@Serializable
+data class RoundEvidence(
+    val round: Int,
+    val triggerQueries: List<String> = emptyList(),
+    val items: List<EvidenceItem> = emptyList(),
+    val summaryContext: String = ""
+)
+```
+
+### 4.4 Engine Execution & Orchestrator Lifecycle
+
+```mermaid
+sequenceDiagram
+    participant O as Orchestrator
+    participant R as DynamicRetriever
+    participant GS as GraphStore (FTS5)
+    participant FS as AttachedFiles / Workspace
+    participant P as Primary/Agents
+
+    Note over O: Round N Concludes
+    O->>R: RetrieveForRound(ctx, round=N, messages, priorEvidence)
+    R->>R: ExtractRoundQueries(delta messages)
+    par Graph Search
+        R->>GS: SearchFTS(query, limit=5)
+        GS-->>R: Top Nodes + Decayed Weights
+    and Document Search
+        R->>FS: ScanPassages(query)
+        FS-->>R: Top Passages
+    end
+    R->>R: Deduplicate & Rank Top-3 Evidence Items
+    R-->>O: RoundEvidence (Items + SummaryContext)
+    O->>O: Append to Discussion.RetrievedEvidence
+    O->>O: Emit System Marker Turn "[🔍 Grounding Evidence Retrieved]"
+    Note over O,P: Round N+1 Starts
+    O->>P: speak(agent, round=N+1, effectiveContext + EvidenceContext)
+    P-->>O: Turns cite [Evidence: ...]
+```
+
+### 4.5 KMP Presentation & UI Implementation
+1. **Round Divider Evidence Badge**:
+   - In `RoundDivider` (or at the top of Round $N+1$), render a sleek pill:
+     `[🔍 3 Evidence Nodes Injected for Round N+1 · View Details]`
+   - Tapping the pill dispatches `ChatIntent.SetEvidenceDrawerOpen(true, round = N+1)`.
+2. **Round Evidence Drawer (`RoundEvidenceDrawer.kt`)**:
+   - Slide-out drawer or modal sheet detailing:
+     - Target Round & Trigger Queries.
+     - Evidence Cards with Source Type icon (`Hub` for Graph, `Description` for Docs).
+     - Relevance score bar gauge.
+     - Expandable snippet preview with 1-tap copy.
+3. **In-Turn Citation Highlighting**:
+   - Matches pattern `\[Evidence:\s*([^\]]+)\]` in message text.
+   - Renders as an interactive token badge that jumps to or opens the corresponding evidence card.
+
+### 4.6 Verification & Testing Plan
+1. **Engine Retrieval Unit Tests (`pkg/retrieval/retriever_test.go`)**:
+   - Query extraction with heuristic fallback when LLM is unavailable.
+   - GraphStore FTS hit scoring + rank cutoff.
+   - Attached files passage chunking and score calculation.
+   - Dedup invariant: items retrieved in Round 1 never duplicate into Round 2.
+2. **Orchestrator Integration Test (`pkg/orchestrator/orchestrator_test.go`)**:
+   - Verify dynamic context injection into Round 2 prompt when Round 1 introduces ungrounded technical claims.
+   - Verify `RetrievedEvidence` propagation in `DebateResult`.
+3. **KMP Shared & UI Tests (`shared/.../EvidenceRetrievalTest.kt`)**:
+   - Serialization and deserialization of `RoundEvidence`.
+   - `ChatViewModel` state transitions when evidence drawer is toggled.
+   - Verification of `RoundEvidenceDrawer` composable rendering.
 
 ---
 

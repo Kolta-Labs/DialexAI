@@ -79,6 +79,7 @@ func (s *Server) runDiscussion(w http.ResponseWriter, r *http.Request, resetTran
 		discussion.Deliverable = nil
 		discussion.Summary = nil
 		discussion.TensionPairs = nil
+		discussion.RetrievedEvidence = nil
 	} else {
 		// Dropping trailing error entries mirrors the desktop app's resume(): they're not
 		// fed back to the agents as context and shouldn't skew the resume point.
@@ -264,6 +265,7 @@ func (s *Server) executeRun(ctx context.Context, controller *runController, id s
 					}
 					st.Discussions[i].Status = model.DiscussionRunning
 					st.Discussions[i].TensionPairs = discussion.TensionPairs
+					st.Discussions[i].RetrievedEvidence = discussion.RetrievedEvidence
 					discussion.Transcript = st.Discussions[i].Transcript
 					discussion.Name = d.Name
 					discussion.ProjectID = d.ProjectID
@@ -298,6 +300,22 @@ func (s *Server) executeRun(ctx context.Context, controller *runController, id s
 				}
 			}
 		},
+		GraphStore:          s.GraphStore,
+		ProjectID:           discussion.ProjectID,
+		InitialEvidence:     discussion.RetrievedEvidence,
+		OnEvidenceRetrieved: func(ev []model.RoundEvidence) {
+			discussion.RetrievedEvidence = ev
+			st, err := s.Store.Load()
+			if err == nil {
+				for i, d := range st.Discussions {
+					if d.ID == id {
+						st.Discussions[i].RetrievedEvidence = ev
+						_ = s.Store.Save(st)
+						break
+					}
+				}
+			}
+		},
 		IsStopped:         controller.isPaused,
 		GetInjected:       controller.drainInjected,
 		CompactionModel:   compactionModel,
@@ -314,6 +332,9 @@ func (s *Server) executeRun(ctx context.Context, controller *runController, id s
 	discussion.EarlyExitReason = result.EarlyExitReason
 	if len(result.TensionPairs) > 0 {
 		discussion.TensionPairs = result.TensionPairs
+	}
+	if len(result.RetrievedEvidence) > 0 {
+		discussion.RetrievedEvidence = result.RetrievedEvidence
 	}
 	if result.Conclusion != nil {
 		discussion.Summary = result.Conclusion

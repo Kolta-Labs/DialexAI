@@ -169,7 +169,8 @@ class ChatViewModel(
         }
 
         val activeTensions = (updatedDiscussion.tensionPairs.ifEmpty { currentDisc?.tensionPairs.orEmpty() }).toImmutableList()
-        setState { copy(discussion = mergedDiscussion, tensionPairs = activeTensions, isActionInProgress = false) }
+        val activeEvidence = (updatedDiscussion.retrievedEvidence.ifEmpty { currentDisc?.retrievedEvidence.orEmpty() }).toImmutableList()
+        setState { copy(discussion = mergedDiscussion, tensionPairs = activeTensions, retrievedEvidence = activeEvidence, isActionInProgress = false) }
         computeTokenWarning(mergedDiscussion)
         updateNextSpeaker(mergedDiscussion)
         validateWorkspaceFolders(mergedDiscussion)
@@ -755,6 +756,22 @@ class ChatViewModel(
             }
             is ChatIntent.SetTensionFilter -> {
                 setState { copy(tensionFilter = intent.filter) }
+            }
+            is ChatIntent.ToggleEvidenceDrawer -> {
+                setState {
+                    copy(
+                        isEvidenceDrawerOpen = !isEvidenceDrawerOpen,
+                        selectedEvidenceRound = if (!isEvidenceDrawerOpen) intent.round else null
+                    )
+                }
+            }
+            is ChatIntent.SetEvidenceDrawerOpen -> {
+                setState {
+                    copy(
+                        isEvidenceDrawerOpen = intent.open,
+                        selectedEvidenceRound = if (intent.open) intent.round else null
+                    )
+                }
             }
         }
     }

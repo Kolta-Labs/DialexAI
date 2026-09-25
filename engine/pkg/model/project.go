@@ -89,6 +89,7 @@ type Discussion struct {
 	Artifacts       []DiscussionArtifact `json:"artifacts,omitempty"`
 	DismissedArtifactIds []string        `json:"dismissedArtifactIds,omitempty"`
 	TensionPairs    []TensionPair        `json:"tensionPairs,omitempty"`
+	RetrievedEvidence []RoundEvidence    `json:"retrievedEvidence,omitempty"`
 	CreatedAt       int64                `json:"createdAt,omitempty"`
 	UpdatedAt       int64                `json:"updatedAt,omitempty"`
 	Warning            *string              `json:"warning,omitempty"`

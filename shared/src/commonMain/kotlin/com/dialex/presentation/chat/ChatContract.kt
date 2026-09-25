@@ -1,5 +1,6 @@
 package com.dialex.presentation.chat
 
+import com.dialex.domain.model.RoundEvidence
 import com.dialex.domain.model.TensionFilter
 import com.dialex.domain.model.TensionPair
 import com.dialex.model.Discussion
@@ -53,6 +54,12 @@ data class ChatState(
     val isTensionDrawerOpen: Boolean = false,
     /** Current active filter for the Tension Matrix drawer. */
     val tensionFilter: TensionFilter = TensionFilter.ALL,
+    /** Round-aware dynamic evidence retrieved from knowledge graph and attached documents. */
+    val retrievedEvidence: ImmutableList<RoundEvidence> = persistentListOf(),
+    /** Whether the Round Evidence drawer is open. */
+    val isEvidenceDrawerOpen: Boolean = false,
+    /** Selected round for evidence drawer inspection (null = all rounds). */
+    val selectedEvidenceRound: Int? = null,
 )
 
 /** One row in the token usage modal — one entry per agent seat. */
@@ -100,6 +107,8 @@ sealed interface ChatIntent {
     data object ToggleTensionDrawer : ChatIntent
     data class SetTensionDrawerOpen(val open: Boolean) : ChatIntent
     data class SetTensionFilter(val filter: TensionFilter) : ChatIntent
+    data class ToggleEvidenceDrawer(val round: Int? = null) : ChatIntent
+    data class SetEvidenceDrawerOpen(val open: Boolean, val round: Int? = null) : ChatIntent
 }
 
 sealed interface ChatEffect {

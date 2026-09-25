@@ -1,5 +1,6 @@
 package com.dialex.model
 
+import com.dialex.domain.model.RoundEvidence
 import com.dialex.domain.model.TensionPair
 import kotlinx.serialization.Serializable
 
@@ -98,6 +99,8 @@ data class Discussion(
     val dismissedArtifactIds: List<String> = emptyList(),
     /** Dialectic tension pairs identified across rounds. */
     val tensionPairs: List<TensionPair> = emptyList(),
+    /** Round-aware dynamic evidence retrieved from the knowledge graph and attached documents. */
+    val retrievedEvidence: List<RoundEvidence> = emptyList(),
     /** Creation timestamp in epoch milliseconds. */
     val createdAt: Long = 0L,
     /** Last updated timestamp in epoch milliseconds. */

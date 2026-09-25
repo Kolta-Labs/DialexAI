@@ -806,6 +806,38 @@ fun ChatScreen(
                                         totalRounds = discussion.config.maxRounds,
                                         cc = cc
                                     )
+                                    val roundEvidence = state.retrievedEvidence.find { it.round == msg.round }
+                                    if (roundEvidence != null && roundEvidence.items.isNotEmpty()) {
+                                        Surface(
+                                            shape = RoundedCornerShape(20.dp),
+                                            color = cc.accent.copy(alpha = 0.08f),
+                                            border = BorderStroke(0.5.dp, cc.accent.copy(alpha = 0.35f)),
+                                            modifier = Modifier
+                                                .align(Alignment.CenterHorizontally)
+                                                .padding(vertical = 4.dp)
+                                                .clickable { onIntent(ChatIntent.ToggleEvidenceDrawer(msg.round)) }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Outlined.TravelExplore,
+                                                    contentDescription = null,
+                                                    tint = cc.accent,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Text(
+                                                    text = "🔍 ${roundEvidence.items.size} Grounded Evidence Item${if (roundEvidence.items.size > 1) "s" else ""} for Round ${msg.round} · View Sources",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = cc.accent
+                                                )
+                                            }
+                                        }
+                                        Spacer(Modifier.height(4.dp))
+                                    }
                                 }
 
                                 AeratedMessageItem(
@@ -1252,6 +1284,36 @@ fun ChatScreen(
                                             text = if (openTensions > 0) "$openTensions Tension${if (openTensions > 1) "s" else ""}" else "Tensions Resolved",
                                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
                                             color = badgeText
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (state.retrievedEvidence.isNotEmpty()) {
+                                Spacer(Modifier.width(8.dp))
+                                val totalEvidenceCount = state.retrievedEvidence.sumOf { it.items.size }
+                                val evBadgeBg = Color(0xFFEDE7F6)
+                                val evBadgeText = Color(0xFF673AB7)
+                                ThemedTooltipBox("$totalEvidenceCount grounded evidence items injected across rounds\nClick to inspect Dynamic Evidence Drawer") {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(5.dp))
+                                            .background(evBadgeBg)
+                                            .clickable { onIntent(ChatIntent.ToggleEvidenceDrawer(null)) }
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.TravelExplore,
+                                            contentDescription = "Dynamic Evidence",
+                                            tint = evBadgeText,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = "$totalEvidenceCount Evidence",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                                            color = evBadgeText
                                         )
                                     }
                                 }
@@ -1787,6 +1849,15 @@ fun ChatScreen(
                     filter = state.tensionFilter,
                     onFilterSelect = { onIntent(ChatIntent.SetTensionFilter(it)) },
                     onDismiss = { onIntent(ChatIntent.SetTensionDrawerOpen(false)) }
+                )
+            }
+
+            if (state.isEvidenceDrawerOpen) {
+                RoundEvidenceDrawer(
+                    evidenceList = state.retrievedEvidence,
+                    selectedRound = state.selectedEvidenceRound,
+                    onRoundSelect = { onIntent(ChatIntent.ToggleEvidenceDrawer(it)) },
+                    onDismiss = { onIntent(ChatIntent.SetEvidenceDrawerOpen(false)) }
                 )
             }
 
@@ -3505,6 +3576,27 @@ private fun AeratedMessageItem(
                                         fontSize = 9.5.sp
                                     ),
                                     color = if (cc.isDark) Color(0xFF93C5FD) else Color(0xFF1D4ED8),
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                        }
+
+                        val hasEvidenceCitation = remember(content) { content.contains("[Evidence:", ignoreCase = true) }
+                        if (hasEvidenceCitation) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(0xFF673AB7).copy(alpha = 0.12f),
+                                border = BorderStroke(0.5.dp, Color(0xFF673AB7).copy(alpha = 0.4f))
+                            ) {
+                                Text(
+                                    text = "🔍 Grounded Citation",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 9.5.sp
+                                    ),
+                                    color = if (cc.isDark) Color(0xFFD1C4E9) else Color(0xFF673AB7),
                                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                                     maxLines = 1,
                                     softWrap = false

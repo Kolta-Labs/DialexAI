@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
+	"dialex/pkg/graph"
 	"dialex/pkg/model"
 	"dialex/pkg/runner"
 )
@@ -463,4 +465,118 @@ func TestParaconsistentConsensusGatekeeper_BlocksSuperficialConsensus(t *testing
 		t.Errorf("expected moderator system intervention for superficial consensus with open tensions")
 	}
 }
+
+type contextTrackingRunner struct {
+	receivedContexts []string
+	turnCount        int
+}
+
+func (c *contextTrackingRunner) Respond(ctx context.Context, agent model.Agent, topic, commonContext, commonInstructions string, transcript []model.DebateMessage, modelOverride string) (runner.AgentReply, error) {
+	c.receivedContexts = append(c.receivedContexts, commonContext)
+	c.turnCount++
+	round := 1
+	if len(transcript) >= 2 {
+		round = 2
+	}
+	if round == 1 {
+		if agent.Provider == model.ProviderAnthropic {
+			return runner.AgentReply{Content: "I assert that SQLite WAL concurrency benchmark throughput outpaces traditional databases under high load."}, nil
+		}
+		return runner.AgentReply{Content: "I disagree. SQLite concurrency locks can create bottlenecks if writers are prolonged."}, nil
+	}
+	return runner.AgentReply{Content: "AGREED: In Round 2, the evidence clearly shows readers never block writers in WAL mode."}, nil
+}
+
+func TestRoundAwareDynamicGraphRetrieval_InjectsEvidenceIntoSubsequentRound(t *testing.T) {
+	store, err := graph.OpenSQLite(":memory:")
+	if err != nil {
+		t.Fatalf("failed to open memory sqlite: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	// Seed knowledge graph with authoritative evidence
+	node := &graph.Node{
+		ID:             "node_wal_spec",
+		ProjectID:      "proj_rag",
+		Type:           graph.NodeTypeConcept,
+		Title:          "SQLite WAL Concurrency",
+		Content:        "Write-Ahead Logging permits readers to read while writer writes. Readers never block writers and writers never block readers.",
+		Weight:         1.0,
+		CurrentWeight:  1.0,
+		CreatedAt:      now.Unix(),
+		LastAccessedAt: now.Unix(),
+	}
+	if err := store.UpsertNode(ctx, node); err != nil {
+		t.Fatalf("failed to insert graph node: %v", err)
+	}
+
+	tracker := &contextTrackingRunner{}
+	o := &Orchestrator{
+		RunnerFor: func(agent model.Agent) runner.AgentRunner {
+			return tracker
+		},
+	}
+
+	sec := model.Agent{ID: "gemini_seat", Provider: model.ProviderGemini, Model: "gemini-test"}
+	config := model.DebateConfig{
+		RoundMode: model.RoundModeFixed,
+		MaxRounds: 2,
+		Topic:     "Storage Engine Deliberation",
+		Primary:   model.Agent{ID: "claude_seat", Provider: model.ProviderAnthropic, Model: "claude-test"},
+		Secondary: &sec,
+	}
+
+	result, err := o.Run(ctx, RunOptions{
+		Config:     config,
+		GraphStore: store,
+		ProjectID:  "proj_rag",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// 1. Verify that dynamic evidence was retrieved for Round 2
+	if len(result.RetrievedEvidence) == 0 {
+		t.Fatalf("expected RetrievedEvidence in result, got 0")
+	}
+
+	round2Evidence := result.RetrievedEvidence[0]
+	if round2Evidence.Round != 2 {
+		t.Errorf("expected Round 2 evidence, got round %d", round2Evidence.Round)
+	}
+	if len(round2Evidence.Items) == 0 {
+		t.Fatalf("expected evidence items for round 2, got 0")
+	}
+	if round2Evidence.Items[0].SourceID != "node_wal_spec" {
+		t.Errorf("expected source ID node_wal_spec, got %s", round2Evidence.Items[0].SourceID)
+	}
+
+	// 2. Verify that Round 2 turns received the grounding context
+	hasInjectedContext := false
+	for _, ctxStr := range tracker.receivedContexts {
+		if strings.Contains(ctxStr, "[DYNAMIC GROUNDING EVIDENCE FOR ROUND 2]") && strings.Contains(ctxStr, "SQLite WAL Concurrency") {
+			hasInjectedContext = true
+			break
+		}
+	}
+	if !hasInjectedContext {
+		t.Errorf("expected Round 2 runner to receive injected evidence context")
+	}
+
+	// 3. Verify that a system marker was added to the transcript
+	hasSystemMarker := false
+	for _, m := range result.Transcript {
+		if m.IsSystem && strings.Contains(m.Content, "Grounding evidence retrieved for Round 2") {
+			hasSystemMarker = true
+			break
+		}
+	}
+	if !hasSystemMarker {
+		t.Errorf("expected system notification marker in transcript for retrieved evidence")
+	}
+}
+
 
