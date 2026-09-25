@@ -26,6 +26,7 @@ fun SettingsRoute(
     initialTab: SettingsTab = SettingsTab.Appearance,
     profileRepository: com.dialex.domain.repository.ProfileRepository? = null,
     apiKeyRepository: com.dialex.domain.repository.ApiKeyRepository? = null,
+    legalConsentRepository: com.dialex.domain.repository.LegalConsentRepository? = null,
     extraTabLabel: String? = null,
     extraTabContent: (@Composable () -> Unit)? = null,
     onExportJson: (String) -> Unit = {},
@@ -42,7 +43,8 @@ fun SettingsRoute(
             recheckCli,
             initialTab,
             profileRepository,
-            apiKeyRepository
+            apiKeyRepository,
+            legalConsentRepository
         )
     }
 

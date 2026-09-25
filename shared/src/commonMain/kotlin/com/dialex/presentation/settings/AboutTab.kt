@@ -56,6 +56,7 @@ private enum class AboutSubTab(val label: String, val icon: ImageVector) {
 @Composable
 fun AboutTab(
     connectionLabel: String,
+    consent: com.dialex.domain.model.LegalConsent? = null,
     onShowFeedback: (() -> Unit)? = null
 ) {
     val cc = LocalCcColors.current
@@ -128,15 +129,41 @@ fun AboutTab(
                         }
                     }
 
-                    Text(
-                        "Version 1.0.0",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Normal
-                        ),
-                        color = cc.textMuted,
-                        modifier = Modifier.padding(top = 16.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(top = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            "Version 1.0.0",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Normal
+                            ),
+                            color = cc.textMuted
+                        )
+
+                        if (consent != null && consent.isAccepted) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(0xFF10B981).copy(alpha = 0.12f),
+                                border = BorderStroke(0.75.dp, Color(0xFF10B981).copy(alpha = 0.35f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(11.dp))
+                                    Text(
+                                        "Terms & Privacy Accepted (v${consent.termsVersion})",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp, fontWeight = FontWeight.Medium),
+                                        color = Color(0xFF10B981)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -598,7 +625,7 @@ private fun PrivacySection(
                     DisableSelection {
                         OutlinedButton(
                             onClick = {
-                                clipboardManager.setText(AnnotatedString(FullPrivacyPolicyText))
+                                clipboardManager.setText(AnnotatedString(LegalTexts.FullPrivacyPolicy))
                                 onCopied("Privacy Policy")
                             },
                             shape = RoundedCornerShape(6.dp),
@@ -679,7 +706,7 @@ private fun LicenseSection(
                     DisableSelection {
                         OutlinedButton(
                             onClick = {
-                                clipboardManager.setText(AnnotatedString(PolyFormLicenseText))
+                                clipboardManager.setText(AnnotatedString(LegalTexts.PolyFormSummary))
                                 onCopied("License Agreement")
                             },
                             shape = RoundedCornerShape(6.dp),
@@ -747,7 +774,7 @@ private fun LicenseSection(
                 ) {
                     SelectionContainer {
                         Text(
-                            text = PolyFormSummaryText,
+                            text = LegalTexts.PolyFormSummary,
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
@@ -788,7 +815,7 @@ private fun TermsSection(
                     DisableSelection {
                         OutlinedButton(
                             onClick = {
-                                clipboardManager.setText(AnnotatedString(TermsOfServiceText))
+                                clipboardManager.setText(AnnotatedString(LegalTexts.FullTermsOfService))
                                 onCopied("Terms of Service")
                             },
                             shape = RoundedCornerShape(6.dp),
@@ -1112,36 +1139,3 @@ private fun LicensePermissionPill(
     }
 }
 
-private const val FullPrivacyPolicyText = """DIALEX PRIVACY POLICY & DATA SOVEREIGNTY CHARTER
-Effective Date: January 1, 2026 • Legal Standard v1.0 • Maintained by Kolta Labs
-
-1. Zero Telemetry: Dialex does not collect, record, harvest, profile, or transmit user analytics, tracking pixels, crash identifiers, prompt logs, or behavioral telemetry to Kolta Labs or any third-party analytics vendor.
-2. Local Data Residence: All workspace history, discussion transcripts, custom personas, workspace configurations, and generated deliverables reside strictly on your local host device filesystem.
-3. Direct Model Communication: When using cloud AI engines (Anthropic, OpenAI, Google, xAI, Mistral), network requests travel directly from your local machine to the official API endpoints of the chosen provider.
-4. Offline Air-Gapped Operation: When configured with local runtimes (such as Ollama or local CLI runners), Dialex operates 100% offline with zero external network connectivity.
-5. Encrypted Credentials: API keys and sensitive tokens are securely stored locally using OS-native encryption primitives.
-6. Data Deletion: Deleting a conversation or project permanently purges associated files from your disk immediately."""
-
-private const val PolyFormSummaryText = """POLYFORM NONCOMMERCIAL LICENSE 1.0.0
-<https://polyformproject.org/licenses/noncommercial/1.0.0>
-Copyright (c) 2026 Kolta Labs
-
-TERMS SUMMARY:
-1. Permitted Purpose: Any noncommercial purpose is permitted, including personal use for research, experimentation, personal study, private entertainment, and hobby projects.
-2. Noncommercial Organizations: Use by charitable, educational, public research, public safety, or non-profit government institutions is permitted.
-3. Commercial Restriction: Any use to earn revenue or run a commercial business, directly or indirectly, or provide services for a fee is NOT permitted without a separate commercial license from Kolta Labs.
-4. Notices: You must retain copyright and license notices on all copies and distributions.
-5. Disclaimer: As far as the law allows, the software is provided AS IS without warranty or liability of any kind."""
-
-private const val PolyFormLicenseText = """PolyForm Noncommercial License 1.0.0
-<https://polyformproject.org/licenses/noncommercial/1.0.0>
-Required Notice: Copyright (c) 2026 Kolta Labs
-
-See https://polyformproject.org/licenses/noncommercial/1.0.0 for the complete official terms."""
-
-private const val TermsOfServiceText = """DIALEX TERMS OF SERVICE & ADVISORY NOTICE
-Maintained by Kolta Labs
-1. Advisory Nature: AI deliberations and artifacts are machine-generated simulation outputs provided strictly for informational purposes. Users retain ultimate responsibility for validating all outputs prior to production adoption.
-2. Acceptable Use: Users agree not to use Dialex for unlawful, fraudulent, or hazardous activities and to comply with upstream AI model acceptable use policies.
-3. Intellectual Property: You retain 100% ownership and copyright of your input prompts, attachments, and generated deliverables.
-4. Limitation of Liability: Dialex is provided "AS IS" without warranty. Kolta Labs, authors, and contributors are not liable for damages arising from use."""

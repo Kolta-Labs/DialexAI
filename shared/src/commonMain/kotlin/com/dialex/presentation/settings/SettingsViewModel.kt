@@ -30,7 +30,8 @@ class SettingsViewModel(
     private val recheckCli: suspend () -> List<ProviderStatus>,
     initialTab: SettingsTab = SettingsTab.Appearance,
     private val profileRepository: ProfileRepository? = null,
-    private val apiKeyRepository: ApiKeyRepository? = null
+    private val apiKeyRepository: ApiKeyRepository? = null,
+    private val legalConsentRepository: com.dialex.domain.repository.LegalConsentRepository? = null
 ) : MviViewModel<SettingsState, SettingsIntent, SettingsEffect>(
     SettingsState(
         selectedTab = initialTab,
@@ -49,6 +50,7 @@ class SettingsViewModel(
                 val personas = personaRepository.getPersonas()
                 val models = settingsRepository.getAvailableModels()
                 val activeProf = profileRepository?.getActiveProfile()
+                val consent = legalConsentRepository?.getLegalConsent() ?: com.dialex.domain.model.LegalConsent.NotAccepted
 
                 setState {
                     copy(
@@ -61,7 +63,8 @@ class SettingsViewModel(
                         debatePolicy = settings.debatePolicy,
                         agentDefaults = settings.agentDefaults,
                         personas = (SystemPersonas + personas).distinctBy { it.id }.toImmutableList(),
-                        availableModels = models.mapValues { entry -> entry.value.toImmutableList() }.toImmutableMap()
+                        availableModels = models.mapValues { entry -> entry.value.toImmutableList() }.toImmutableMap(),
+                        legalConsent = consent
                     )
                 }
 

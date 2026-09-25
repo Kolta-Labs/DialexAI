@@ -329,7 +329,7 @@ private fun SettingsTabContent(
                 onNavigateToLogs = { onIntent(SettingsIntent.SelectTab(SettingsTab.Logs)) }
             )
             SettingsTab.Logs -> LogsTab()
-            SettingsTab.About -> AboutTab(state.connectionLabel, onShowFeedback)
+            SettingsTab.About -> AboutTab(state.connectionLabel, state.legalConsent, onShowFeedback)
         }
     }
 }

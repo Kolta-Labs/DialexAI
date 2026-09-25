@@ -60,6 +60,7 @@ data class SettingsState(
     val showImportDialog: Boolean = false,
     val showGalleryDialog: Boolean = false,
     val error: String? = null,
+    val legalConsent: com.dialex.domain.model.LegalConsent = com.dialex.domain.model.LegalConsent.NotAccepted,
 )
 
 enum class SettingsTab {
