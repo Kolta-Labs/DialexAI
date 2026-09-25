@@ -9,10 +9,10 @@ This document serves as the formal specification for pending features slated for
 
 ## 📑 Specification Index
 
-1. [Self-Organizing Knowledge Graph with Temporal Decay (COMPLETED)](#1-self-organizing-knowledge-graph-with-temporal-decay)
-2. [Pre-Debate Multi-Perspective Problem Decomposition (COMPLETED)](#2-pre-debate-multi-perspective-problem-decomposition)
-3. [Explicit Contradiction & Tension Pair Detection Engine](#3-explicit-contradiction--tension-pair-detection-engine)
-4. [Round-Aware Dynamic Graph Retrieval (In-Debate RAG)](#4-round-aware-dynamic-graph-retrieval-in-debate-rag)
+1. [Self-Organizing Knowledge Graph with Temporal Decay (COMPLETED)](features/01_KNOWLEDGE_GRAPH_AND_DRAG_DROP.md)
+2. [Pre-Debate Multi-Perspective Problem Decomposition (COMPLETED)](features/02_PROBLEM_DECOMPOSITION.md)
+3. [Explicit Contradiction & Tension Pair Detection Engine (COMPLETED)](features/03_CONTRADICTION_AND_TENSION_DETECTION.md)
+4. [Round-Aware Dynamic Graph Retrieval (In-Debate RAG) (COMPLETED)](features/04_ROUND_AWARE_DYNAMIC_RETRIEVAL.md)
 5. [Dedicated 1-on-1 Socratic Interview Mode](#5-dedicated-1-on-1-socratic-interview-mode)
 6. [Null Hypothesis Benchmarking & Quantitative Evaluation Suite](#6-null-hypothesis-benchmarking--quantitative-evaluation-suite)
 7. [8-Layer DNA Mental & Structured Persona Ingestion](#7-8-layer-dna-mental--structured-persona-ingestion)
@@ -22,7 +22,7 @@ This document serves as the formal specification for pending features slated for
 ## 1. Self-Organizing Knowledge Graph with Temporal Decay
 
 > [!NOTE]
-> **Status**: **COMPLETED** (v1.1)  
+> **Status**: **COMPLETED** (v1.1) — Detailed architectural spec: [**docs/features/01_KNOWLEDGE_GRAPH_AND_DRAG_DROP.md**](features/01_KNOWLEDGE_GRAPH_AND_DRAG_DROP.md)  
 > **Component**: Go Engine (`pkg/graph`, `pkg/api`), KMP Shared (`domain`, `data`, `presentation/graph`), Embedded SQLite + FTS5, Pure-Go WAL.
 
 ### 1.1 Problem Statement
@@ -51,7 +51,7 @@ Implement an embedded, local-first **SQLite + FTS5** graph storage engine with t
 ## 2. Pre-Debate Multi-Perspective Problem Decomposition
 
 > [!NOTE]
-> **Status**: **COMPLETED** (v1.2)  
+> **Status**: **COMPLETED** (v1.2) — Detailed architectural spec: [**docs/features/02_PROBLEM_DECOMPOSITION.md**](features/02_PROBLEM_DECOMPOSITION.md)  
 > **Component**: Go Engine (`pkg/decomposition`, `pkg/api`), KMP Shared (`domain`, `data`, `presentation/setup`), Compose UI.
 
 ### 2.1 Problem Statement
@@ -70,7 +70,7 @@ Introduce a preliminary **Decomposition Phase** prior to Round 1:
 ## 3. Explicit Contradiction & Tension Pair Detection Engine
 
 > [!NOTE]
-> **Status**: **COMPLETED** (v1.3)  
+> **Status**: **COMPLETED** (v1.3) — Detailed architectural spec: [**docs/features/03_CONTRADICTION_AND_TENSION_DETECTION.md**](features/03_CONTRADICTION_AND_TENSION_DETECTION.md)  
 > **Component**: Go Engine (`pkg/consensus`, `pkg/model`), KMP Presentation (`chat`, `deliverables`).
 
 ### 3.1 Problem Statement
@@ -97,7 +97,7 @@ Grounded in **Paraconsistent Logic** (da Costa, 1974), where contradictions are 
 ## 4. Round-Aware Dynamic Graph Retrieval (In-Debate RAG)
 
 > [!NOTE]
-> **Status**: **COMPLETED** (v1.4)  
+> **Status**: **COMPLETED** (v1.4) — Detailed architectural spec: [**docs/features/04_ROUND_AWARE_DYNAMIC_RETRIEVAL.md**](features/04_ROUND_AWARE_DYNAMIC_RETRIEVAL.md)  
 > **Component**: Go Engine (`pkg/retrieval`, `pkg/orchestrator`, `pkg/api`), KMP Shared (`domain`, `data`, `presentation/chat`), Compose UI.
 
 ### 4.1 Problem Statement & Theoretical Motivation

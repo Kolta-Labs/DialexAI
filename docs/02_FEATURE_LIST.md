@@ -153,17 +153,30 @@ This document details all user-facing capabilities, unique selling propositions 
 
 ---
 
-## 10. Pending Features Specification (High Priority / Important)
+## 10. Advanced Epistemic Features & Roadmap
 
-The following advanced capabilities are specified and queued for implementation in [**docs/04_PENDING_FEATURES_SPEC.md**](04_PENDING_FEATURES_SPEC.md):
+The following advanced capabilities have been implemented or are queued for implementation in [**docs/04_PENDING_FEATURES_SPEC.md**](04_PENDING_FEATURES_SPEC.md):
 
-> [!IMPORTANT]
-> All pending capabilities below are classified as **HIGH PRIORITY / IMPORTANT** to advance Dialex AI from a turn-based deliberation chat platform into an evolving, self-organizing cognitive engine:
+### Completed Features (v1.1 – v1.4)
+1. **Self-Organizing Knowledge Graph & Drag-and-Drop Workspace Organization (COMPLETED)**:
+   - Local-first pure-Go SQLite + FTS5 graph storage with activation energy mathematical decay ($W(t) = W_0 \cdot 2^{-\Delta t / t_{\text{half}}}$) and Hebbian edge reinforcement ($\Delta W = \eta (1 - W)$).
+   - Interactive 2D force-directed canvas with pan/zoom and activation filters.
+   - Smooth drag-and-drop workspace reorganization with auto-expanding drop targets.
+   - 📖 **Full Architectural Specification**: [**docs/features/01_KNOWLEDGE_GRAPH_AND_DRAG_DROP.md**](features/01_KNOWLEDGE_GRAPH_AND_DRAG_DROP.md)
+2. **Pre-Debate Multi-Perspective Problem Decomposition (COMPLETED)**:
+   - Divergent dual-mind breakdown of user dilemmas into orthogonal sub-axes (Technical/Structural vs Product/Strategic) before the main council convenes.
+   - Interactive `DecompositionModal` with one-click injection into discussion agenda contexts.
+   - 📖 **Full Architectural Specification**: [**docs/features/02_PROBLEM_DECOMPOSITION.md**](features/02_PROBLEM_DECOMPOSITION.md)
+3. **Explicit Contradiction & Tension Pair Detection Engine (COMPLETED)**:
+   - Automated real-time extraction and tracking of dialectic tension pairs (thesis vs antithesis) grounded in paraconsistent logic ($C_n$ systems).
+   - Real-time slide-out `TensionMatrixDrawer` tracking severity metrics, quote citations, and synthesis resolution.
+   - 📖 **Full Architectural Specification**: [**docs/features/03_CONTRADICTION_AND_TENSION_DETECTION.md**](features/03_CONTRADICTION_AND_TENSION_DETECTION.md)
+4. **Round-Aware Dynamic Graph Retrieval & Evidence Grounding (COMPLETED)**:
+   - Dynamic per-round query expansion based on disputed claims from round $N$ to retrieve empirical evidence from knowledge graph nodes and attached project files.
+   - Automated prompt injection of `[DYNAMIC GROUNDING EVIDENCE FOR ROUND N+1]` grounding blocks and slide-out `RoundEvidenceDrawer`.
+   - 📖 **Full Architectural Specification**: [**docs/features/04_ROUND_AWARE_DYNAMIC_RETRIEVAL.md**](features/04_ROUND_AWARE_DYNAMIC_RETRIEVAL.md)
 
-1. **Self-Organizing Knowledge Graph with Temporal Decay**: Local-first SQLite + FTS5 graph storage with activation energy mathematical decay ($W(t) = W_0 \cdot 2^{-\Delta t / t_{\text{half}}}$) and edge reinforcement across deliberations.
-2. **Pre-Debate Multi-Perspective Problem Decomposition**: Divergent dual-mind breakdown of user dilemmas into orthogonal sub-axes before the main council convenes.
-3. **Explicit Contradiction & Tension Pair Detection Engine**: Automated real-time extraction and tracking of dialectic tension pairs (thesis vs antithesis) grounded in paraconsistent logic.
-4. **Round-Aware Dynamic Graph Retrieval (In-Debate RAG)**: Dynamic per-round query generation based on previous turn claims to inject fresh graph and codebase evidence.
+### Pending Roadmap Capabilities
 5. **Dedicated 1-on-1 Socratic Interview Mode**: Focused Socratic extraction and interrogation of an individual persona (`*interview {persona} {topic}`) without spinning up a full council.
 6. **Null Hypothesis Benchmarking & Evaluation Suite**: Automated testing framework validating multi-agent debate superiority against single-model baselines across hallucination and trade-off metrics.
 7. **8-Layer DNA Mental & Structured Persona Ingestion**: Standardized cognitive schema (epistemic bias, communication vector, taboo spaces, heuristics) with MMOS export compatibility.
