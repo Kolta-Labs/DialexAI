@@ -120,6 +120,20 @@ Clicking **+ Add a Role** opens the 2-tab Persona Picker:
   <p><em>Figure 3.2: Persona Studio & AI Persona Assistant prompt generator with Ponytail brevity controls.</em></p>
 </div>
 
+### 3.3 8-Layer Cognitive DNA Studio & MMOS Ingestion (v1.7)
+For advanced enterprise deliberation and formal dialectic modeling, Dialex AI supports full **8-Layer Cognitive DNA** calibration:
+1. **Layer 1 (Core Identity)**: Professional title, background, credentials, and domain authority boundaries.
+2. **Layer 2 (Epistemic Bias)**: 5-D cognitive coordinate matrix (`theoryVsPractice`, `noveltyVsProvenance`, `safetyVsVelocity`, `rigorThreshold`) and primary reasoning mode.
+3. **Layer 3 (Communication Vector)**: Calibrated tone, formality level (1 to 5), sentence ceiling constraints, rhetorical devices, and syntax patterns.
+4. **Layer 4 (Heuristic Library)**: 10 standard mental model heuristics (*Gall's Law*, *Conway's Law*, *Chesterton's Fence*, *Amdahl's Law*, *CAP Theorem*, etc.) enforced during argument formulation.
+5. **Layer 5 (Taboo Space)**: Explicit negative constraints defining forbidden arguments, rejected fallacies, and intolerable buzzwords with automated penalties.
+6. **Layer 6 (Domain Ontology)**: Mandatory RFCs, ISO standards, and specialized terminology with formal citation enforcement.
+7. **Layer 7 (Adversarial Posture)**: 5 combat stances (*Unyielding Dogmatic*, *Counter-Attacking*, *Socratic Inverter*, *Analytical Deconstructor*, *Pragmatic Accommodator*), tenacity scores, and concede conditions.
+8. **Layer 8 (Synthesis Preference)**: Consensus styles (*Seek Synthesis*, *Hold Minority Report*, *Conditional Compromise*) and minority report criteria.
+- **DNA Radar Matrix Visualizer**: Canvas 5-axis pentagonal spider chart rendering live epistemic coordinates with real-time sliders.
+- **Dense Prompt Compiler**: Emits mathematical `[COGNITIVE DNA MANDATE]` instruction blocks directly injected into agent context.
+- **MMOS v1.0 Compatibility**: 1-click import and export of Mind Matrix Open Standard YAML and JSON definitions.
+
 ---
 
 ## 4. Anti-Fluff & Topic-Drift Guardrails

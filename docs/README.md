@@ -122,7 +122,7 @@ See [Developer Guide: Kolt Ecosystem Setup](DEVELOPER_GUIDE.md#2-kolt-ecosystem-
 | 📱 **Client Applications Setup (Desktop & Mobile)** | Native 1-click installer packaging (DMG/MSI/AppImage/APK), UI polish, Dialex AI Mobile (Android), and in-memory diagnostics (`AppLogStore`). | Application Engineers, Users | [**CLIENT_SETUP.md**](CLIENT_SETUP.md) |
 | 📖 **User Guide & Deliberation Manual** | Council topologies, 10 Universal Roles, 40+ Domain Personas, 3-Tier Anti-Fluff guardrails, human steering, and deliverables. | End Users, Researchers, Strategists | [**USER_GUIDE.md**](USER_GUIDE.md) |
 | 🛠️ **Developer Guide & Kolt Framework** | Developer workspace setup, **Kolt / KoltLibs** composite build (`compose-kmp`, `AsyncState`), adding AI model runners, and deliverable synthesizers. | Contributors, Extension Authors | [**DEVELOPER_GUIDE.md**](DEVELOPER_GUIDE.md) |
-| 🔮 **Advanced Features & Epistemic Specs** | Formal architectural specifications for Knowledge Graph, Problem Decomposition, Tension Detection, Dynamic Retrieval, Socratic Interview mode, and Null Hypothesis Benchmarking. | Core Contributors, Researchers, Architects | [**04_PENDING_FEATURES_SPEC.md**](04_PENDING_FEATURES_SPEC.md) · [**Socratic Spec**](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md) · [**Benchmarking Spec**](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md) |
+| 🔮 **Advanced Features & Epistemic Specs** | Formal architectural specifications for Knowledge Graph, Problem Decomposition, Tension Detection, Dynamic Retrieval, Socratic Interview mode, Null Hypothesis Benchmarking, and 8-Layer Persona DNA. | Core Contributors, Researchers, Architects | [**04_PENDING_FEATURES_SPEC.md**](04_PENDING_FEATURES_SPEC.md) · [**Socratic Spec**](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md) · [**Benchmarking Spec**](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md) · [**Persona DNA Spec**](features/07_8_LAYER_PERSONA_DNA_SPEC.md) |
 | 🔌 **REST & SSE API Reference** | Complete HTTP endpoints, JWT authentication, real-time Server-Sent Events (SSE) schemas, error codes, and curl payloads. | API Developers, Integrators | [**API_REFERENCE.md**](API_REFERENCE.md) |
 
 ---
@@ -139,6 +139,7 @@ See [Developer Guide: Kolt Ecosystem Setup](DEVELOPER_GUIDE.md#2-kolt-ecosystem-
 ### 💡 Capabilities, USPs & Workflows
 - **Local Developer CLI Integration & Cost Savings**: See [User Guide: Local CLI Execution & Cost Savings](USER_GUIDE.md#6-local-developer-cli-execution--cost-savings-usp).
 - **10 Universal Debate Archetypes & 40+ Personas**: See [User Guide: Persona Registry](USER_GUIDE.md#3-the-persona-registry--live-customization).
+- **8-Layer Cognitive DNA Studio & MMOS Ingestion**: See [Persona DNA Architectural Spec](features/07_8_LAYER_PERSONA_DNA_SPEC.md) and [API Reference](API_REFERENCE.md#6-8-layer-cognitive-dna--mmos-endpoints).
 - **3-Tier Anti-Fluff & Topic Drift Guardrails**: See [User Guide: Anti-Fluff Guardrails](USER_GUIDE.md#4-anti-fluff--topic-drift-guardrails).
 - **Live Human Interjections & Instant Interrupts**: See [User Guide: Live Interventions](USER_GUIDE.md#5-live-human-interjections--instant-interrupts).
 - **Consensus Outcome & Generative Deliverables**: See [User Guide: Deliverable Synthesis](USER_GUIDE.md#7-moderator-consensus--generative-deliverables).

@@ -382,6 +382,118 @@ Supports query parameter `format=markdown`, `format=csv`, or `format=json`.
 
 ---
 
+## 6. 8-Layer Cognitive DNA & MMOS Endpoints
+
+### 6.1 Get Persona DNA Matrix
+`GET /api/v1/personas/{id}/dna`
+
+Returns the complete 8-layer cognitive DNA structure for a given persona identifier.
+
+#### Response (`200 OK`):
+```json
+{
+  "schemaVersion": "dialex.dna/v1.0",
+  "id": "the-risk-analyst",
+  "name": "The Risk Analyst",
+  "role": "Failure Mode Specialist",
+  "category": "Reliability & Risk",
+  "coreIdentity": {
+    "title": "Principal Reliability & Failure Mode Analyst",
+    "background": "Deep systems engineering & formal analysis",
+    "domainAuthority": "Distributed systems, fault tolerance, reliability engineering",
+    "credentials": ["Formal Methods", "Fault Tolerance", "RFC Author"]
+  },
+  "epistemicBias": {
+    "primaryMode": "FIRST_PRINCIPLES",
+    "theoryVsPractice": 0.6,
+    "noveltyVsProvenance": 0.8,
+    "safetyVsVelocity": 0.85,
+    "rigorThreshold": 0.9
+  },
+  "communicationVector": {
+    "tone": "CONCISE_INCISIVE",
+    "formalityLevel": 4,
+    "targetSentenceCeiling": 4,
+    "rhetoricalDevices": ["reductio-ad-absurdum", "inversion"],
+    "syntaxPattern": "structured-bulleted"
+  },
+  "heuristicLibrary": [
+    {
+      "id": "heur_gall",
+      "name": "Gall's Law",
+      "formulaOrMaxime": "A complex system that works is invariably found to have evolved from a simple system that worked.",
+      "triggerCondition": "System Architecture",
+      "applicationDirective": "Start with a working simple system."
+    }
+  ],
+  "tabooSpace": {
+    "forbiddenArguments": ["hand-waving", "appeal-to-popularity"],
+    "rejectedFallacies": ["sunk-cost", "false-dichotomy"],
+    "intolerableBuzzwords": ["synergy", "paradigm-shift", "turnkey"],
+    "penaltyAction": "IMMEDIATE_REFUTATION"
+  },
+  "domainOntology": {
+    "mandatoryStandards": ["RFC 793", "CAP Theorem", "PACELC"],
+    "authoritativeRFCs": ["RFC-1122", "RFC-7540"],
+    "specializedLexicon": ["failure-domain", "split-brain", "backpressure"],
+    "enforceFormalCitations": true
+  },
+  "adversarialPosture": {
+    "stance": "SOCRATIC_INVERTER",
+    "tenacityScore": 0.8,
+    "counterAttackMethod": "IDENTIFY_HIDDEN_AXIOM_AND_DISPROVE",
+    "concedeCondition": "RIGOROUS_EMPIRICAL_OR_FORMAL_PROOF"
+  },
+  "synthesisPreference": {
+    "style": "CONDITIONAL_COMPROMISE",
+    "allowMinorityReport": true,
+    "minorityReportCriteria": "UNMITIGATED_CATASTROPHIC_FAILURE_MODE",
+    "compromiseCondition": "BOUNDED_RISK_ENVELOPE"
+  }
+}
+```
+
+### 6.2 Update Persona DNA Matrix
+`POST /api/v1/personas/{id}/dna`
+
+Saves or updates the 8-layer cognitive DNA structure for a persona.
+
+### 6.3 List Built-in Mental Model Heuristics
+`GET /api/v1/personas/heuristics`
+
+Returns canonical mental model heuristics (*Gall's Law*, *Conway's Law*, *Chesterton's Fence*, *Amdahl's Law*, *CAP Theorem*, etc.).
+
+### 6.4 Compile DNA Prompt Mandate
+`POST /api/v1/personas/dna/compile`
+
+Compiles a raw `PersonaDNA` schema into a dense, token-efficient `[COGNITIVE DNA MANDATE]` mathematical prompt block.
+
+#### Request:
+```json
+{
+  "dna": { ... }
+}
+```
+
+#### Response (`200 OK`):
+```json
+{
+  "compiledPrompt": "[COGNITIVE DNA MANDATE: The Risk Analyst]\n..."
+}
+```
+
+### 6.5 Import MMOS Specification
+`POST /api/v1/personas/dna/import?format=yaml`
+
+Parses and validates a Mind Matrix Open Standard (MMOS v1.0) YAML or JSON string payload into a `PersonaDNA` structure.
+
+### 6.6 Export Persona DNA MMOS
+`GET /api/v1/personas/{id}/dna/export?format=yaml`
+
+Exports a persona's complete 8-layer DNA as valid MMOS v1.0 YAML (`format=yaml`) or JSON (`format=json`).
+
+---
+
 ## 📄 License
 
 Dialex AI is licensed under the [PolyForm Noncommercial License 1.0.0](file:///LICENSE).  
