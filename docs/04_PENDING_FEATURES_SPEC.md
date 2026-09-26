@@ -17,6 +17,7 @@ This document serves as the formal specification for pending features slated for
 6. [Null Hypothesis Benchmarking & Quantitative Evaluation Suite (COMPLETED)](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md)
 7. [8-Layer DNA Mental & Structured Persona Ingestion (COMPLETED)](features/07_8_LAYER_PERSONA_DNA_SPEC.md)
 8. [Mobile Epistemic Parity & Gap Closure Suite (COMPLETED)](features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md)
+9. [Bayesian Credence Tracking & Quantitative Epistemic Uncertainty Network (APPROVED SPEC)](features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md)
 
 ---
 
@@ -359,3 +360,24 @@ While Dialex AI Desktop provides a complete 3-pane IDE workspace with full epist
 | **7. Dynamic RAG Round Evidence Drawer** | Slide-out side drawer (`Cmd+Shift+E`) showing retrieved graph nodes. | Side drawer breaks mobile screen width; hidden on mobile chat. | Implement a **Touch-Friendly Bottom Sheet (`ModalBottomSheet`)** for `RoundEvidenceDrawer`. |
 | **8. Paraconsistent Tension Matrix Drawer** | Slide-out side drawer (`Cmd+Shift+T`) tracking open tensions. | Side drawer inaccessible without keyboard shortcut. | Implement a **Touch-Friendly Bottom Sheet** for `TensionMatrixDrawer` with direct pill in mobile chat header. |
 | **9. Problem Decomposition Modal on Mobile** | Dual-mind divergent decomposition popup modal. | Decomposition modal requires width tuning for small screens. | Full-screen compact dialog for `DecompositionModal` with vertical tab selection. |
+
+---
+
+## 9. Bayesian Credence Tracking & Quantitative Epistemic Uncertainty Network
+
+> [!NOTE]
+> **Status**: **APPROVED SPECIFICATION** (v1.9) — Detailed architectural spec: [**docs/features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md**](features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md)  
+> **Component**: Go Engine (`pkg/credence`, `pkg/api`), KMP Shared (`domain`, `data`, `presentation/chat`), Desktop & Mobile Compose UI, Executive Memo Exporter.
+
+### 9.1 Problem Statement
+While Dialex AI delivers rigorous qualitative deliberation and dialectic argumentation, technical and executive leaders require **mathematically quantifiable confidence intervals, explicit hypothesis probability tracking, and empirical uncertainty metrics**. Rhetoric alone can mask model overconfidence or false equivalence.
+
+### 9.2 Key Capabilities & Theoretical Formulations
+* **Finite Hypothesis Space**: Extraction of 2 to 4 mutually exclusive, exhaustive strategic hypotheses $\mathcal{H} = \{ H_1, \dots, H_K \}$ at debate intake.
+* **Round-by-Round Bayesian Updates**: Tracking persona prior and posterior vectors $\mathbf{p}_i^{(r)} = [ P_i(H_1 | E), \dots, P_i(H_K | E) ]$ alongside meta-confidence certainty scores $c_i^{(r)}$.
+* **Shannon Epistemic Entropy ($\mathcal{S}$)**: Real-time quantification of council disagreement vs convergence:
+  $$\mathcal{S}^{(r)} = -\sum_{k=1}^K \overline{P}^{(r)}(H_k) \log_2 \overline{P}^{(r)}(H_k) \quad [\text{bits}]$$
+* **Likelihood Ratio ($\Lambda$) Tipping Points**: Identification of decisive citations that shifted belief: $\Lambda(E_r) = \frac{P(E_r \mid H_a)}{P(E_r \mid H_b)}$.
+* **Interactive Credence Ribbon Canvas**: Fluid Bézier area chart showing belief flow across rounds with interactive scrubbing in Desktop and Mobile (`CredenceDrawer`).
+* **Audit-Ready Epistemic Decision Matrix**: Embedded probability shift tables in ADRs and Executive Memos.
+

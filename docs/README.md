@@ -146,6 +146,7 @@ See [Developer Guide: Kolt Ecosystem Setup](DEVELOPER_GUIDE.md#2-kolt-ecosystem-
 - **Consensus Outcome & Generative Deliverables**: See [User Guide: Deliverable Synthesis](USER_GUIDE.md#7-moderator-consensus--generative-deliverables).
 - **Dedicated 1-on-1 Socratic Interview Mode & Epistemic Ledger**: See [User Guide: Socratic Interview Mode](USER_GUIDE.md#23-dedicated-1-on-1-socratic-interview-mode) and [Socratic Architectural Spec](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md).
 - **Null Hypothesis Benchmarking Suite & Arena Radar**: See [User Guide: Benchmarking Suite](USER_GUIDE.md#9-null-hypothesis-benchmarking--quantitative-evaluation-suite-dialexbench) and [Benchmarking Spec](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md).
+- **Bayesian Credence Tracking & Epistemic Uncertainty Network**: See [Bayesian Credence Spec](features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md).
 
 ### 📐 Architecture, Clean Code & Developers
 - **Clean Architecture Strict Call Chain**: See [Architecture Guide: Domain Layer](ARCHITECTURE.md#4-domain-layer--clean-architecture).
