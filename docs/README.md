@@ -140,6 +140,7 @@ See [Developer Guide: Kolt Ecosystem Setup](DEVELOPER_GUIDE.md#2-kolt-ecosystem-
 - **Local Developer CLI Integration & Cost Savings**: See [User Guide: Local CLI Execution & Cost Savings](USER_GUIDE.md#6-local-developer-cli-execution--cost-savings-usp).
 - **10 Universal Debate Archetypes & 40+ Personas**: See [User Guide: Persona Registry](USER_GUIDE.md#3-the-persona-registry--live-customization).
 - **8-Layer Cognitive DNA Studio & MMOS Ingestion**: See [Persona DNA Architectural Spec](features/07_8_LAYER_PERSONA_DNA_SPEC.md) and [API Reference](API_REFERENCE.md#6-8-layer-cognitive-dna--mmos-endpoints).
+- **Mobile Epistemic Parity Suite & Zero-Wait Auto Mode**: See [Mobile Epistemic Parity Spec](features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md).
 - **3-Tier Anti-Fluff & Topic Drift Guardrails**: See [User Guide: Anti-Fluff Guardrails](USER_GUIDE.md#4-anti-fluff--topic-drift-guardrails).
 - **Live Human Interjections & Instant Interrupts**: See [User Guide: Live Interventions](USER_GUIDE.md#5-live-human-interjections--instant-interrupts).
 - **Consensus Outcome & Generative Deliverables**: See [User Guide: Deliverable Synthesis](USER_GUIDE.md#7-moderator-consensus--generative-deliverables).

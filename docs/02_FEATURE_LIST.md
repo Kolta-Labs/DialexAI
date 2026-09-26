@@ -201,9 +201,13 @@ The following advanced capabilities have been implemented or are queued for impl
    - Includes embedded **DialexBench-10** canonical dilemma dataset plus custom dilemma authoring and Markdown/CSV/JSON export.
    - 📖 **Full Architectural Specification**: [**docs/features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md**](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md)
 
-### Pending Roadmap Capabilities
-7. **8-Layer DNA Mental & Structured Persona Ingestion (SPEC IN PROGRESS - v1.7)**: Standardized cognitive schema (epistemic bias, communication vector, taboo spaces, heuristics, domain ontology, adversarial posture, and synthesis preference) with MMOS export compatibility and interactive Persona Studio editor.
-8. **Mobile Epistemic Parity & Gap Closure Suite (PENDING - v1.8)**: Full mobile parity across Socratic Interview launcher, Benchmark Arena mobile viewport & canvas radar, Project workspace hierarchy, and touch-optimized bottom sheets for Dynamic RAG evidence citations and Tension Matrix drawers.
+7. **8-Layer DNA Mental & Structured Persona Ingestion (COMPLETED - v1.7)**:
+   - Standardized 8-layer cognitive schema (*Core Identity*, *Epistemic Bias*, *Communication Vector*, *Heuristic Library*, *Taboo Space*, *Domain Ontology*, *Adversarial Posture*, *Synthesis Preference*) with MMOS v1.0 YAML/JSON export/import and interactive desktop/mobile Persona Studio.
+   - 📖 **Full Architectural Specification**: [**docs/features/07_8_LAYER_PERSONA_DNA_SPEC.md**](features/07_8_LAYER_PERSONA_DNA_SPEC.md)
+8. **Mobile Epistemic Parity & Gap Closure Suite (COMPLETED - v1.8)**:
+   - Full mobile parity across Socratic Interview launcher, Benchmark Arena mobile viewport & 260dp canvas radar, Project workspace hierarchy with knowledge graph links, and touch-optimized bottom sheets for Dynamic RAG evidence citations and Tension Matrix drawers.
+   - Zero-Wait Autonomous Autopilot: 1-tap presets immediately initiate autonomous deliberation without user input or setup pauses.
+   - 📖 **Full Architectural Specification**: [**docs/features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md**](features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md)
 
 ---
 

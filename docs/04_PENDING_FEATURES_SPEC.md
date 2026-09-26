@@ -14,8 +14,9 @@ This document serves as the formal specification for pending features slated for
 3. [Explicit Contradiction & Tension Pair Detection Engine (COMPLETED)](features/03_CONTRADICTION_AND_TENSION_DETECTION.md)
 4. [Round-Aware Dynamic Graph Retrieval (In-Debate RAG) (COMPLETED)](features/04_ROUND_AWARE_DYNAMIC_RETRIEVAL.md)
 5. [Dedicated 1-on-1 Socratic Interview Mode (COMPLETED)](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md)
-6. [Null Hypothesis Benchmarking & Quantitative Evaluation Suite (APPROVED SPEC)](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md)
-7. [8-Layer DNA Mental & Structured Persona Ingestion](#7-8-layer-dna-mental--structured-persona-ingestion)
+6. [Null Hypothesis Benchmarking & Quantitative Evaluation Suite (COMPLETED)](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md)
+7. [8-Layer DNA Mental & Structured Persona Ingestion (COMPLETED)](features/07_8_LAYER_PERSONA_DNA_SPEC.md)
+8. [Mobile Epistemic Parity & Gap Closure Suite (COMPLETED)](features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md)
 
 ---
 
@@ -338,9 +339,9 @@ Currently, personas are defined through basic markdown text prompts and binary s
 
 ## 8. Mobile Epistemic Parity & Gap Closure Suite
 
-> [!IMPORTANT]
-> **Status**: **IN SPECIFICATION & DELIBERATION** (v1.8) — Detailed architectural spec: [**docs/features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md**](features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md)  
-> **Component**: KMP Presentation Mobile (`presentation/mobile`, `presentation/chat`, `presentation/setup`), Android App.
+> [!NOTE]
+> **Status**: **COMPLETED** (v1.8) — Detailed architectural spec: [**docs/features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md**](features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md)  
+> **Component**: KMP Presentation Mobile (`presentation/mobile`, `presentation/chat`, `presentation/setup`, `presentation/arena`), Android App, Zero-Wait Autonomous Autopilot.
 
 ### 8.1 Problem Statement & Mobile Feature Gaps
 While Dialex AI Desktop provides a complete 3-pane IDE workspace with full epistemic capabilities, the Android / compact mobile experience (`maxWidth < 600.dp`) currently suffers from functional gaps where desktop-first features lack touch-friendly mobile entrypoints and viewport adaptations.
