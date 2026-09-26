@@ -339,7 +339,7 @@ Currently, personas are defined through basic markdown text prompts and binary s
 ## 8. Mobile Epistemic Parity & Gap Closure Suite
 
 > [!IMPORTANT]
-> **Status**: **PENDING ROADMAP FEATURE** (v1.8)  
+> **Status**: **IN SPECIFICATION & DELIBERATION** (v1.8) — Detailed architectural spec: [**docs/features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md**](features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md)  
 > **Component**: KMP Presentation Mobile (`presentation/mobile`, `presentation/chat`, `presentation/setup`), Android App.
 
 ### 8.1 Problem Statement & Mobile Feature Gaps
