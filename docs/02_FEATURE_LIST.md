@@ -188,7 +188,8 @@ The following advanced capabilities have been implemented or are queued for impl
    - 📖 **Full Architectural Specification**: [**docs/features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md**](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md)
 
 ### Pending Roadmap Capabilities
-7. **8-Layer DNA Mental & Structured Persona Ingestion**: Standardized cognitive schema (epistemic bias, communication vector, taboo spaces, heuristics) with MMOS export compatibility.
+7. **8-Layer DNA Mental & Structured Persona Ingestion (SPEC IN PROGRESS - v1.7)**: Standardized cognitive schema (epistemic bias, communication vector, taboo spaces, heuristics, domain ontology, adversarial posture, and synthesis preference) with MMOS export compatibility and interactive Persona Studio editor.
+8. **Mobile Epistemic Parity & Gap Closure Suite (PENDING - v1.8)**: Full mobile parity across Socratic Interview launcher, Benchmark Arena mobile viewport & canvas radar, Project workspace hierarchy, and touch-optimized bottom sheets for Dynamic RAG evidence citations and Tension Matrix drawers.
 
 ---
 

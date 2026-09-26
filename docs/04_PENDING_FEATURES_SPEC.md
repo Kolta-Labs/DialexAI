@@ -314,21 +314,47 @@ To establish scientific legitimacy and enterprise ROI, Dialex AI must empiricall
 
 ## 7. 8-Layer DNA Mental & Structured Persona Ingestion
 
-> [!IMPORTANT]
-> **Priority**: Medium / High Value  
-> **Component**: KMP Shared (`model`, `domain`), Go Engine (`pkg/model`).
+> [!NOTE]
+> **Status**: **IN SPECIFICATION & DELIBERATION** (v1.7) — Detailed spec: [**docs/features/07_8_LAYER_PERSONA_DNA_SPEC.md**](features/07_8_LAYER_PERSONA_DNA_SPEC.md)  
+> **Component**: Go Engine (`pkg/model`, `pkg/persona`), KMP Shared (`model`, `domain`, `presentation/settings/personas`), Persona Studio UI.
 
 ### 7.1 Problem Statement
-Currently, personas are defined via markdown prompts and style toggles (e.g. Ponytail). To support deeper psychological and domain fidelity, structured persona schemas are needed.
+Currently, personas are defined through basic markdown text prompts and binary style flags (e.g. Ponytail). While functional, this lacks psychological depth, structural rigor, and domain standardization:
+1. **Shallow Epistemic Constraints**: Models frequently regress into generic corporate pleasantries or abandon their adversarial mandate mid-debate.
+2. **Missing Negative Constraints (Taboo Spaces)**: Personas have no programmatic guardrails against invoking ungrounded marketing hype, logical fallacies, or outdated technical anti-patterns.
+3. **Lack of Interoperability**: Enterprise architects and researchers cannot import/export structured cognitive archetypes into industry formats like MMOS (Mind Matrix Open Standard).
 
-### 7.2 Proposed Architecture & Specifications
-Adopt an **8-Layer Cognitive Schema** (compatible with MMOS exports):
-1. **Core Identity**: Name, background, domain authority.
-2. **Epistemic Bias**: Preferred reasoning frameworks (First Principles, Empirical/Statistical, Historical Analogy, Pragmatic/Engineering).
-3. **Communication Vector**: Tone, formality, directness, brevity.
-4. **Heuristic Library**: Specific rules-of-thumb and mental models invoked under stress.
-5. **Taboo Space**: What arguments or fallacies this persona refuses to tolerate.
-6. **Domain Ontology**: Specialized vocabulary, standards, and references.
-7. **Adversarial Posture**: How the persona reacts when challenged (accommodating, unyielding, counter-attacking).
-8. **Synthesis Preference**: Propensity toward compromise vs holding a hard minority report.
-* Provide JSON/YAML import and export in the **Persona Studio**.
+### 7.2 The 8-Layer Cognitive Schema
+1. **Core Identity**: Name, background, credentials, jurisdiction, and domain authority boundaries.
+2. **Epistemic Bias**: Primary reasoning frameworks (*First Principles*, *Empirical/Statistical*, *Historical Analogy*, *Pragmatic/Engineering*).
+3. **Communication Vector**: Tone, formality, directness, brevity, and rhetorical posture.
+4. **Heuristic Library**: Specific mental models and rules-of-thumb invoked under stress (e.g., *Gall's Law*, *Conway's Law*, *Chesterton's Fence*).
+5. **Taboo Space**: Arguments, fallacies, and anti-patterns this persona explicitly rejects and challenges.
+6. **Domain Ontology**: Specialized vocabulary, authoritative RFCs, ISO standards, and citation requirements.
+7. **Adversarial Posture**: Behavior when challenged (*Accommodating*, *Unyielding*, *Counter-Attacking*, *Socratic Inversion*).
+8. **Synthesis Preference**: Propensity toward compromise vs holding an unyielding **Minority Report** in final deliverables.
+
+---
+
+## 8. Mobile Epistemic Parity & Gap Closure Suite
+
+> [!IMPORTANT]
+> **Status**: **PENDING ROADMAP FEATURE** (v1.8)  
+> **Component**: KMP Presentation Mobile (`presentation/mobile`, `presentation/chat`, `presentation/setup`), Android App.
+
+### 8.1 Problem Statement & Mobile Feature Gaps
+While Dialex AI Desktop provides a complete 3-pane IDE workspace with full epistemic capabilities, the Android / compact mobile experience (`maxWidth < 600.dp`) currently suffers from functional gaps where desktop-first features lack touch-friendly mobile entrypoints and viewport adaptations.
+
+### 8.2 Inventory of Mobile Missing Features & Required Solutions
+
+| Missing Mobile Capability | Desktop Status | Mobile Problem | Proposed Touch/Mobile Solution |
+|---|---|---|---|
+| **1. Dedicated Socratic Interview Launcher** | Standalone `[ 🎯 Socratic Interview ]` amber capsule in sidebar. | Mobile bottom bar and `CouncilHubTab` only launch default Council Setup. | Add a prominent **`🎯 Socratic Interview`** FAB or Quick Action Card in `CouncilHubTab` and `QuickStartTab`. |
+| **2. Null Hypothesis Benchmark Arena Entry** | Full sidebar button `[ ⚔️ Arena & Benchmarks ]` + Canvas Radar. | Route exists in routing table, but has zero entrypoints in mobile navigation shell. | Add a dedicated **Arena** card in `CouncilHubTab` or top bar action icon linking to `BenchmarkArena`. |
+| **3. Mobile Radar Chart & Arena Viewport** | 2-column wide layout with canvas spider web. | 2-column layout overflows on portrait mobile screens (<420dp). | Responsive 1-column mobile layout: top compact radar chart (320dp height) + swipeable horizontal deliverable cards. |
+| **4. Knowledge Graph Visualization on Mobile** | Project action `GraphRoute` with force-directed 2D canvas. | No button or tab to access project knowledge graphs on mobile. | Add a **"View Knowledge Graph"** action in project menus and discussion detail header. |
+| **5. Mobile Persona Studio & Editor** | Full Persona Studio tab in desktop Settings. | Mobile Vault only manages keys/profiles; cannot create or edit personas. | Add a **"Personas"** management view in `MobileVaultTab` with bottom-sheet persona editor. |
+| **6. Hierarchical Project Workspace Grouping** | Tree sidebar with collapsible project folders and drag-and-drop. | `CouncilHubTab` displays a flat discussion list; cannot view projects or move discussions. | Introduce expandable project group headers, project creation dialog, and move discussion sheet. |
+| **7. Dynamic RAG Round Evidence Drawer** | Slide-out side drawer (`Cmd+Shift+E`) showing retrieved graph nodes. | Side drawer breaks mobile screen width; hidden on mobile chat. | Implement a **Touch-Friendly Bottom Sheet (`ModalBottomSheet`)** for `RoundEvidenceDrawer`. |
+| **8. Paraconsistent Tension Matrix Drawer** | Slide-out side drawer (`Cmd+Shift+T`) tracking open tensions. | Side drawer inaccessible without keyboard shortcut. | Implement a **Touch-Friendly Bottom Sheet** for `TensionMatrixDrawer` with direct pill in mobile chat header. |
+| **9. Problem Decomposition Modal on Mobile** | Dual-mind divergent decomposition popup modal. | Decomposition modal requires width tuning for small screens. | Full-screen compact dialog for `DecompositionModal` with vertical tab selection. |
