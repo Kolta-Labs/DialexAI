@@ -30,6 +30,7 @@ class ChatViewModel(
     private val conductSocraticTurnUseCase: com.dialex.domain.usecase.ConductSocraticTurnUseCase? = null,
     private val generateSocraticDigestUseCase: com.dialex.domain.usecase.GenerateSocraticDigestUseCase? = null,
     private val elevateSocraticToCouncilUseCase: com.dialex.domain.usecase.ElevateSocraticToCouncilUseCase? = null,
+    private val recalculateCredenceUseCase: com.dialex.domain.usecase.RecalculateCredenceUseCase? = null,
 ) : MviViewModel<ChatState, ChatIntent, ChatEffect>(ChatState()) {
 
     private var streamJob: Job? = null
@@ -183,7 +184,8 @@ class ChatViewModel(
 
         val activeTensions = (updatedDiscussion.tensionPairs.ifEmpty { currentDisc?.tensionPairs.orEmpty() }).toImmutableList()
         val activeEvidence = (updatedDiscussion.retrievedEvidence.ifEmpty { currentDisc?.retrievedEvidence.orEmpty() }).toImmutableList()
-        setState { copy(discussion = mergedDiscussion, tensionPairs = activeTensions, retrievedEvidence = activeEvidence, isActionInProgress = false) }
+        val activeCredence = updatedDiscussion.credenceLedger ?: currentDisc?.credenceLedger
+        setState { copy(discussion = mergedDiscussion, tensionPairs = activeTensions, retrievedEvidence = activeEvidence, credenceLedger = activeCredence, isActionInProgress = false) }
         computeTokenWarning(mergedDiscussion)
         updateNextSpeaker(mergedDiscussion)
         validateWorkspaceFolders(mergedDiscussion)
@@ -815,6 +817,18 @@ class ChatViewModel(
                     )
                 }
             }
+            is ChatIntent.ToggleCredenceDrawer -> {
+                setState { copy(isCredenceDrawerOpen = !isCredenceDrawerOpen) }
+            }
+            is ChatIntent.SetCredenceDrawerOpen -> {
+                setState { copy(isCredenceDrawerOpen = intent.open) }
+            }
+            is ChatIntent.SelectCredenceRound -> {
+                setState { copy(selectedCredenceRound = intent.round) }
+            }
+            is ChatIntent.RecalculateCredence -> {
+                recalculateCredence()
+            }
             is ChatIntent.GenerateSocraticDigest -> {
                 if (state.value.isGeneratingDigest) return
                 setState { copy(isGeneratingDigest = true) }
@@ -954,6 +968,27 @@ class ChatViewModel(
                 try {
                     discussionRepository.pauseDiscussion(discussionId)
                 } catch (e: Exception) {}
+            }
+        }
+    }
+
+    private fun recalculateCredence() {
+        if (state.value.isRecalculatingCredence) return
+        val useCase = recalculateCredenceUseCase ?: return
+        viewModelScope.launch {
+            setState { copy(isRecalculatingCredence = true) }
+            try {
+                val updatedLedger = useCase(discussionId).getOrThrow()
+                setState {
+                    copy(
+                        credenceLedger = updatedLedger,
+                        isRecalculatingCredence = false,
+                        discussion = discussion?.copy(credenceLedger = updatedLedger)
+                    )
+                }
+            } catch (e: Exception) {
+                setState { copy(isRecalculatingCredence = false) }
+                com.dialex.logging.AppLogStore.error("ChatViewModel", "Recalculate credence failed: ${e.message}")
             }
         }
     }

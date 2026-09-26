@@ -215,6 +215,12 @@ fun App(
     val benchmarkRepository: BenchmarkRepository? = remember(dataSource) {
         dataSource?.let { BenchmarkRepositoryImpl(it) }
     }
+    val credenceRepository: com.dialex.domain.repository.CredenceRepository? = remember(dataSource) {
+        dataSource?.let { com.dialex.data.repository.CredenceRepositoryImpl(it) }
+    }
+    val recalculateCredenceUseCase = remember(credenceRepository) {
+        credenceRepository?.let { com.dialex.domain.usecase.RecalculateCredenceUseCase(it) }
+    }
 
     // Live state of projects and discussions for the Sidebar
     var projects by remember { mutableStateOf<List<Project>>(emptyList()) }
@@ -629,6 +635,7 @@ fun App(
                         val currentProj = projects.firstOrNull { it.id == (selectedProjectId ?: currentDisc?.projectId) }
                         var artifactsPaneOpen by remember { mutableStateOf(false) }
                         var summaryDialogOpen by remember { mutableStateOf(false) }
+                        var credenceDrawerOpen by remember { mutableStateOf(false) }
                         var lastSeenArtifactsCount by remember(selectedDiscussionId) { mutableStateOf(0) }
 
                         // Discussion chat search states
@@ -718,8 +725,31 @@ fun App(
                                 searchMatchCount = chatSearchMatchCount,
                                 currentSearchMatchIndex = currentChatSearchMatchIndex,
                                 onNextSearchMatch = { chatSearchNextTrigger++ },
-                                onPrevSearchMatch = { chatSearchPrevTrigger++ }
+                                onPrevSearchMatch = { chatSearchPrevTrigger++ },
+                                credenceLedger = currentDisc?.credenceLedger,
+                                onOpenCredenceDrawer = { credenceDrawerOpen = true }
                             )
+
+                            if (credenceDrawerOpen && currentDisc?.credenceLedger != null) {
+                                com.dialex.presentation.chat.CredenceDrawer(
+                                    ledger = currentDisc.credenceLedger,
+                                    onDismiss = { credenceDrawerOpen = false },
+                                    onRecalculate = {
+                                        val disc = currentDisc
+                                        if (disc != null && recalculateCredenceUseCase != null) {
+                                            coroutineScope.launch {
+                                                try {
+                                                    val updatedLedger = recalculateCredenceUseCase(disc.id).getOrThrow()
+                                                    val updatedDisc = disc.copy(credenceLedger = updatedLedger)
+                                                    discussions = discussions.map { if (it.id == updatedDisc.id) updatedDisc else it }
+                                                } catch (e: Exception) {
+                                                    io.github.koltalabs.kolt.logutils.printLog("Failed to recalculate credence: ${e.message}", isError = true)
+                                                }
+                                            }
+                                        }
+                                    }
+                                )
+                            }
                         }
 
                         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -784,7 +814,8 @@ fun App(
                                                     chatSearchMatchCount = count
                                                     currentChatSearchMatchIndex = index
                                                 },
-                                                isCompact = false
+                                                isCompact = false,
+                                                recalculateCredenceUseCase = recalculateCredenceUseCase
                                             )
                                         }
                                     }
@@ -850,6 +881,7 @@ fun App(
                                                     onDiscussionUpdated = { updatedDisc ->
                                                         discussions = discussions.map { if (it.id == updatedDisc.id) updatedDisc else it }
                                                     },
+                                                    recalculateCredenceUseCase = recalculateCredenceUseCase,
                                                     isCompact = false
                                                 )
                                             }
@@ -957,6 +989,7 @@ fun App(
                                             discussions = discussions.map { if (it.id == updatedDisc.id) updatedDisc else it }
                                         },
                                         isCompact = true,
+                                        recalculateCredenceUseCase = recalculateCredenceUseCase,
                                     )
                                 }
                             }

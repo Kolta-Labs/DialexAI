@@ -85,6 +85,65 @@ fun Discussion.toExecutiveMemorandumHtml(projectName: String? = null): String {
         """.trimIndent()
     } else ""
 
+    val credenceHtml = credenceLedger?.let { ledger ->
+        if (ledger.hypotheses.isEmpty() || ledger.snapshots.isEmpty()) return@let ""
+        val initialSnap = ledger.snapshots.first()
+        val latestSnap = ledger.latestSnapshot ?: ledger.snapshots.last()
+        val entropy = latestSnap.entropy
+        val entropyStr = ((entropy * 100).toInt() / 100.0).toString()
+
+        val rows = ledger.hypotheses.joinToString("") { h ->
+            val p0 = initialSnap.probabilityFor(h.id) * 100
+            val pn = latestSnap.probabilityFor(h.id) * 100
+            val delta = pn - p0
+            val deltaSign = if (delta > 0) "+" else ""
+            val deltaColor = if (delta > 0) "#10B981" else if (delta < 0) "#EF4444" else "inherit"
+            val isDominant = h.id == latestSnap.dominantHypothesis
+            val nameStyle = if (isDominant) "font-weight: 700; color: #6366F1;" else "font-weight: 500;"
+
+            """
+            <tr>
+                <td style="$nameStyle">
+                    <strong>${escapeHtml(h.label)}</strong>${if (h.description.isNotBlank()) ": ${escapeHtml(h.description)}" else ""}
+                    ${if (isDominant) "<span class=\"tag\" style=\"margin-left: 6px; background: rgba(99, 102, 241, 0.15); color: #6366F1; border-color: rgba(99, 102, 241, 0.3);\">Dominant</span>" else ""}
+                </td>
+                <td style="text-align: right; font-family: monospace;">${p0.toInt()}%</td>
+                <td style="text-align: right; font-family: monospace; font-weight: 600;">${pn.toInt()}%</td>
+                <td style="text-align: right; font-family: monospace; color: $deltaColor;">$deltaSign${delta.toInt()}%</td>
+            </tr>
+            """.trimIndent()
+        }
+
+        val allTippingPoints = ledger.snapshots.flatMap { it.tippingPoints }
+        val tippingHtml = if (allTippingPoints.isNotEmpty()) {
+            val tippingRows = allTippingPoints.joinToString("") { tp ->
+                """
+                <li><strong>Round ${tp.roundIndex}</strong>: Likelihood Ratio &Lambda; = ${((tp.likelihoodRatio * 10).toInt() / 10.0)} &mdash; ${escapeHtml(tp.evidenceSnippet)}</li>
+                """.trimIndent()
+            }
+            """
+            <div style="margin-top: 14px; font-size: 12.5px; color: var(--text-muted);">
+                <strong>Epistemic Tipping Points Detected:</strong>
+                <ul style="margin: 6px 0 0 18px;">$tippingRows</ul>
+            </div>
+            """.trimIndent()
+        } else ""
+
+        """
+        <div class="section">
+            <h2 class="section-title">Bayesian Epistemic Credence Matrix</h2>
+            <p class="section-sub">Quantitative probabilistic tracking across deliberation rounds with DNA domain authority weighting (Terminal Shannon Entropy: <strong>$entropyStr bits</strong>):</p>
+            <table class="data-table">
+                <thead>
+                    <tr><th>Hypothesis Option</th><th style="text-align: right;">Prior (P₀)</th><th style="text-align: right;">Posterior (P_N)</th><th style="text-align: right;">Net Shift (&Delta;P)</th></tr>
+                </thead>
+                <tbody>$rows</tbody>
+            </table>
+            $tippingHtml
+        </div>
+        """.trimIndent()
+    } ?: ""
+
     return """
 <!DOCTYPE html>
 <html lang="en">
@@ -440,6 +499,8 @@ fun Discussion.toExecutiveMemorandumHtml(projectName: String? = null): String {
             <p class="section-sub">Participating frontier AI agents who evaluated and stress-tested this decision:</p>
             <div class="council-grid">$participantsHtml</div>
         </div>
+
+        $credenceHtml
 
         $attachmentsHtml
 

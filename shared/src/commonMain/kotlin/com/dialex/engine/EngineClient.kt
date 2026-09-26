@@ -238,6 +238,14 @@ class EngineClient(
     suspend fun setupDiscussionWithAi(request: com.dialex.domain.model.AiSetupRequest): Discussion =
         post("/api/v1/debates/ai-setup", request)
 
+    // ── Bayesian Credence & Epistemic Uncertainty ────────────────────────────
+
+    suspend fun getCredenceLedger(discussionId: String): com.dialex.domain.model.CredenceLedger =
+        get("/api/v1/debates/$discussionId/credence")
+
+    suspend fun recalculateCredence(discussionId: String): com.dialex.domain.model.CredenceLedger =
+        postNoBodyReturn("/api/v1/debates/$discussionId/credence/recalculate")
+
     // ── Knowledge Graph ───────────────────────────────────────────────────────
 
     suspend fun getActiveGraph(projectId: String, minWeight: Double = 0.1): com.dialex.domain.model.KnowledgeGraph =

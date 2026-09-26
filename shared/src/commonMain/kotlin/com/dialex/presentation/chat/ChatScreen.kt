@@ -597,6 +597,13 @@ fun ChatScreen(
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown &&
                         (event.isMetaPressed || event.isCtrlPressed) &&
+                        event.isShiftPressed &&
+                        event.key == Key.B
+                    ) {
+                        onIntent(ChatIntent.ToggleCredenceDrawer)
+                        true
+                    } else if (event.type == KeyEventType.KeyDown &&
+                        (event.isMetaPressed || event.isCtrlPressed) &&
                         event.key == Key.F
                     ) {
                         onEffectiveToggleSearch(!effectiveSearchActive)
@@ -636,7 +643,9 @@ fun ChatScreen(
                         openTensionCount = state.tensionPairs.count { it.status == TensionStatus.OPEN || it.status == TensionStatus.EXPLORED },
                         onOpenTensionDrawer = { onIntent(ChatIntent.SetTensionDrawerOpen(true)) },
                         retrievedEvidenceCount = state.retrievedEvidence.sumOf { it.items.size },
-                        onOpenEvidenceDrawer = { onIntent(ChatIntent.SetEvidenceDrawerOpen(true, null)) }
+                        onOpenEvidenceDrawer = { onIntent(ChatIntent.SetEvidenceDrawerOpen(true, null)) },
+                        credenceLedger = state.credenceLedger,
+                        onOpenCredenceDrawer = { onIntent(ChatIntent.SetCredenceDrawerOpen(true)) }
                     )
                 }
 
@@ -2025,6 +2034,18 @@ fun ChatScreen(
                     selectedRound = state.selectedEvidenceRound,
                     onRoundSelect = { onIntent(ChatIntent.ToggleEvidenceDrawer(it)) },
                     onDismiss = { onIntent(ChatIntent.SetEvidenceDrawerOpen(false)) }
+                )
+            }
+
+            val credenceLedger = state.credenceLedger
+            if (state.isCredenceDrawerOpen && credenceLedger != null) {
+                CredenceDrawer(
+                    ledger = credenceLedger,
+                    selectedRound = state.selectedCredenceRound,
+                    isRecalculating = state.isRecalculatingCredence,
+                    onSelectRound = { onIntent(ChatIntent.SelectCredenceRound(it)) },
+                    onRecalculate = { onIntent(ChatIntent.RecalculateCredence) },
+                    onDismiss = { onIntent(ChatIntent.SetCredenceDrawerOpen(false)) }
                 )
             }
 

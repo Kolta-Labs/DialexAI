@@ -94,6 +94,7 @@ type Discussion struct {
 	SocraticConfig  *SocraticConfig      `json:"socraticConfig,omitempty"`
 	SocraticDigest  *SocraticDigest      `json:"socraticDigest,omitempty"`
 	SocraticLedger  []SocraticLedgerItem `json:"socraticLedger,omitempty"`
+	CredenceLedger  *CredenceLedger      `json:"credenceLedger,omitempty"`
 	CreatedAt       int64                `json:"createdAt,omitempty"`
 	UpdatedAt       int64                `json:"updatedAt,omitempty"`
 	Warning            *string              `json:"warning,omitempty"`

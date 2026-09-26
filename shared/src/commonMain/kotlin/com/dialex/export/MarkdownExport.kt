@@ -93,6 +93,38 @@ fun Discussion.toMarkdown(): String = buildString {
         appendLine()
         appendLine(summary)
     }
+    if (credenceLedger != null && credenceLedger.hypotheses.isNotEmpty() && credenceLedger.snapshots.isNotEmpty()) {
+        val initialSnap = credenceLedger.snapshots.first()
+        val latestSnap = credenceLedger.latestSnapshot ?: credenceLedger.snapshots.last()
+        val entropy = latestSnap.entropy
+        val entropyStr = ((entropy * 100).toInt() / 100.0).toString()
+
+        appendLine()
+        appendLine("## Bayesian Epistemic Credence Matrix")
+        appendLine()
+        appendLine("Final Epistemic Shannon Entropy: **$entropyStr bits**")
+        appendLine()
+        appendLine("| Hypothesis Option | Prior (P₀) | Posterior (P_N) | Net Shift (ΔP) |")
+        appendLine("| :--- | :---: | :---: | :---: |")
+        credenceLedger.hypotheses.forEach { h ->
+            val p0 = (initialSnap.probabilityFor(h.id) * 100).toInt()
+            val pn = (latestSnap.probabilityFor(h.id) * 100).toInt()
+            val delta = pn - p0
+            val deltaSign = if (delta > 0) "+" else ""
+            val dominantMark = if (h.id == latestSnap.dominantHypothesis) " 👑 (Dominant)" else ""
+            val descPart = if (h.description.isNotBlank()) ": ${h.description}" else ""
+            appendLine("| **${h.label}**$descPart$dominantMark | $p0% | $pn% | $deltaSign$delta% |")
+        }
+        val allTippingPoints = credenceLedger.snapshots.flatMap { it.tippingPoints }
+        if (allTippingPoints.isNotEmpty()) {
+            appendLine()
+            appendLine("### Epistemic Tipping Points")
+            appendLine()
+            allTippingPoints.forEach { tp ->
+                appendLine("- **Round ${tp.roundIndex}** (Likelihood Ratio Λ = ${((tp.likelihoodRatio * 10).toInt() / 10.0)}): ${tp.evidenceSnippet}")
+            }
+        }
+    }
 }
 
 /**

@@ -44,6 +44,7 @@ fun ChatRoute(
     searchPrevTrigger: Int = 0,
     onSearchMatchesChanged: ((count: Int, currentIndex: Int) -> Unit)? = null,
     isCompact: Boolean = false,
+    recalculateCredenceUseCase: com.dialex.domain.usecase.RecalculateCredenceUseCase? = null,
     modifier: Modifier = Modifier
 ) {
     val conductSocraticTurnUseCase = remember(discussionRepository) { com.dialex.domain.usecase.ConductSocraticTurnUseCase(discussionRepository) }
@@ -58,6 +59,7 @@ fun ChatRoute(
             conductSocraticTurnUseCase = conductSocraticTurnUseCase,
             generateSocraticDigestUseCase = generateSocraticDigestUseCase,
             elevateSocraticToCouncilUseCase = elevateSocraticToCouncilUseCase,
+            recalculateCredenceUseCase = recalculateCredenceUseCase,
         )
     }
 

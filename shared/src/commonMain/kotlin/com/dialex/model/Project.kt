@@ -123,6 +123,8 @@ data class Discussion(
     val isConsensusReached: Boolean = false,
     /** Reason for early exit (e.g. "CONSENSUS", "TOKEN_BUDGET", etc.). */
     val earlyExitReason: String? = null,
+    /** Bayesian Credence Ledger tracking quantitative probability trajectories and Shannon entropy. */
+    val credenceLedger: com.dialex.domain.model.CredenceLedger? = null,
 )
 
 /** A generated artifact saved for this discussion (deliverable, summary, or transcript). */

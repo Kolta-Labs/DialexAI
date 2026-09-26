@@ -75,6 +75,14 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("POST /api/v1/debates/{id}/socratic/elevate", s.requireAuth(s.handleSocraticElevate))
 	mux.HandleFunc("POST /api/v1/discussions/{id}/socratic/elevate", s.requireAuth(s.handleSocraticElevate))
 
+	// Bayesian Credence & Epistemic Uncertainty APIs
+	mux.HandleFunc("GET /debates/{id}/credence", s.requireAuth(s.handleGetCredenceLedger))
+	mux.HandleFunc("GET /api/v1/debates/{id}/credence", s.requireAuth(s.handleGetCredenceLedger))
+	mux.HandleFunc("GET /api/v1/discussions/{id}/credence", s.requireAuth(s.handleGetCredenceLedger))
+	mux.HandleFunc("POST /debates/{id}/credence/recalculate", s.requireAuth(s.handleRecalculateCredence))
+	mux.HandleFunc("POST /api/v1/debates/{id}/credence/recalculate", s.requireAuth(s.handleRecalculateCredence))
+	mux.HandleFunc("POST /api/v1/discussions/{id}/credence/recalculate", s.requireAuth(s.handleRecalculateCredence))
+
 	mux.HandleFunc("GET /settings", s.requireAuth(s.handleGetSettings))
 	mux.HandleFunc("PUT /settings", s.requireAuth(s.handleUpdateSettings))
 

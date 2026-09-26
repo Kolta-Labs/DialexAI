@@ -83,6 +83,13 @@ class EngineDataSource(private val client: EngineClient) {
     suspend fun getDiscussionUsage(id: String): EngineClient.UsageResponse =
         wrap { client.getDiscussionUsage(id) }
 
+    // ── Bayesian Credence & Epistemic Uncertainty ────────────────────────────
+    suspend fun getCredenceLedger(id: String): com.dialex.domain.model.CredenceLedger =
+        wrap { client.getCredenceLedger(id) }
+
+    suspend fun recalculateCredence(id: String): com.dialex.domain.model.CredenceLedger =
+        wrap { client.recalculateCredence(id) }
+
     // ── Personas ──────────────────────────────────────────────────────────────
 
     suspend fun listPersonas(): List<PredefinedPersona> = wrap { client.listPersonas() }

@@ -60,6 +60,11 @@ data class ChatState(
     val isEvidenceDrawerOpen: Boolean = false,
     /** Selected round for evidence drawer inspection (null = all rounds). */
     val selectedEvidenceRound: Int? = null,
+    /** Bayesian Credence Tracking and Epistemic Uncertainty Network */
+    val credenceLedger: com.dialex.domain.model.CredenceLedger? = null,
+    val isCredenceDrawerOpen: Boolean = false,
+    val selectedCredenceRound: Int? = null,
+    val isRecalculatingCredence: Boolean = false,
     /** Socratic 1-on-1 interview state */
     val isSocraticProcessing: Boolean = false,
     val activeProbe: String? = null,
@@ -116,6 +121,11 @@ sealed interface ChatIntent {
     data class SetTensionFilter(val filter: TensionFilter) : ChatIntent
     data class ToggleEvidenceDrawer(val round: Int? = null) : ChatIntent
     data class SetEvidenceDrawerOpen(val open: Boolean, val round: Int? = null) : ChatIntent
+    // ── Bayesian Credence ───────────────────────────────────────────────────────
+    data object ToggleCredenceDrawer : ChatIntent
+    data class SetCredenceDrawerOpen(val open: Boolean) : ChatIntent
+    data class SelectCredenceRound(val round: Int?) : ChatIntent
+    data object RecalculateCredence : ChatIntent
     // ── Socratic Interview ─────────────────────────────────────────────────────
     data object GenerateSocraticDigest : ChatIntent
     data class ElevateSocraticToCouncil(val targetProjectId: String? = null) : ChatIntent

@@ -87,6 +87,8 @@ fun WorkspaceHeader(
     onOpenTensionDrawer: (() -> Unit)? = null,
     retrievedEvidenceCount: Int = 0,
     onOpenEvidenceDrawer: (() -> Unit)? = null,
+    credenceLedger: com.dialex.domain.model.CredenceLedger? = null,
+    onOpenCredenceDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val cc = LocalCcColors.current
@@ -452,6 +454,56 @@ fun WorkspaceHeader(
                                         fontWeight = FontWeight.Bold
                                     ),
                                     color = Color(0xFF673AB7)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Bayesian Credence Pill Button (Touch Drawer Trigger)
+                if (onOpenCredenceDrawer != null && credenceLedger != null && credenceLedger.snapshots.isNotEmpty()) {
+                    val latest = credenceLedger.latestSnapshot ?: credenceLedger.snapshots.last()
+                    val dominantH = credenceLedger.hypotheses.find { it.id == latest.dominantHypothesis }
+                        ?: credenceLedger.hypotheses.maxByOrNull { latest.probabilityFor(it.id) }
+                    val dominantP = ((latest.probabilityFor(dominantH?.id ?: "")) * 100).toInt()
+                    val entropy = latest.entropy
+                    val entropyStr = ((entropy * 100).toInt() / 100.0).toString()
+
+                    val (pillBg, pillBorder, pillTint) = when {
+                        entropy < 0.8 -> Triple(Color(0xFFECFDF5), Color(0xFF10B981).copy(alpha = 0.5f), Color(0xFF059669))
+                        entropy <= 1.4 -> Triple(Color(0xFFFEF3C7), Color(0xFFF59E0B).copy(alpha = 0.5f), Color(0xFFD97706))
+                        else -> Triple(Color(0xFFEEF2FF), Color(0xFF6366F1).copy(alpha = 0.5f), Color(0xFF4F46E5))
+                    }
+
+                    Spacer(Modifier.width(8.dp))
+                    ThemedTooltipBox("Bayesian Credence: $dominantP% ${dominantH?.label ?: "Dominant"} (Entropy: $entropyStr bits)") {
+                        Surface(
+                            shape = RoundedCornerShape(7.dp),
+                            color = pillBg,
+                            border = BorderStroke(0.75.dp, pillBorder),
+                            modifier = Modifier
+                                .height(28.dp)
+                                .clip(RoundedCornerShape(7.dp))
+                                .clickable(onClick = onOpenCredenceDrawer)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Analytics,
+                                    contentDescription = "Bayesian Credence",
+                                    tint = pillTint,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    "$dominantP% ${dominantH?.label ?: "H1"}",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = pillTint
                                 )
                             }
                         }
@@ -905,6 +957,20 @@ fun WorkspaceHeader(
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                                     )
                                 }
+                            }
+                            if (credenceLedger != null && onOpenCredenceDrawer != null) {
+                                DropdownMenuItem(
+                                    modifier = Modifier.height(32.dp),
+                                    text = { Text("Bayesian Credence Network", color = cc.textPrimary, fontSize = 13.sp) },
+                                    leadingIcon = {
+                                        Icon(Icons.Outlined.Analytics, contentDescription = null, tint = cc.accent, modifier = Modifier.size(16.dp))
+                                    },
+                                    onClick = {
+                                        overflowMenuOpen = false
+                                        onOpenCredenceDrawer.invoke()
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                )
                             }
                             if (!showExportDirect) {
                                 if (onExportMemo != null) {
