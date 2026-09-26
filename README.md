@@ -185,6 +185,22 @@ flowchart TD
   - **Bundled DialexBench-10**: 10 canonical architectural dilemmas with ground-truth traps and trade-off axes.
   - **Multi-Format Export**: One-tap export to Markdown, CSV, and JSON.
 
+### 9. 🧬 8-Layer Cognitive DNA & MMOS Studio (v1.7)
+- **Standardized Cognitive Schema**: Standardizes personas across 8 foundational dimensions (*Core Identity*, *Epistemic Bias*, *Communication Vector*, *Heuristic Library*, *Taboo Space*, *Domain Ontology*, *Adversarial Posture*, *Synthesis Preference*).
+- **Taboo Space Negative Constraints**: Explicit negative constraints forbidding marketing buzzwords, ungrounded speculation, or anti-patterns.
+- **MMOS Interoperability**: Industry-standard YAML and JSON import/export matching Mind Matrix Open Standard.
+
+### 10. 📱 Mobile Epistemic Parity Suite & Zero-Wait Autopilot (v1.8)
+- **Full Mobile Parity**: Dedicated Socratic Interview FAB, Benchmark Arena mobile viewport with responsive radar charts, project hierarchy with knowledge graph links, and touch-optimized bottom sheets for Dynamic RAG evidence citations and Tension Matrix drawers.
+- **Zero-Wait Autonomous Autopilot**: Instant 1-tap initiation without requiring redundant human input or setup pauses.
+
+### 11. 📊 Bayesian Credence Tracking & Epistemic Uncertainty Network (v1.9)
+- **Quantitative Probability Invariants**: Dynamically extracts a finite hypothesis space ($\mathcal{H} = \{ H_1, \dots, H_K \}$) and tracks round-by-round prior and posterior probability distributions ($P(H \mid E)$) with DNA domain authority weights.
+- **Epistemic Shannon Entropy ($\mathcal{S}$)**: Computes real-time entropy in bits to mathematically quantify consensus convergence ($\mathcal{S} < 0.8$) vs deadlock ($\mathcal{S} > 1.4$).
+- **Likelihood Ratio ($\Lambda$) Tipping Points**: Detects decisive evidence citations ($\Lambda \ge 2.5$ or $\le 0.4$) shifting council belief.
+- **Interactive Bézier Credence Ribbon Canvas**: Desktop modal and mobile bottom sheet (`Cmd+Shift+B`) rendering smooth probability area flows across rounds.
+- **Audit-Ready Bayesian Decision Matrix**: Embeds probability shift tables and tipping points directly in generated ADRs, Markdown docs, and Executive Memorandums.
+
 ---
 
 ## 🛠️ Build Requirements & The Kolt Ecosystem Dependency

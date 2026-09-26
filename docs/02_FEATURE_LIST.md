@@ -209,8 +209,7 @@ The following advanced capabilities have been implemented or are queued for impl
    - Zero-Wait Autonomous Autopilot: 1-tap presets immediately initiate autonomous deliberation without user input or setup pauses.
    - 📖 **Full Architectural Specification**: [**docs/features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md**](features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md)
 
-### Active Roadmap Capabilities (v1.9)
-9. **Bayesian Credence Tracking & Quantitative Epistemic Uncertainty Network (APPROVED SPEC - v1.9)**:
+9. **Bayesian Credence Tracking & Quantitative Epistemic Uncertainty Network (COMPLETED - v1.9)**:
    - Mathematical Bayesian decision engine tracking prior and posterior probability distributions ($P(H | E)$) across 2 to 4 competing hypotheses per debate.
    - Computes real-time Shannon Epistemic Entropy ($\mathcal{S}$) in bits and evidence Likelihood Ratios ($\Lambda$) to isolate decisive tipping points.
    - Interactive Credence Ribbon Canvas with fluid Bézier area flows and live certainty pills in desktop/mobile workspace headers.

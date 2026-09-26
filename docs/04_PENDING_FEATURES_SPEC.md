@@ -17,7 +17,7 @@ This document serves as the formal specification for pending features slated for
 6. [Null Hypothesis Benchmarking & Quantitative Evaluation Suite (COMPLETED)](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md)
 7. [8-Layer DNA Mental & Structured Persona Ingestion (COMPLETED)](features/07_8_LAYER_PERSONA_DNA_SPEC.md)
 8. [Mobile Epistemic Parity & Gap Closure Suite (COMPLETED)](features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md)
-9. [Bayesian Credence Tracking & Quantitative Epistemic Uncertainty Network (APPROVED SPEC)](features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md)
+9. [Bayesian Credence Tracking & Quantitative Epistemic Uncertainty Network (COMPLETED)](features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md)
 
 ---
 
@@ -366,7 +366,7 @@ While Dialex AI Desktop provides a complete 3-pane IDE workspace with full epist
 ## 9. Bayesian Credence Tracking & Quantitative Epistemic Uncertainty Network
 
 > [!NOTE]
-> **Status**: **APPROVED SPECIFICATION** (v1.9) — Detailed architectural spec: [**docs/features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md**](features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md)  
+> **Status**: **COMPLETED** (v1.9) — Detailed architectural spec: [**docs/features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md**](features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md)  
 > **Component**: Go Engine (`pkg/credence`, `pkg/api`), KMP Shared (`domain`, `data`, `presentation/chat`), Desktop & Mobile Compose UI, Executive Memo Exporter.
 
 ### 9.1 Problem Statement
