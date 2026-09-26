@@ -86,6 +86,14 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/personas/export", s.requireAuth(s.handleExportPersonas))
 	mux.HandleFunc("POST /api/v1/personas/chat", s.requireAuth(s.handleChatPersona))
 
+	// 8-Layer Persona DNA
+	mux.HandleFunc("GET /api/v1/personas/{id}/dna", s.requireAuth(s.handleGetPersonaDNA))
+	mux.HandleFunc("POST /api/v1/personas/{id}/dna", s.requireAuth(s.handleUpdatePersonaDNA))
+	mux.HandleFunc("GET /api/v1/personas/heuristics", s.requireAuth(s.handleListBuiltinHeuristics))
+	mux.HandleFunc("POST /api/v1/personas/dna/compile", s.requireAuth(s.handleCompilePersonaDNA))
+	mux.HandleFunc("POST /api/v1/personas/dna/import", s.requireAuth(s.handleImportPersonaDNA))
+	mux.HandleFunc("GET /api/v1/personas/{id}/dna/export", s.requireAuth(s.handleExportPersonaDNA))
+
 
 	// File attachments
 	mux.HandleFunc("POST /api/v1/debates/{id}/files", s.requireAuth(s.handleUploadFile))

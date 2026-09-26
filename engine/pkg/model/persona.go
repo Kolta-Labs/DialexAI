@@ -13,7 +13,8 @@ type Persona struct {
 	IsSystem       bool   `json:"isSystem"`
 	RoleAndPersona string `json:"roleAndPersona,omitempty"`
 	CoreExpertise  string `json:"coreExpertise,omitempty"`
-	ToneAndVoice   string `json:"toneAndVoice,omitempty"`
-	Objective      string `json:"objective,omitempty"`
+	ToneAndVoice   string      `json:"toneAndVoice,omitempty"`
+	Objective      string      `json:"objective,omitempty"`
+	DNA            *PersonaDNA `json:"dna,omitempty"`
 }
 

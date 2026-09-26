@@ -49,17 +49,29 @@ fun PersonaBuilderRoute(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
-        PersonaBuilderScreen(
-            state = state,
-            onIntent = viewModel::onIntent,
-            onBack = onBack ?: { backStack.removeLast(); Unit },
-            isCompact = isCompact,
-            modifier = Modifier.fillMaxSize(),
+    if (state.isDnaStudioOpen) {
+        com.dialex.presentation.settings.personas.dna.PersonaDnaRoute(
+            personaRepository = personaRepository,
+            personaId = if (state.isEditing) state.draft.id else null,
+            initialDna = state.draft.dna,
+            onBack = { viewModel.onIntent(PersonaBuilderIntent.ToggleDnaStudio(false)) },
+            onApplyToPersona = { updatedDna, compiledPrompt ->
+                viewModel.onIntent(PersonaBuilderIntent.ApplyDnaToDraft(updatedDna, compiledPrompt))
+            }
         )
-        com.dialex.ui.ThemedSnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
-        )
+    } else {
+        Box(Modifier.fillMaxSize()) {
+            PersonaBuilderScreen(
+                state = state,
+                onIntent = viewModel::onIntent,
+                onBack = onBack ?: { backStack.removeLast(); Unit },
+                isCompact = isCompact,
+                modifier = Modifier.fillMaxSize(),
+            )
+            com.dialex.ui.ThemedSnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+            )
+        }
     }
 }

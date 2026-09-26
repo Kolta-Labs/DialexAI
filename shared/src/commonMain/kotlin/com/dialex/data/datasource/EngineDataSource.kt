@@ -94,6 +94,19 @@ class EngineDataSource(private val client: EngineClient) {
     suspend fun chatPersona(request: com.dialex.domain.model.PersonaChatRequest): com.dialex.domain.model.PersonaChatResponse =
         wrap { client.chatPersona(request) }
 
+    suspend fun getPersonaDna(id: String): com.dialex.domain.model.PersonaDNA =
+        wrap { client.getPersonaDna(id) }
+    suspend fun updatePersonaDna(id: String, dna: com.dialex.domain.model.PersonaDNA): com.dialex.domain.model.PersonaDNA =
+        wrap { client.updatePersonaDna(id, dna) }
+    suspend fun listBuiltinHeuristics(): List<com.dialex.domain.model.HeuristicRule> =
+        wrap { client.listBuiltinHeuristics() }
+    suspend fun compileDnaPrompt(dna: com.dialex.domain.model.PersonaDNA): String =
+        wrap { client.compileDnaPrompt(dna) }
+    suspend fun importPersonaDna(content: String, format: String = "yaml"): com.dialex.domain.model.PersonaDNA =
+        wrap { client.importPersonaDna(content, format) }
+    suspend fun exportPersonaDna(id: String, format: String = "yaml"): String =
+        wrap { client.exportPersonaDna(id, format) }
+
     // ── Socratic Interview ─────────────────────────────────────────────────────
 
     suspend fun socraticTurn(discussionId: String, request: SocraticTurnRequest): SocraticTurnResponse =

@@ -94,5 +94,74 @@ class LocalFilePersonaRepository(
             parsedPersona = generated
         )
     }
+
+    override suspend fun getPersonaDna(id: String): Result<com.dialex.domain.model.PersonaDNA> = synchronized(personas) {
+        val p = personas.find { it.id == id }
+        if (p?.dna != null) {
+            Result.success(p.dna)
+        } else if (p != null) {
+            Result.success(
+                com.dialex.domain.model.PersonaDNA(
+                    id = p.id,
+                    name = p.name,
+                    role = p.role,
+                    category = p.category,
+                    icon = p.icon,
+                    coreIdentity = com.dialex.domain.model.CoreIdentity(title = p.role, background = p.roleAndPersona, domainAuthority = p.coreExpertise),
+                    communicationVector = com.dialex.domain.model.CommunicationVector(tone = p.toneAndVoice),
+                    rawCustomPrompt = p.systemPrompt
+                )
+            )
+        } else {
+            Result.failure(NoSuchElementException("Persona not found: $id"))
+        }
+    }
+
+    override suspend fun updatePersonaDna(id: String, dna: com.dialex.domain.model.PersonaDNA): Result<com.dialex.domain.model.PersonaDNA> = synchronized(personas) {
+        val idx = personas.indexOfFirst { it.id == id }
+        if (idx >= 0) {
+            personas[idx] = personas[idx].copy(dna = dna)
+            onPersist?.invoke(personas.toList())
+            Result.success(dna)
+        } else {
+            val created = PredefinedPersona(
+                id = id,
+                name = dna.name,
+                role = dna.role,
+                category = dna.category,
+                icon = dna.icon,
+                dna = dna
+            )
+            personas.add(created)
+            onPersist?.invoke(personas.toList())
+            Result.success(dna)
+        }
+    }
+
+    override suspend fun listBuiltinHeuristics(): Result<List<com.dialex.domain.model.HeuristicRule>> {
+        return Result.success(
+            listOf(
+                com.dialex.domain.model.HeuristicRule("heur_gall", "Gall's Law", "A complex system that works is invariably found to have evolved from a simple system that worked.", "", "Challenge full rewrites; demand incremental paths."),
+                com.dialex.domain.model.HeuristicRule("heur_conway", "Conway's Law", "Organizations design systems that mirror their own communication structures.", "", "Flag team alignment mismatches."),
+                com.dialex.domain.model.HeuristicRule("heur_chesterton", "Chesterton's Fence", "Do not remove a constraint until you understand why it was put there.", "", "Protect legacy constraints."),
+                com.dialex.domain.model.HeuristicRule("heur_cap", "CAP & PACELC Theorem", "Choose between Consistency and Availability under partition.", "", "Expose partition trade-offs.")
+            )
+        )
+    }
+
+    override suspend fun compileDnaPrompt(dna: com.dialex.domain.model.PersonaDNA): Result<String> {
+        val prompt = "### [COGNITIVE DNA MANDATE: ${dna.name.uppercase()}]\n• Role: ${dna.role}\n• Epistemic Bias: ${dna.epistemicBias.primaryMode}"
+        return Result.success(prompt)
+    }
+
+    override suspend fun importPersonaDna(content: String, format: String): Result<com.dialex.domain.model.PersonaDNA> = runCatching {
+        json.decodeFromString<com.dialex.domain.model.PersonaDNA>(content)
+    }
+
+    override suspend fun exportPersonaDna(id: String, format: String): Result<String> = synchronized(personas) {
+        val p = personas.find { it.id == id }
+        val dna = p?.dna ?: com.dialex.domain.model.PersonaDNA(id = id, name = p?.name ?: "Unknown", role = p?.role ?: "Expert")
+        runCatching { json.encodeToString(dna) }
+    }
 }
 

@@ -315,8 +315,8 @@ To establish scientific legitimacy and enterprise ROI, Dialex AI must empiricall
 ## 7. 8-Layer DNA Mental & Structured Persona Ingestion
 
 > [!NOTE]
-> **Status**: **IN SPECIFICATION & DELIBERATION** (v1.7) — Detailed spec: [**docs/features/07_8_LAYER_PERSONA_DNA_SPEC.md**](features/07_8_LAYER_PERSONA_DNA_SPEC.md)  
-> **Component**: Go Engine (`pkg/model`, `pkg/persona`), KMP Shared (`model`, `domain`, `presentation/settings/personas`), Persona Studio UI.
+> **Status**: **COMPLETED** (v1.7) — Detailed spec: [**docs/features/07_8_LAYER_PERSONA_DNA_SPEC.md**](features/07_8_LAYER_PERSONA_DNA_SPEC.md)  
+> **Component**: Go Engine (`pkg/model`, `pkg/persona`, `pkg/api`), KMP Shared (`model`, `domain`, `presentation/settings/personas/dna`), Persona DNA Studio UI, Radar Matrix Visualizer.
 
 ### 7.1 Problem Statement
 Currently, personas are defined through basic markdown text prompts and binary style flags (e.g. Ponytail). While functional, this lacks psychological depth, structural rigor, and domain standardization:

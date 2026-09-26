@@ -49,6 +49,20 @@ This document details all user-facing capabilities, unique selling propositions 
   - **Standard**: Deep dialectic rigor with code citations and nuance.
   - **Ponytail Mode**: Structured executive bullet points with trade-off matrices.
 
+- **8-Layer Cognitive DNA Studio & MMOS Ingestion (v1.7)**:
+  - **8 Cognitive Layers**:
+    1. *Layer 1 (Core Identity)*: Professional title, background, credentials, and domain authority boundaries.
+    2. *Layer 2 (Epistemic Bias)*: 5-D cognitive coordinate matrix (`theoryVsPractice`, `noveltyVsProvenance`, `safetyVsVelocity`, `rigorThreshold`) and primary reasoning modes (*First Principles*, *Empirical/Statistical*, *Historical Analogy*, *Pragmatic/Engineering*, *Formal Logical*).
+    3. *Layer 3 (Communication Vector)*: Calibrated tone, formality level (1 to 5), sentence ceiling constraints, rhetorical devices, and syntax patterns.
+    4. *Layer 4 (Heuristic Library)*: 10 standard mental model heuristics (*Gall's Law*, *Conway's Law*, *Chesterton's Fence*, *Amdahl's Law*, *Goodhart's Law*, *Occam's Razor*, *CAP Theorem*, *Second-Order Thinking*, *Hanlon's Razor*, *Inversion Principle*) with triggers and application directives.
+    5. *Layer 5 (Taboo Space)*: Negative cognitive constraints defining forbidden arguments, rejected fallacies, and intolerable buzzwords with automated penalty actions.
+    6. *Layer 6 (Domain Ontology)*: Mandatory RFCs, ISO standards, and specialized terminology with formal citation enforcement.
+    7. *Layer 7 (Adversarial Posture)*: 5 combat stances (*Unyielding Dogmatic*, *Counter-Attacking*, *Socratic Inverter*, *Analytical Deconstructor*, *Pragmatic Accommodator*), tenacity scores (0.0 to 1.0), and concede conditions.
+    8. *Layer 8 (Synthesis Preference)*: Consensus styles (*Seek Synthesis*, *Hold Minority Report*, *Conditional Compromise*), minority report triggers, and compromise envelopes.
+  - **DNA Radar Matrix Visualizer**: Canvas 5-axis pentagonal spider chart rendering live cognitive bias profiles with interactive calibration sliders.
+  - **Token-Efficient Prompt Compiler**: Generates mathematical `[COGNITIVE DNA MANDATE]` instruction blocks directly injected into agent context.
+  - **MMOS v1.0 Standard Compatibility**: Bi-directional YAML/JSON import and export adhering to the Mind Matrix Open Standard.
+
 <table align="center" width="100%">
   <tr>
     <td width="50%" align="center">

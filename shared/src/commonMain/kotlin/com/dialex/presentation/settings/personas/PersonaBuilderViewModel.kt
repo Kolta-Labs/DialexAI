@@ -200,6 +200,23 @@ class PersonaBuilderViewModel(
                     }
                 }
             }
+            is PersonaBuilderIntent.ToggleDnaStudio -> {
+                setState { copy(isDnaStudioOpen = intent.open ?: !isDnaStudioOpen) }
+            }
+            is PersonaBuilderIntent.ApplyDnaToDraft -> {
+                val currentDraft = state.value.draft
+                val updatedPrompt = intent.compiledPrompt?.takeIf { it.isNotBlank() } ?: currentDraft.systemPrompt
+                setState {
+                    copy(
+                        draft = currentDraft.copy(
+                            dna = intent.dna,
+                            systemPrompt = updatedPrompt
+                        ),
+                        isDnaStudioOpen = false
+                    )
+                }
+                sendEffect(PersonaBuilderEffect.ShowSnackbar("8-Layer Cognitive DNA applied to '${currentDraft.name.ifBlank { "persona" }}'"))
+            }
             is PersonaBuilderIntent.Discard -> {
                 sendEffect(PersonaBuilderEffect.NavigateBack)
             }

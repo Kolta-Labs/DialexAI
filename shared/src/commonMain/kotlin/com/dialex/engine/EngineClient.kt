@@ -354,6 +354,28 @@ class EngineClient(
     suspend fun chatPersona(request: com.dialex.domain.model.PersonaChatRequest): com.dialex.domain.model.PersonaChatResponse =
         post("/api/v1/personas/chat", request)
 
+    // ── 8-Layer Persona DNA ────────────────────────────────────────────────────
+
+    suspend fun getPersonaDna(id: String): com.dialex.domain.model.PersonaDNA =
+        get("/api/v1/personas/$id/dna")
+
+    suspend fun updatePersonaDna(id: String, dna: com.dialex.domain.model.PersonaDNA): com.dialex.domain.model.PersonaDNA =
+        post("/api/v1/personas/$id/dna", dna)
+
+    suspend fun listBuiltinHeuristics(): List<com.dialex.domain.model.HeuristicRule> =
+        get("/api/v1/personas/heuristics")
+
+    suspend fun compileDnaPrompt(dna: com.dialex.domain.model.PersonaDNA): String {
+        val resp: com.dialex.domain.model.CompileDnaResponse = post("/api/v1/personas/dna/compile", com.dialex.domain.model.CompileDnaRequest(dna))
+        return resp.compiledPrompt
+    }
+
+    suspend fun importPersonaDna(content: String, format: String = "yaml"): com.dialex.domain.model.PersonaDNA =
+        postText("/api/v1/personas/dna/import?format=$format", content, if (format == "json") "application/json" else "application/x-yaml")
+
+    suspend fun exportPersonaDna(id: String, format: String = "yaml"): String =
+        getText("/api/v1/personas/$id/dna/export?format=$format")
+
     // ── Socratic Interview ─────────────────────────────────────────────────────
 
     suspend fun socraticTurn(discussionId: String, request: SocraticTurnRequest): SocraticTurnResponse =
@@ -583,6 +605,54 @@ class EngineClient(
                 url = fullUrl,
                 requestHeaders = reqHeaders,
                 requestBody = null,
+                responseStatusCode = statusCode,
+                responseHeaders = emptyMap(),
+                responseBody = resBody ?: errorMsg,
+                errorDetails = errorMsg,
+                durationMs = duration,
+                isSuccess = success
+            )
+        }
+    }
+
+    private suspend inline fun <reified TResponse> postText(path: String, textBody: String, contentTypeHeader: String = "text/plain"): TResponse {
+        val start = System.currentTimeMillis()
+        val fullUrl = "$baseUrl$path"
+        var statusCode: Int? = null
+        var resBody: String? = null
+        var errorMsg: String? = null
+        var success = false
+        try {
+            var response = client.post(fullUrl) {
+                authenticate()
+                contentType(ContentType.parse(contentTypeHeader))
+                setBody(textBody)
+            }
+            if (response.status.value == 401 && tryAutoReauth()) {
+                response = client.post(fullUrl) {
+                    authenticate()
+                    contentType(ContentType.parse(contentTypeHeader))
+                    setBody(textBody)
+                }
+            }
+            statusCode = response.status.value
+            resBody = requireSuccess(response)
+            success = true
+            return json.decodeFromString(resBody)
+        } catch (e: Exception) {
+            errorMsg = e.message ?: e.toString()
+            throw e
+        } finally {
+            val duration = System.currentTimeMillis() - start
+            val reqHeaders = buildMap {
+                put("Content-Type", contentTypeHeader)
+                if (token != null) put("Authorization", "Bearer $token")
+            }
+            com.dialex.logging.ApiCallStore.trackEngineCall(
+                method = "POST",
+                url = fullUrl,
+                requestHeaders = reqHeaders,
+                requestBody = textBody,
                 responseStatusCode = statusCode,
                 responseHeaders = emptyMap(),
                 responseBody = resBody ?: errorMsg,

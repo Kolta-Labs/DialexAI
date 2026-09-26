@@ -54,6 +54,9 @@ data class PersonaBuilderState(
         "deepseek-reasoner",
         "mistral-large-latest",
     ),
+
+    // ── 8-Layer Cognitive DNA Studio ──
+    val isDnaStudioOpen: Boolean = false,
 )
 
 sealed interface PersonaBuilderIntent {
@@ -71,6 +74,10 @@ sealed interface PersonaBuilderIntent {
     data object AutoComposePrompt : PersonaBuilderIntent
     data object Save : PersonaBuilderIntent
     data object Discard : PersonaBuilderIntent
+
+    // ── 8-Layer DNA Studio Intents ──
+    data class ToggleDnaStudio(val open: Boolean? = null) : PersonaBuilderIntent
+    data class ApplyDnaToDraft(val dna: com.dialex.domain.model.PersonaDNA, val compiledPrompt: String? = null) : PersonaBuilderIntent
 
     // ── JSON Import Intents ──
     data object OpenImportDialog : PersonaBuilderIntent

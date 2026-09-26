@@ -268,6 +268,27 @@ private fun PersonaBuilderFormContent(
                     Text("Import JSON", style = MaterialTheme.typography.labelSmall, color = cc.textPrimary)
                 }
 
+                // 8-Layer Cognitive DNA Studio Button
+                Button(
+                    onClick = { onIntent(PersonaBuilderIntent.ToggleDnaStudio(true)) },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (draft.dna != null) cc.accent.copy(alpha = 0.2f) else cc.panelAlt,
+                        contentColor = if (draft.dna != null) cc.accent else cc.textPrimary
+                    ),
+                    border = BorderStroke(1.dp, if (draft.dna != null) cc.accent else cc.border),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(34.dp)
+                ) {
+                    Text("🧬", fontSize = 13.sp)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (draft.dna != null) "DNA Configured" else "Cognitive DNA",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (draft.dna != null) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+
                 // AI Persona Assistant Toggle Button
                 Button(
                     onClick = { onIntent(PersonaBuilderIntent.ToggleChatDrawer()) },
@@ -582,6 +603,57 @@ private fun PersonaBuilderFormContent(
             minLines = 5,
             modifier = Modifier.fillMaxWidth(),
         )
+
+        Spacer(Modifier.height(12.dp))
+
+        // ── 8-Layer Cognitive DNA Status Card ──
+        Surface(
+            color = if (draft.dna != null) cc.accent.copy(alpha = 0.08f) else cc.panelAlt,
+            shape = RoundedCornerShape(10.dp),
+            border = BorderStroke(1.dp, if (draft.dna != null) cc.accent.copy(alpha = 0.4f) else cc.border),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("🧬", fontSize = 22.sp)
+                    Column {
+                        Text(
+                            if (draft.dna != null) "8-Layer Cognitive DNA Active" else "8-Layer Cognitive DNA Studio",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (draft.dna != null) cc.accent else cc.textPrimary
+                        )
+                        Text(
+                            if (draft.dna != null)
+                                "Title: ${draft.dna.coreIdentity.title.ifBlank { draft.dna.role }} • Stance: ${draft.dna.adversarialPosture.stance.name} • ${draft.dna.heuristicLibrary.size} Heuristics"
+                            else
+                                "Calibrate 5-D epistemic bias, taboo spaces, heuristics, and combat stances using MMOS standard.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = cc.textMuted
+                        )
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(
+                    onClick = { onIntent(PersonaBuilderIntent.ToggleDnaStudio(true)) },
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text(if (draft.dna != null) "Edit DNA" else "Configure", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
 
         Spacer(Modifier.height(16.dp))
 

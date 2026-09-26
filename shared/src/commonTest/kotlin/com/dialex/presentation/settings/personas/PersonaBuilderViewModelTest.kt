@@ -53,6 +53,24 @@ class FakePersonaRepository : PersonaRepository {
             )
         }
     }
+
+    override suspend fun getPersonaDna(id: String): Result<com.dialex.domain.model.PersonaDNA> =
+        Result.success(com.dialex.domain.model.PersonaDNA(id = id, name = id, role = "Test Analyst"))
+
+    override suspend fun updatePersonaDna(id: String, dna: com.dialex.domain.model.PersonaDNA): Result<com.dialex.domain.model.PersonaDNA> =
+        Result.success(dna)
+
+    override suspend fun listBuiltinHeuristics(): Result<List<com.dialex.domain.model.HeuristicRule>> =
+        Result.success(emptyList())
+
+    override suspend fun compileDnaPrompt(dna: com.dialex.domain.model.PersonaDNA): Result<String> =
+        Result.success("[DNA MANDATE: ${dna.name}]")
+
+    override suspend fun importPersonaDna(content: String, format: String): Result<com.dialex.domain.model.PersonaDNA> =
+        Result.success(com.dialex.domain.model.PersonaDNA(id = "imported", name = "Imported", role = "Imported Role"))
+
+    override suspend fun exportPersonaDna(id: String, format: String): Result<String> =
+        Result.success("schemaVersion: dialex.dna/v1.0\nid: $id\n")
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

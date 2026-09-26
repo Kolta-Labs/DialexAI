@@ -38,6 +38,8 @@ data class PredefinedPersona(
     val toneAndVoice: String = "",
     /** Optional primary objective or fiduciary mandate. */
     val objective: String = "",
+    /** Optional 8-Layer Cognitive DNA Schema. */
+    val dna: com.dialex.domain.model.PersonaDNA? = null,
 )
 
 /**
