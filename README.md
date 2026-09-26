@@ -25,7 +25,7 @@ Dialex AI features exhaustive technical and user documentation organized in the 
 | 📱 **Client Applications Setup** | Desktop (macOS/Linux/Windows) packaging (DMG/DEB/MSI), Dialex AI Mobile (Android), JNI, and logging. | [**docs/CLIENT_SETUP.md**](docs/CLIENT_SETUP.md) |
 | 📖 **User & Deliberation Manual** | Council setup, 10 Universal Roles, 40+ Domain Personas, Anti-Fluff guardrails, and deliverables. | [**docs/USER_GUIDE.md**](docs/USER_GUIDE.md) |
 | 🛠️ **Developer & Kolt Guide** | Contributor setup, testing, and in-depth guide to the **Kolt / KoltLibs** ecosystem (`compose-kmp`, `AsyncState`). | [**docs/DEVELOPER_GUIDE.md**](docs/DEVELOPER_GUIDE.md) |
-| 🔮 **Advanced Features Specs** | Architectural specifications for Knowledge Graph, Problem Decomposition, Tension Detection, Dynamic Retrieval, and Socratic Interview mode. | [**docs/04_PENDING_FEATURES_SPEC.md**](docs/04_PENDING_FEATURES_SPEC.md) · [**Socratic Spec**](docs/features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md) |
+| 🔮 **Advanced Features Specs** | Architectural specifications for Knowledge Graph, Problem Decomposition, Tension Detection, Dynamic Retrieval, Socratic Interview mode, and Null Hypothesis Benchmarking. | [**docs/04_PENDING_FEATURES_SPEC.md**](docs/04_PENDING_FEATURES_SPEC.md) · [**Socratic Spec**](docs/features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md) · [**Benchmarking Spec**](docs/features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md) |
 | 🔌 **REST & SSE API Reference** | Complete HTTP REST endpoints, JWT authentication, and real-time Server-Sent Events specifications. | [**docs/API_REFERENCE.md**](docs/API_REFERENCE.md) |
 
 ---
@@ -173,6 +173,17 @@ flowchart TD
 - 🔀 **Pre-Debate Problem Decomposition**: Divergent dual-mind breakdown of user dilemmas into orthogonal sub-axes before convening the council.
 - ⚡ **Paraconsistent Tension Pair Detection**: Real-time extraction of thesis vs antithesis contradictions with unresolved conflict tracking.
 - 🔍 **Round-Aware Dynamic Graph Retrieval (In-Debate RAG)**: Dynamic per-round query expansion retrieving empirical evidence from graph nodes and attached documents.
+
+### 8. ⚔️ Null Hypothesis Benchmarking & Quantitative Evaluation Suite (`DialexBench`)
+- **Automated $H_0$ Significance Testing**: Empirically validates whether multi-agent dialectic deliberation produces statistically superior outcomes compared to a single frontier model baseline.
+- **4 Quantitative Scoring Dimensions**: Factuality ($S_{\text{fact}}$, 30%), Blind Spot Coverage ($S_{\text{blind}}$, 25%), Trade-Off Completeness ($S_{\text{trade}}$, 25%), and Actionability ($S_{\text{action}}$, 20%).
+- **Double-Blind LLM Judge with Position Swapping**: Eliminates LLM primacy and presentation bias by evaluating Pass 1 ($A/B$) and Pass 2 ($B/A$) with anonymous deliverable labeling.
+- **Paired Two-Tailed Student's $t$-test**: Computes exact $p$-values via the regularized incomplete beta function ($I_x(a,b)$), formally rejecting $H_0$ at $p < 0.05$.
+- **Full-Stack Execution & Visuals**:
+  - **Desktop KMP Arena**: Interactive UI with a 4-axis spider/radar chart, head-to-head deliverable viewer, and one-click execution.
+  - **Standalone CLI (`dialexbench`)**: High-throughput terminal runner (`dialexbench list`, `run`, `stats`, `export`).
+  - **Bundled DialexBench-10**: 10 canonical architectural dilemmas with ground-truth traps and trade-off axes.
+  - **Multi-Format Export**: One-tap export to Markdown, CSV, and JSON.
 
 ---
 

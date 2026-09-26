@@ -264,6 +264,62 @@ Directly below the Consensus Outcome Bubble, click any button to instantly gener
 
 ---
 
+## 9. Null Hypothesis Benchmarking & Quantitative Evaluation Suite (`DialexBench`)
+
+Dialex AI includes a complete scientific benchmarking harness designed to evaluate multi-agent dialectic deliberation against a solo frontier model baseline ($H_0$).
+
+### 9.1 Opening the Benchmark Arena
+- In the left sidebar, click **`⚔️ Arena & Benchmarks`** to launch the full-screen evaluation studio.
+- Or visit the Web Admin Dashboard at `http://localhost:8080/admin/benchmarks`.
+
+### 9.2 The DialexBench-10 Dataset & Custom Dilemmas
+The suite ships with 10 bundled, real-world architectural dilemmas (`DB01` through `DB10`), complete with ground-truth trap detections and mandatory trade-off axes:
+- `DB01`: Event-Driven Architecture vs CQRS in Financial Ledgers
+- `DB02`: Zero-Trust Service Mesh Migration under High Throughput
+- `DB03`: Vector Database vs Relational pgvector for RAG Pipelines
+- `DB04`: Globally Distributed Spanner vs Multi-Region DynamoDB
+- `DB05`: Micro-Frontend Module Federation vs Optimized Monolith
+- `DB06`: eBPF Observability Agents vs Sidecar Telemetry Meshes
+- `DB07`: Sharded Monolithic Postgres vs CockroachDB Migration
+- `DB08`: WebAssembly Edge Compute vs Centralized Serverless Workers
+- `DB09`: Schema-First Protocol Buffers vs Dynamic GraphQL Federation
+- `DB10`: Hybrid Cloud Active-Active Disaster Recovery Architecture
+
+You can also author custom dilemmas directly from the UI with custom constraint lists, required trade-off dimensions, and traps.
+
+### 9.3 Running Dual-Arm Evaluations
+Click **`⚔️ Run Benchmark`** on any dilemma:
+1. **Arm A (Solo Baseline)**: Dispatches the dilemma to a single frontier model prompted for exhaustive architectural reasoning.
+2. **Arm B (Dialex AI Council)**: Convenes a 3-agent dialectic council across 2 full debate rounds plus Moderator synthesis.
+3. **Blinded LLM-as-a-Judge**: Evaluates both outputs through dual-pass position swapping ($A/B$ and $B/A$) to cancel out order bias across 4 dimensions:
+   - **Factuality** ($S_{\text{fact}}$, 30%)
+   - **Blind Spot Coverage** ($S_{\text{blind}}$, 25%)
+   - **Trade-Off Completeness** ($S_{\text{trade}}$, 25%)
+   - **Actionability** ($S_{\text{action}}$, 20%)
+
+### 9.4 Statistical Significance & Radar Visualizer
+- **Interactive Radar Chart**: The custom spider web compares Solo vs Council performance across each axis.
+- **Paired Student's $t$-test**: Continuously computes the aggregate $p$-value and marks statistical significance ($p < 0.05$) when $H_0$ is formally rejected.
+- **Exporting Reports**: Export complete statistical summaries and head-to-head transcripts to **Markdown**, **CSV**, or **JSON**.
+
+### 9.5 Standalone CLI Tool (`dialexbench`)
+For CI/CD automated regression testing and high-throughput headless evaluations:
+```bash
+# List all bundled and custom benchmark cases
+./engine/bin/dialexbench list
+
+# Run a specific benchmark dilemma
+./engine/bin/dialexbench run DB01 --rounds 2
+
+# Print aggregate Student's t-test summary
+./engine/bin/dialexbench stats
+
+# Export results
+./engine/bin/dialexbench export --format=markdown > benchmark_report.md
+```
+
+---
+
 ## 📄 License & Legal Notice
 
 Dialex AI is licensed under the [PolyForm Noncommercial License 1.0.0](file:///LICENSE).  

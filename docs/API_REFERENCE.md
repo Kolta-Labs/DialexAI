@@ -260,6 +260,128 @@ data: {"code":"RATE_LIMIT_EXCEEDED","provider":"OPENAI","message":"RPM limit rea
 
 ---
 
+## 5. Benchmarking & Quantitative Evaluation Endpoints
+
+### 5.1 List Benchmark Dilemmas
+`GET /api/v1/benchmarks/cases`
+
+Returns all bundled canonical cases (`DB01`–`DB10`) and custom-authored cases.
+
+#### Response (`200 OK`):
+```json
+[
+  {
+    "id": "DB01",
+    "title": "Event-Driven vs CQRS in High-Throughput Financial Ledger",
+    "domain": "Distributed Systems",
+    "dilemma": "...",
+    "constraints": ["Zero data loss", "<50ms p99 write latency"],
+    "groundTruthTraps": ["Two-phase commit failure cascades"],
+    "requiredTradeOffAxes": ["Eventual Consistency vs Immediate Read-After-Write"],
+    "isBundled": true
+  }
+]
+```
+
+### 5.2 Create Custom Dilemma
+`POST /api/v1/benchmarks/cases`
+
+#### Request:
+```json
+{
+  "id": "custom-kafka-vs-pulsar",
+  "title": "Kafka vs Apache Pulsar for Tier-1 Telemetry",
+  "domain": "Messaging & Streaming",
+  "dilemma": "Architectural trade-off analysis under 5M msg/sec.",
+  "constraints": ["Multi-tenancy", "Tiered cloud storage"],
+  "groundTruthTraps": ["ZooKeeper vs KRaft migration overhead"],
+  "requiredTradeOffAxes": ["Operational Simplicity vs Storage Decoupling"]
+}
+```
+
+### 5.3 Trigger Dual-Arm Benchmark Run
+`POST /api/v1/benchmarks/run`
+
+Concurrently executes Arm A (Solo Frontier Model) and Arm B (Dialex AI Multi-Agent Council), followed by double-blind position-swapped LLM judge scoring.
+
+#### Request:
+```json
+{
+  "caseId": "DB01",
+  "rounds": 2
+}
+```
+
+#### Response (`200 OK`):
+```json
+{
+  "id": "run_01j9a100",
+  "caseId": "DB01",
+  "caseTitle": "Event-Driven vs CQRS in High-Throughput Financial Ledger",
+  "timestamp": 1758153600000,
+  "soloResult": {
+    "armType": "SOLO_BASELINE",
+    "modelOrCouncil": "claude-3-7-sonnet",
+    "deliverable": "...",
+    "tokensUsed": 1820,
+    "durationMs": 4200
+  },
+  "councilResult": {
+    "armType": "COUNCIL",
+    "modelOrCouncil": "Dialex 3-Agent Council",
+    "deliverable": "...",
+    "tokensUsed": 4600,
+    "durationMs": 9800
+  },
+  "evaluations": [
+    {
+      "passNumber": 1,
+      "order": "AB",
+      "soloScores": [{"dimension": "FACTUALITY", "score": 7.5}],
+      "councilScores": [{"dimension": "FACTUALITY", "score": 9.0}],
+      "overallVerdict": "Council wins due to superior trade-off depth."
+    }
+  ],
+  "soloTotalScore": 7.4,
+  "councilTotalScore": 9.1,
+  "deltaQ": 1.7,
+  "winner": "COUNCIL"
+}
+```
+
+### 5.4 List Historical Benchmark Runs
+`GET /api/v1/benchmarks/runs`
+
+### 5.5 Get Benchmark Statistical Summary
+`GET /api/v1/benchmarks/summary`
+
+Returns aggregated win rates, mean $\Delta Q$, and paired Student's $t$-test $p$-value.
+
+#### Response (`200 OK`):
+```json
+{
+  "totalRuns": 12,
+  "councilWins": 11,
+  "soloWins": 1,
+  "ties": 0,
+  "councilWinRate": 91.67,
+  "meanDeltaQ": 1.82,
+  "pValue": 0.0034,
+  "isStatSignificant": true,
+  "avgFactualityDelta": 1.5,
+  "avgBlindSpotDelta": 2.1,
+  "avgTradeOffDelta": 1.9,
+  "avgActionDelta": 1.8
+}
+```
+
+### 5.6 Export Benchmark Report
+`GET /api/v1/benchmarks/export?format=markdown`
+
+Supports query parameter `format=markdown`, `format=csv`, or `format=json`.
+
+---
+
 ## 📄 License
 
 Dialex AI is licensed under the [PolyForm Noncommercial License 1.0.0](file:///LICENSE).  
