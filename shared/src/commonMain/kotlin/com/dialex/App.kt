@@ -1022,6 +1022,30 @@ fun App(
                                     onThemeModeChange = { mode ->
                                         onThemeModeChange(mode)
                                     },
+                                    projects = projects,
+                                    personaRepository = personaRepository,
+                                    onOpenBenchmarkArena = {
+                                        backStack.add(BenchmarkArena)
+                                    },
+                                    onOpenKnowledgeGraph = { pId ->
+                                        backStack.add(Graph(pId))
+                                    },
+                                    onOpenSocraticInterview = {
+                                        val ungroupedId = projects.firstOrNull { it.name.equals("Ungrouped", ignoreCase = true) }?.id
+                                        val targetProjId = selectedProjectId ?: ungroupedId ?: projects.firstOrNull()?.id
+                                        selectedProjectId = targetProjId
+                                        selectedDiscussionId = null
+                                        backStack.add(Setup(discussionId = null, initialProjectId = targetProjId, initialMode = com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW))
+                                    },
+                                    onCreateProject = { name ->
+                                        coroutineScope.launch {
+                                            projectRepository?.createProject(name)
+                                            reloadSidebarData()
+                                        }
+                                    },
+                                    onOpenPersonaBuilder = { pId ->
+                                        backStack.add(PersonaBuilder(pId))
+                                    },
                                     onSelectDiscussion = { discId ->
                                         selectedDiscussionId = discId
                                         val disc = discussions.firstOrNull { it.id == discId }
@@ -1040,8 +1064,10 @@ fun App(
                                                 val created = discussionRepository.createDiscussion(targetProjId, preset.title, preset.toDebateConfig())
                                                 selectedDiscussionId = created.id
                                                 selectedProjectId = targetProjId
+                                                // Auto mode does not wait for user input — launch deliberation immediately
+                                                runCatching { discussionRepository.startDiscussion(created.id) }
                                                 reloadSidebarData()
-                                                backStack.add(Setup(created.id))
+                                                backStack.add(Chat(created.id))
                                             }
                                         }
                                     },

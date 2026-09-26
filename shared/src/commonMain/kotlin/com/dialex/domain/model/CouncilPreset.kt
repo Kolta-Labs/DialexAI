@@ -31,7 +31,8 @@ data class CouncilPreset(
             secondary = secondaryAgents.getOrNull(0),
             tertiary = secondaryAgents.getOrNull(1),
             quaternary = secondaryAgents.getOrNull(2),
-            quinary = secondaryAgents.getOrNull(3)
+            quinary = secondaryAgents.getOrNull(3),
+            userInterventionPolicy = com.dialex.model.UserInterventionPolicy.AUTONOMOUS_AUTOPILOT
         )
     }
 

@@ -4,18 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -86,20 +75,39 @@ fun RoundEvidenceDrawer(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .fillMaxHeight(0.88f)
-                .clip(RoundedCornerShape(16.dp)),
-            color = cc.panel,
-            border = BorderStroke(1.dp, cc.border),
-            shadowElevation = 24.dp
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp)
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val isCompact = maxWidth < 640.dp
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = if (isCompact) Alignment.BottomCenter else Alignment.Center
             ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth(if (isCompact) 1f else 0.92f)
+                        .fillMaxHeight(if (isCompact) 0.92f else 0.88f)
+                        .clip(
+                            if (isCompact) RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                            else RoundedCornerShape(16.dp)
+                        ),
+                    color = cc.panel,
+                    border = BorderStroke(1.dp, cc.border),
+                    shadowElevation = 24.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(if (isCompact) 16.dp else 24.dp)
+                    ) {
+                        if (isCompact) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(bottom = 10.dp)
+                                    .size(36.dp, 4.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(cc.border.copy(alpha = 0.8f))
+                                    .align(Alignment.CenterHorizontally)
+                            )
+                        }
                 // Top Header Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -242,6 +250,8 @@ fun RoundEvidenceDrawer(
             }
         }
     }
+}
+}
 }
 
 @Composable

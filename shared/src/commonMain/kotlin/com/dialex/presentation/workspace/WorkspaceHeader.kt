@@ -83,6 +83,10 @@ fun WorkspaceHeader(
     currentSearchMatchIndex: Int = 0,
     onNextSearchMatch: () -> Unit = {},
     onPrevSearchMatch: () -> Unit = {},
+    openTensionCount: Int = 0,
+    onOpenTensionDrawer: (() -> Unit)? = null,
+    retrievedEvidenceCount: Int = 0,
+    onOpenEvidenceDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val cc = LocalCcColors.current
@@ -376,6 +380,80 @@ fun WorkspaceHeader(
                                 ),
                                 color = cc.textMuted
                             )
+                        }
+                    }
+                }
+
+                // Paraconsistent Tensions Pill Button (Touch Drawer Trigger)
+                if (onOpenTensionDrawer != null && openTensionCount > 0) {
+                    Spacer(Modifier.width(8.dp))
+                    ThemedTooltipBox("$openTensionCount Dialectic Tensions") {
+                        Surface(
+                            shape = RoundedCornerShape(7.dp),
+                            color = Color(0xFFFEF3C7),
+                            border = BorderStroke(0.75.dp, Color(0xFFD97706).copy(alpha = 0.5f)),
+                            modifier = Modifier
+                                .height(28.dp)
+                                .clip(RoundedCornerShape(7.dp))
+                                .clickable(onClick = onOpenTensionDrawer)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.ElectricBolt,
+                                    contentDescription = "Tension Matrix",
+                                    tint = Color(0xFFD97706),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    "$openTensionCount",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = Color(0xFFD97706)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Dynamic Grounding Evidence Pill Button (Touch Drawer Trigger)
+                if (onOpenEvidenceDrawer != null && retrievedEvidenceCount > 0) {
+                    Spacer(Modifier.width(8.dp))
+                    ThemedTooltipBox("$retrievedEvidenceCount Injected Evidence Items") {
+                        Surface(
+                            shape = RoundedCornerShape(7.dp),
+                            color = Color(0xFFEDE7F6),
+                            border = BorderStroke(0.75.dp, Color(0xFF673AB7).copy(alpha = 0.5f)),
+                            modifier = Modifier
+                                .height(28.dp)
+                                .clip(RoundedCornerShape(7.dp))
+                                .clickable(onClick = onOpenEvidenceDrawer)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.TravelExplore,
+                                    contentDescription = "Dynamic Evidence",
+                                    tint = Color(0xFF673AB7),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    "$retrievedEvidenceCount",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = Color(0xFF673AB7)
+                                )
+                            }
                         }
                     }
                 }

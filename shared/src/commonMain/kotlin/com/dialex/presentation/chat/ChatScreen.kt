@@ -632,7 +632,11 @@ fun ChatScreen(
                         searchMatchCount = searchMatches.size,
                         currentSearchMatchIndex = currentMatchIndex,
                         onNextSearchMatch = onNextSearchMatch,
-                        onPrevSearchMatch = onPrevSearchMatch
+                        onPrevSearchMatch = onPrevSearchMatch,
+                        openTensionCount = state.tensionPairs.count { it.status == TensionStatus.OPEN || it.status == TensionStatus.EXPLORED },
+                        onOpenTensionDrawer = { onIntent(ChatIntent.SetTensionDrawerOpen(true)) },
+                        retrievedEvidenceCount = state.retrievedEvidence.sumOf { it.items.size },
+                        onOpenEvidenceDrawer = { onIntent(ChatIntent.SetEvidenceDrawerOpen(true, null)) }
                     )
                 }
 

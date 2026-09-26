@@ -2,6 +2,7 @@ package com.dialex.presentation.setup
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -51,217 +52,272 @@ fun DecompositionModal(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .fillMaxHeight(0.88f)
-                .clip(RoundedCornerShape(16.dp)),
-            color = cc.bg,
-            border = BorderStroke(1.dp, cc.border),
-            shadowElevation = 24.dp
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Header
-                Row(
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val isCompact = maxWidth < 640.dp
+
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = if (isCompact) Alignment.BottomCenter else Alignment.Center
+            ) {
+                Surface(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 18.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .fillMaxWidth(if (isCompact) 1f else 0.92f)
+                        .fillMaxHeight(if (isCompact) 0.92f else 0.88f)
+                        .clip(
+                            if (isCompact) RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                            else RoundedCornerShape(16.dp)
+                        ),
+                    color = cc.bg,
+                    border = BorderStroke(1.dp, cc.border),
+                    shadowElevation = 24.dp
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(cc.accent.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = cc.accent,
-                                modifier = Modifier.size(20.dp)
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        if (isCompact) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(top = 10.dp)
+                                    .size(36.dp, 4.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(cc.border.copy(alpha = 0.8f))
+                                    .align(Alignment.CenterHorizontally)
                             )
                         }
-                        Column {
-                            Text(
-                                text = "Problem Decomposition Matrix",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = cc.textPrimary
-                            )
-                            Text(
-                                text = "Orthogonal Divergent Axes before Round 1",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = cc.textMuted
-                            )
-                        }
-                    }
 
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = cc.textMuted
-                        )
-                    }
-                }
-
-                HorizontalDivider(color = cc.border.copy(alpha = 0.5f))
-
-                // Topic Pill & Quick Preset Chips
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Surface(
-                        color = cc.panel,
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, cc.border.copy(alpha = 0.4f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                        // Header
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = if (isCompact) 16.dp else 24.dp, vertical = if (isCompact) 12.dp else 18.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(cc.accent.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = cc.accent,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = "Problem Decomposition Matrix",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = cc.textPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "Orthogonal Divergent Axes before Round 1",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = cc.textMuted,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close",
+                                    tint = cc.textMuted
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(color = cc.border.copy(alpha = 0.5f))
+
+                        // Topic Context Banner
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = if (isCompact) 16.dp else 24.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "TOPIC:",
+                                text = "DEBATE TOPIC",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = cc.accent
+                                color = cc.textMuted
                             )
                             Text(
                                 text = decomposition.topic,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = cc.textPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                fontWeight = FontWeight.SemiBold,
+                                color = cc.textPrimary
                             )
-                        }
-                    }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        PresetChip(
-                            label = "Select All Technical (A)",
-                            onClick = onSelectAllPerspectiveA,
-                            cc = cc
-                        )
-                        PresetChip(
-                            label = "Select All Strategic (B)",
-                            onClick = onSelectAllPerspectiveB,
-                            cc = cc
-                        )
-                    }
-                }
-
-                // Perspective Selector Tabs
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                ) {
-                    PerspectiveTabButton(
-                        title = decomposition.perspectiveA.name,
-                        count = decomposition.perspectiveA.axes.count { it.id in selectedAxisIds },
-                        total = decomposition.perspectiveA.axes.size,
-                        isSelected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    PerspectiveTabButton(
-                        title = decomposition.perspectiveB.name,
-                        count = decomposition.perspectiveB.axes.count { it.id in selectedAxisIds },
-                        total = decomposition.perspectiveB.axes.size,
-                        isSelected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // Lens Description Banner
-                Surface(
-                    color = cc.panel.copy(alpha = 0.6f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(6.dp)
-                ) {
-                    Text(
-                        text = activePerspective.lensDescription,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = cc.textMuted,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                    )
-                }
-
-                // Axes List
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(vertical = 8.dp)
-                ) {
-                    items(activePerspective.axes, key = { it.id }) { axis ->
-                        AxisCard(
-                            axis = axis,
-                            isSelected = axis.id in selectedAxisIds,
-                            onToggle = { onToggleAxis(axis.id) }
-                        )
-                    }
-                }
-
-                HorizontalDivider(color = cc.border.copy(alpha = 0.5f))
-
-                // Bottom Action Bar
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "$totalSelected axes selected for agenda",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = if (totalSelected > 0) cc.textPrimary else cc.textMuted
-                    )
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(
-                            onClick = onDismiss,
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = cc.textMuted)
-                        ) {
-                            Text("Cancel")
+                            // Preset Filter Chips
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                PresetChip(
+                                    label = "Select All Technical (A)",
+                                    onClick = onSelectAllPerspectiveA,
+                                    cc = cc
+                                )
+                                PresetChip(
+                                    label = "Select All Strategic (B)",
+                                    onClick = onSelectAllPerspectiveB,
+                                    cc = cc
+                                )
+                            }
                         }
 
-                        Button(
-                            onClick = onApplyToAgenda,
-                            enabled = totalSelected > 0,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = cc.accent,
-                                contentColor = Color.White
-                            )
+                        // Perspective Selector Tabs
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = if (isCompact) 16.dp else 24.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Tune,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
+                            PerspectiveTabButton(
+                                title = decomposition.perspectiveA.name,
+                                count = decomposition.perspectiveA.axes.count { it.id in selectedAxisIds },
+                                total = decomposition.perspectiveA.axes.size,
+                                isSelected = selectedTab == 0,
+                                onClick = { selectedTab = 0 },
+                                modifier = Modifier.weight(1f)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Adopt as Debate Agenda ($totalSelected)")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            PerspectiveTabButton(
+                                title = decomposition.perspectiveB.name,
+                                count = decomposition.perspectiveB.axes.count { it.id in selectedAxisIds },
+                                total = decomposition.perspectiveB.axes.size,
+                                isSelected = selectedTab == 1,
+                                onClick = { selectedTab = 1 },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        // Lens Description Banner
+                        Surface(
+                            color = cc.panel.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = if (isCompact) 16.dp else 24.dp, vertical = 8.dp),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = activePerspective.lensDescription,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = cc.textMuted,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+
+                        // Axes List
+                        LazyColumn(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = if (isCompact) 16.dp else 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            contentPadding = PaddingValues(vertical = 8.dp)
+                        ) {
+                            items(activePerspective.axes, key = { it.id }) { axis ->
+                                AxisCard(
+                                    axis = axis,
+                                    isSelected = axis.id in selectedAxisIds,
+                                    onToggle = { onToggleAxis(axis.id) }
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(color = cc.border.copy(alpha = 0.5f))
+
+                        // Bottom Action Bar: Stacked on mobile, side-by-side on desktop
+                        if (isCompact) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "$totalSelected axes selected for agenda",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (totalSelected > 0) cc.textPrimary else cc.textMuted
+                                )
+                                Button(
+                                    onClick = onApplyToAgenda,
+                                    enabled = totalSelected > 0,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = cc.accent,
+                                        contentColor = Color.White
+                                    ),
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Adopt as Debate Agenda ($totalSelected)", fontWeight = FontWeight.Bold)
+                                }
+                                OutlinedButton(
+                                    onClick = onDismiss,
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = cc.textMuted),
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)
+                                ) {
+                                    Text("Cancel")
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp, vertical = 14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "$totalSelected axes selected for agenda",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (totalSelected > 0) cc.textPrimary else cc.textMuted
+                                )
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    OutlinedButton(
+                                        onClick = onDismiss,
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = cc.textMuted)
+                                    ) {
+                                        Text("Cancel")
+                                    }
+
+                                    Button(
+                                        onClick = onApplyToAgenda,
+                                        enabled = totalSelected > 0,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = cc.accent,
+                                            contentColor = Color.White
+                                        )
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Tune,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Adopt as Debate Agenda ($totalSelected)")
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -274,20 +330,25 @@ fun DecompositionModal(
 private fun PresetChip(
     label: String,
     onClick: () -> Unit,
-    cc: com.dialex.theme.CcPalette
+    cc: com.dialex.theme.CcPalette,
 ) {
     Surface(
         onClick = onClick,
-        color = cc.panel,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, cc.border.copy(alpha = 0.6f))
+        shape = RoundedCornerShape(20.dp),
+        color = cc.panelAlt,
+        border = BorderStroke(1.dp, cc.border.copy(alpha = 0.6f)),
+        modifier = Modifier.height(28.dp)
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = cc.textPrimary,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-        )
+        Box(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = cc.textMuted
+            )
+        }
     }
 }
 
@@ -298,38 +359,45 @@ private fun PerspectiveTabButton(
     total: Int,
     isSelected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val cc = LocalCcColors.current
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(8.dp),
-        color = if (isSelected) cc.accent.copy(alpha = 0.15f) else cc.panel,
-        border = BorderStroke(1.dp, if (isSelected) cc.accent else cc.border.copy(alpha = 0.4f)),
+        color = if (isSelected) cc.accent.copy(alpha = 0.12f) else cc.panelAlt,
+        border = BorderStroke(
+            width = if (isSelected) 1.5.dp else 1.dp,
+            color = if (isSelected) cc.accent else cc.border.copy(alpha = 0.5f)
+        ),
         modifier = modifier
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.bodySmall,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                 color = if (isSelected) cc.accent else cc.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
+            Spacer(modifier = Modifier.width(8.dp))
             Surface(
-                shape = CircleShape,
-                color = if (isSelected) cc.accent else cc.border.copy(alpha = 0.4f)
+                shape = RoundedCornerShape(10.dp),
+                color = if (isSelected) cc.accent else cc.panel,
+                contentColor = if (isSelected) Color.White else cc.textMuted
             ) {
                 Text(
                     text = "$count/$total",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (isSelected) Color.White else cc.textMuted,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
             }
@@ -341,28 +409,29 @@ private fun PerspectiveTabButton(
 private fun AxisCard(
     axis: ProblemAxis,
     isSelected: Boolean,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
 ) {
     val cc = LocalCcColors.current
 
     Surface(
         onClick = onToggle,
         shape = RoundedCornerShape(10.dp),
-        color = if (isSelected) cc.panel else cc.panel.copy(alpha = 0.5f),
+        color = if (isSelected) cc.panelAlt else cc.panel.copy(alpha = 0.4f),
         border = BorderStroke(
-            1.dp,
-            if (isSelected) cc.accent.copy(alpha = 0.5f) else cc.border.copy(alpha = 0.3f)
+            width = if (isSelected) 1.5.dp else 1.dp,
+            color = if (isSelected) cc.accent else cc.border.copy(alpha = 0.4f)
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Header Row: Checkbox + Title + Relevance Badge
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -374,46 +443,43 @@ private fun AxisCard(
                             .size(20.dp)
                             .clip(RoundedCornerShape(4.dp))
                             .background(if (isSelected) cc.accent else Color.Transparent)
-                            .then(
-                                if (!isSelected) Modifier.background(Color.Transparent)
-                                else Modifier
+                            .border(
+                                width = 1.5.dp,
+                                color = if (isSelected) cc.accent else cc.border,
+                                shape = RoundedCornerShape(4.dp)
                             ),
                         contentAlignment = Alignment.Center
                     ) {
                         if (isSelected) {
                             Icon(
                                 imageVector = Icons.Default.Check,
-                                contentDescription = null,
+                                contentDescription = "Selected",
                                 tint = Color.White,
                                 modifier = Modifier.size(14.dp)
                             )
-                        } else {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                border = BorderStroke(1.5.dp, cc.border),
-                                color = Color.Transparent,
-                                modifier = Modifier.fillMaxSize()
-                            ) {}
                         }
                     }
 
                     Text(
                         text = axis.title,
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         color = cc.textPrimary
                     )
                 }
 
+                // Relevance Score Badge
+                val relevancePct = (axis.weight * 100).toInt()
                 Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = cc.border.copy(alpha = 0.3f)
+                    shape = RoundedCornerShape(12.dp),
+                    color = cc.panel,
+                    border = BorderStroke(0.5.dp, cc.border)
                 ) {
                     Text(
-                        text = "Weight ${(axis.weight * 100).toInt()}%",
+                        text = "$relevancePct% relevant",
                         style = MaterialTheme.typography.labelSmall,
                         color = cc.textMuted,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                     )
                 }
             }

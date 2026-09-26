@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,8 +22,10 @@ import com.dialex.domain.model.ConnectionProfile
 import com.dialex.domain.model.CouncilPreset
 import com.dialex.domain.model.ProfileType
 import com.dialex.domain.repository.ApiKeyRepository
+import com.dialex.domain.repository.PersonaRepository
 import com.dialex.domain.repository.ProfileRepository
 import com.dialex.model.Discussion
+import com.dialex.model.Project
 import com.dialex.theme.LocalCcColors
 import com.dialex.theme.ThemeMode
 
@@ -45,6 +48,13 @@ fun MobileNavigationShell(
     onSwitchToLocal: () -> Unit,
     onSwitchToRemote: () -> Unit,
     onScanQr: () -> Unit,
+    projects: List<Project> = emptyList(),
+    personaRepository: PersonaRepository? = null,
+    onOpenBenchmarkArena: () -> Unit = {},
+    onOpenKnowledgeGraph: (String) -> Unit = {},
+    onOpenSocraticInterview: () -> Unit = {},
+    onCreateProject: (String) -> Unit = {},
+    onOpenPersonaBuilder: (String?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val cc = LocalCcColors.current
@@ -53,14 +63,14 @@ fun MobileNavigationShell(
 
     Box(modifier = modifier.fillMaxSize().background(cc.bg)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Top App Bar with Engine Status Chip
+            // Top App Bar with Arena quick button and Engine Status Chip
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
                     .background(cc.panel)
                     .border(width = 1.dp, color = cc.border)
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -83,34 +93,49 @@ fun MobileNavigationShell(
                     )
                 }
 
-                // Interactive Engine Status Pill (Tapping flips to Vault)
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(if (isLocal) Color(0xFF10B981).copy(alpha = 0.15f) else Color(0xFF38BDF8).copy(alpha = 0.15f))
-                        .border(
-                            width = 1.dp,
-                            color = if (isLocal) Color(0xFF10B981).copy(alpha = 0.4f) else Color(0xFF38BDF8).copy(alpha = 0.4f),
-                            shape = RoundedCornerShape(999.dp)
-                        )
-                        .clickable { currentTab = MobileTab.VAULT }
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Quick Action: Benchmark Arena
+                    IconButton(
+                        onClick = onOpenBenchmarkArena,
+                        modifier = Modifier.size(36.dp)
+                    ) {
                         Icon(
-                            imageVector = if (isLocal) Icons.Default.PhoneAndroid else Icons.Default.Cloud,
-                            contentDescription = null,
-                            tint = if (isLocal) Color(0xFF10B981) else Color(0xFF38BDF8),
-                            modifier = Modifier.size(13.dp)
+                            imageVector = Icons.Outlined.Shield,
+                            contentDescription = "Null Hypothesis Benchmark Arena",
+                            tint = Color(0xFF38BDF8),
+                            modifier = Modifier.size(20.dp)
                         )
-                        Spacer(Modifier.width(5.dp))
-                        Text(
-                            text = if (isLocal) "Local Engine" else "Remote Server",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (isLocal) Color(0xFF10B981) else Color(0xFF38BDF8)
-                        )
+                    }
+
+                    // Interactive Engine Status Pill (Tapping flips to Vault)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(if (isLocal) Color(0xFF10B981).copy(alpha = 0.15f) else Color(0xFF38BDF8).copy(alpha = 0.15f))
+                            .border(
+                                width = 1.dp,
+                                color = if (isLocal) Color(0xFF10B981).copy(alpha = 0.4f) else Color(0xFF38BDF8).copy(alpha = 0.4f),
+                                shape = RoundedCornerShape(999.dp)
+                            )
+                            .clickable { currentTab = MobileTab.VAULT }
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (isLocal) Icons.Default.PhoneAndroid else Icons.Default.Cloud,
+                                contentDescription = null,
+                                tint = if (isLocal) Color(0xFF10B981) else Color(0xFF38BDF8),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                text = if (isLocal) "Local Engine" else "Remote Server",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isLocal) Color(0xFF10B981) else Color(0xFF38BDF8)
+                            )
+                        }
                     }
                 }
             }
@@ -122,12 +147,18 @@ fun MobileNavigationShell(
                         CouncilHubTab(
                             discussions = discussions,
                             onSelectDiscussion = onSelectDiscussion,
-                            onNewDilemma = onNewDilemma
+                            onNewDilemma = onNewDilemma,
+                            projects = projects,
+                            onOpenBenchmarkArena = onOpenBenchmarkArena,
+                            onOpenKnowledgeGraph = onOpenKnowledgeGraph,
+                            onOpenSocraticInterview = onOpenSocraticInterview,
+                            onCreateProject = onCreateProject
                         )
                     }
                     MobileTab.PRESETS -> {
                         QuickStartTab(
-                            onSelectPreset = onLaunchPreset
+                            onSelectPreset = onLaunchPreset,
+                            onSelectSocratic = onOpenSocraticInterview
                         )
                     }
                     MobileTab.LAUNCH -> {
@@ -152,7 +183,9 @@ fun MobileNavigationShell(
                             onSwitchToRemote = onSwitchToRemote,
                             onScanQr = onScanQr,
                             themeMode = themeMode,
-                            onThemeModeChange = onThemeModeChange
+                            onThemeModeChange = onThemeModeChange,
+                            personaRepository = personaRepository,
+                            onOpenPersonaBuilder = onOpenPersonaBuilder
                         )
                     }
                 }
