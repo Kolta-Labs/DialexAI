@@ -25,7 +25,7 @@ Dialex AI features exhaustive technical and user documentation organized in the 
 | 📱 **Client Applications Setup** | Desktop (macOS/Linux/Windows) packaging (DMG/DEB/MSI), Dialex AI Mobile (Android), JNI, and logging. | [**docs/CLIENT_SETUP.md**](docs/CLIENT_SETUP.md) |
 | 📖 **User & Deliberation Manual** | Council setup, 10 Universal Roles, 40+ Domain Personas, Anti-Fluff guardrails, and deliverables. | [**docs/USER_GUIDE.md**](docs/USER_GUIDE.md) |
 | 🛠️ **Developer & Kolt Guide** | Contributor setup, testing, and in-depth guide to the **Kolt / KoltLibs** ecosystem (`compose-kmp`, `AsyncState`). | [**docs/DEVELOPER_GUIDE.md**](docs/DEVELOPER_GUIDE.md) |
-| 🔮 **Advanced Features Specs** | Architectural specifications for Knowledge Graph, Problem Decomposition, Tension Detection, Dynamic Retrieval, Socratic Interview mode, Null Hypothesis Benchmarking, 8-Layer Persona DNA, Mobile Epistemic Parity Suite, and Bayesian Credence Tracking. | [**docs/04_PENDING_FEATURES_SPEC.md**](docs/04_PENDING_FEATURES_SPEC.md) · [**Socratic Spec**](docs/features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md) · [**Benchmarking Spec**](docs/features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md) · [**Persona DNA Spec**](docs/features/07_8_LAYER_PERSONA_DNA_SPEC.md) · [**Mobile Parity Spec**](docs/features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md) · [**Bayesian Credence Spec**](docs/features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md) |
+| 🔮 **Advanced Features Specs** | Architectural specifications for Knowledge Graph, Problem Decomposition, Tension Detection, Dynamic Retrieval, Socratic Interview mode, Null Hypothesis Benchmarking, 8-Layer Persona DNA, Mobile Epistemic Parity Suite, Bayesian Credence Tracking, and Autonomous Artifact Sandbox. | [**docs/04_PENDING_FEATURES_SPEC.md**](docs/04_PENDING_FEATURES_SPEC.md) · [**Socratic Spec**](docs/features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md) · [**Benchmarking Spec**](docs/features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md) · [**Persona DNA Spec**](docs/features/07_8_LAYER_PERSONA_DNA_SPEC.md) · [**Mobile Parity Spec**](docs/features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md) · [**Bayesian Credence Spec**](docs/features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md) · [**Sandbox Spec**](docs/features/10_AUTONOMOUS_ARTIFACT_SANDBOX_SPEC.md) |
 | 🔌 **REST & SSE API Reference** | Complete HTTP REST endpoints, JWT authentication, and real-time Server-Sent Events specifications. | [**docs/API_REFERENCE.md**](docs/API_REFERENCE.md) |
 
 ---
@@ -200,6 +200,12 @@ flowchart TD
 - **Likelihood Ratio ($\Lambda$) Tipping Points**: Detects decisive evidence citations ($\Lambda \ge 2.5$ or $\le 0.4$) shifting council belief.
 - **Interactive Bézier Credence Ribbon Canvas**: Desktop modal and mobile bottom sheet (`Cmd+Shift+B`) rendering smooth probability area flows across rounds.
 - **Audit-Ready Bayesian Decision Matrix**: Embeds probability shift tables and tipping points directly in generated ADRs, Markdown docs, and Executive Memorandums.
+
+### 12. ⚡ Autonomous Artifact Sandbox & Code Verification Engine (v2.0)
+- **Multi-Language Isolated Execution**: Micro-sandbox supporting Go, Python, TypeScript, Rust, SQLite, and Bash in ephemeral scratch directories (`0700`) with process group termination and environment sanitization.
+- **Closed-Loop Verification Feedback**: Code compilation errors or test failures during automated deliberation rounds feed compiler diagnostics directly back to council models as empirical challenges.
+- **Interactive Sandbox Terminal Drawer**: `Cmd+Shift+X` / `Ctrl+Shift+X` modal in desktop and mobile with live stdout/stderr streams, resource telemetry (execution time, memory), and "Run in Sandbox" buttons on transcript code blocks.
+- **Empirical Verification Badges**: Proof-of-execution seals embedded into exported Architecture Decision Records (ADRs) and Executive Memorandums.
 
 ---
 

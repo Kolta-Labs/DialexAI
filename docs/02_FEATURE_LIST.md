@@ -216,6 +216,14 @@ The following advanced capabilities have been implemented or are queued for impl
    - Embeds Bayesian Epistemic Decision Matrices into generated ADRs and Executive Memos.
    - 📖 **Full Architectural Specification**: [**docs/features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md**](features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md)
 
+### Active Roadmap Capabilities (v2.0)
+10. **Autonomous Artifact Sandbox & Code Verification Engine (APPROVED SPEC - v2.0)**:
+    - Multi-language isolated micro-sandbox (Go, Python, TypeScript, Rust, SQLite, Bash) with process group cancellation and ephemeral scrubbed runtimes.
+    - Automated closed-loop verification: Compiler errors and test panics feed directly back into council rounds as empirical challenges.
+    - Interactive Sandbox Terminal Drawer (`Cmd+Shift+X` / `Ctrl+Shift+X`) in Desktop and Mobile with live stdout/stderr streams and runtime selector.
+    - Proof-of-execution verification badges embedded into exported ADRs and Executive Memorandums.
+    - 📖 **Full Architectural Specification**: [**docs/features/10_AUTONOMOUS_ARTIFACT_SANDBOX_SPEC.md**](features/10_AUTONOMOUS_ARTIFACT_SANDBOX_SPEC.md)
+
 ---
 
 ## 📄 License

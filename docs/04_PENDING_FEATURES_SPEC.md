@@ -18,6 +18,7 @@ This document serves as the formal specification for pending features slated for
 7. [8-Layer DNA Mental & Structured Persona Ingestion (COMPLETED)](features/07_8_LAYER_PERSONA_DNA_SPEC.md)
 8. [Mobile Epistemic Parity & Gap Closure Suite (COMPLETED)](features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md)
 9. [Bayesian Credence Tracking & Quantitative Epistemic Uncertainty Network (COMPLETED)](features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md)
+10. [Autonomous Artifact Sandbox & Code Verification Engine (APPROVED SPEC)](features/10_AUTONOMOUS_ARTIFACT_SANDBOX_SPEC.md)
 
 ---
 
@@ -380,4 +381,21 @@ While Dialex AI delivers rigorous qualitative deliberation and dialectic argumen
 * **Likelihood Ratio ($\Lambda$) Tipping Points**: Identification of decisive citations that shifted belief: $\Lambda(E_r) = \frac{P(E_r \mid H_a)}{P(E_r \mid H_b)}$.
 * **Interactive Credence Ribbon Canvas**: Fluid Bézier area chart showing belief flow across rounds with interactive scrubbing in Desktop and Mobile (`CredenceDrawer`).
 * **Audit-Ready Epistemic Decision Matrix**: Embedded probability shift tables in ADRs and Executive Memos.
+
+---
+
+## 10. Autonomous Artifact Sandbox & Code Verification Engine
+
+> [!NOTE]
+> **Status**: **APPROVED SPECIFICATION** (v2.0) — Detailed architectural spec: [**docs/features/10_AUTONOMOUS_ARTIFACT_SANDBOX_SPEC.md**](features/10_AUTONOMOUS_ARTIFACT_SANDBOX_SPEC.md)  
+> **Component**: Go Engine (`pkg/sandbox`, `pkg/api`), KMP Shared (`domain`, `data`, `presentation/chat`, `presentation/sandbox`), Desktop & Mobile Compose UI, Deliverable Exporters.
+
+### 10.1 Problem Statement
+While frontier models generate syntactically convincing code proposals, unexecuted code remains epistemic speculation. Undetected API hallucinations, concurrency race conditions, and failing assertions often pass visual inspection, forcing humans to manually copy, compile, and debug generated deliverables.
+
+### 10.2 Key Capabilities & Architecture
+* **Isolated Zero-Cloud Execution**: Multi-language runtime detection (Go, Python, TypeScript, Rust, SQLite, Bash) running in ephemeral scratch directories (`0700` permissions) with hard timeouts (default 5s) and process group tree cleanup.
+* **Closed-Loop Verification Feedback**: Code failures during automated rounds feed compiler diagnostics/stderr directly back to authoring agents as empirical challenges.
+* **Interactive Sandbox Terminal Drawer**: `Cmd+Shift+X` slide-over modal in desktop and mobile with live stdout/stderr streams, resource telemetry (execution time, memory), and "Run in Sandbox" buttons on transcript code blocks.
+* **Empirical Verification Badges**: Proof-of-execution seals embedded into exported Architecture Decision Records (ADRs) and Executive Memorandums.
 
