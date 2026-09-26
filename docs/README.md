@@ -14,39 +14,57 @@ Welcome to the official technical and user documentation suite for **Dialex AI**
 | 🔒 **100% Sovereign Zero-Cloud Vault** | Credentials encrypted at rest via Argon2id + AES-256-GCM and Android Hardware Keystore (TEE/StrongBox). Run 100% offline with local models or in isolated private on-prem networks. |
 | ⚡ **Deterministic Go Turn State Machine** | Orchestrates debate rounds through a strict concurrency engine with Server-Sent Events (SSE) streaming, progressive cost meters, and **Instant Human Interrupts** with zero state corruption. |
 | 🎯 **Actionable Generative Deliverables** | Synthesizes consensus into production-ready **ADRs (Architecture Decision Records)**, **Weighted Decision Matrices**, **Pro/Con Breakdowns**, **Executive Memos (HTML)**, and **Code Diffs**. |
+
 ---
 
-## 📸 Platform Interface & Deliberation UI
+## 📚 Complete Documentation Suite Index
 
-<div align="center">
-  <img src="screenshots/02_deliberation_chat_transcript.png" alt="Dialex AI Deliberation Workspace" width="90%" style="border-radius: 8px;" />
-  <p><em>Dialex AI Multi-Agent Deliberation Workspace: 4 competing models debating system architecture with seat color coordination, round trackers, and live steering queue.</em></p>
-</div>
+Explore our comprehensive guides organized by domain and objective:
 
-<br/>
+### 1. Conceptual & Strategic Foundation
+- [**Product Philosophy & Epistemology**](PRODUCT_PHILOSOPHY.md)  
+  *The epistemological case for dialectic multi-agent councils, why single-prompt LLMs fail, Bayesian credence updating, 3-tier anti-fluff guardrails, and data sovereignty.*
+- [**Executive Overview & Strategic Value**](EXECUTIVE_OVERVIEW.md)  
+  *Business justification, executive summary, ROI models, enterprise risk mitigation, and synthetic advisory board economics.*
+- [**Comprehensive Project Scope**](01_PROJECT_SCOPE.md)  
+  *Exhaustive functional and non-functional requirements, target environments, multiplatform guarantees, and security constraints.*
+- [**Complete Feature Catalog**](02_FEATURE_LIST.md)  
+  *Full inventory of capabilities, debate archetypes, domain personas, status badges, style modifiers, and target personas.*
 
-<table align="center" width="100%">
-  <tr>
-    <td width="50%" align="center">
-      <img src="screenshots/03_consensus_outcome_deliverables.png" alt="Moderator Consensus Outcome and Generative Action Buttons" width="100%" />
-      <br/><em>Moderator Consensus Synthesis & 1-Tap Generative Deliverables (ADR, Matrix, Pro/Con, Memo).</em>
-    </td>
-    <td width="50%" align="center">
-      <img src="screenshots/04_artifacts_sliding_drawer.png" alt="Artifacts Sliding Drawer" width="100%" />
-      <br/><em>Saved Deliverables Sliding Drawer (<code>Cmd+Shift+A</code>) with Markdown and HTML export.</em>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center">
-      <img src="screenshots/07_personas_registry_and_custom_library.png" alt="Two-Tab Persona Registry" width="100%" />
-      <br/><em>Two-Tab Persona Registry: 10 Universal Roles, 40+ Domain Archetypes, and Custom Badges.</em>
-    </td>
-    <td width="50%" align="center">
-      <img src="screenshots/05_mobile_qr_pairing_modal.png" alt="1-Tap QR Companion Pairing" width="100%" />
-      <br/><em>1-Tap Mobile Companion Pairing with LAN IP and Tailscale (<code>tsnet</code>) private mesh.</em>
-    </td>
-  </tr>
-</table>
+### 2. Operational & User Manuals
+- [**User Guide & Deliberation Manual**](USER_GUIDE.md)  
+  *Step-by-step handbook covering project setup, council configurations, 1-on-1 Socratic interviews, live steering, artifact extraction, and mobile companion pairing.*
+- [**Enterprise Use Cases & Deliberation Playbooks**](USE_CASES.md)  
+  *Battle-tested, ready-to-run playbooks for Systems Architecture (Kafka vs Pulsar, Monolith vs Microservices), Cybersecurity Threat Modeling, Capital Allocation, and AI Infrastructure.*
+
+### 3. Architecture & Technical Design
+- [**System Topology & Clean System Design**](03_ARCHITECTURE_AND_SYSTEM_DESIGN.md)  
+  *High-level data flow diagrams, decoupled dual-engine topology, and client-to-engine contract specifications.*
+- [**Deep Architecture & Clean Call Chains**](ARCHITECTURE.md)  
+  *Strict Clean Architecture layering in KMP (`domain` $\rightarrow$ `data` $\rightarrow$ `presentation`), unidirectional MVI (`Contract.kt`), Go Turn State Machine, and AES-256 Vault.*
+- [**REST & SSE API Reference**](API_REFERENCE.md)  
+  *Complete HTTP REST endpoints, JWT authentication schemes, real-time Server-Sent Events (SSE) streaming protocols, and curl examples.*
+
+### 4. Setup, Deployment & Administration
+- [**Server & Go Engine Setup Guide**](SERVER_SETUP.md)  
+  *Standalone compilation, CLI flags, systemd/launchd background daemons, Docker Compose stacks, reverse proxies, and Tailscale mesh (`tsnet`).*
+- [**Client Applications Setup (Desktop & Mobile)**](CLIENT_SETUP.md)  
+  *Packaging native 1-click installers (DMG, MSI, AppImage, APK), Android biometric gate, in-memory diagnostics (`AppLogStore`), and JNI.*
+- [**Developer Guide & Kolt Framework**](DEVELOPER_GUIDE.md)  
+  *Developer workspace setup, **Kolt / KoltLibs** composite build (`compose-kmp`, `AsyncState`), writing unit tests, adding new AI providers, and synthesizer extensions.*
+
+### 5. Advanced Feature Specifications (`docs/features/`)
+Formal technical specifications for the ten breakthrough epistemic modules:
+1. [**Knowledge Graph & Drag-and-Drop**](features/01_KNOWLEDGE_GRAPH_AND_DRAG_DROP.md) — Visual canvas connecting claims, tensions, and evidence with physics-based nodes.
+2. [**Problem Decomposition & Sub-Topic Tree**](features/02_PROBLEM_DECOMPOSITION.md) — Recursive multi-tier dilemma breakdown into parallelizable sub-debates.
+3. [**Contradiction & Tension Detection Matrix**](features/03_CONTRADICTION_AND_TENSION_DETECTION.md) — Automated heuristic and embedding-based extraction of conflicting claims.
+4. [**Round-Aware Dynamic Retrieval**](features/04_ROUND_AWARE_DYNAMIC_RETRIEVAL.md) — Per-turn live web and vector search injected dynamically between debate rounds.
+5. [**Dedicated 1-on-1 Socratic Interview Mode**](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md) — *Brevis Interrogatio*, Epistemic Ledger (Invariants vs Concessions), and Council Elevation.
+6. [**Null-Hypothesis Benchmarking Suite (DialexBench)**](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md) — Quantitative radar evaluation measuring hallucination reduction vs single models.
+7. [**8-Layer Cognitive Persona DNA & MMOS Studio**](features/07_8_LAYER_PERSONA_DNA_SPEC.md) — Deep persona customization with ontological anchors, cognitive biases, and MMOS ingestion.
+8. [**Mobile Epistemic Parity Suite**](features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md) — Full feature parity on Android with Navigation 3, biometrics, offline engine, and LAN pairing.
+9. [**Bayesian Credence Tracking Network**](features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md) — Real-time probability updating and epistemic uncertainty network.
+10. [**Autonomous Artifact Sandbox & Code Verification**](features/10_AUTONOMOUS_ARTIFACT_SANDBOX_SPEC.md) — Sandboxed execution environment verifying generated scripts and code diffs.
 
 ---
 
@@ -87,7 +105,7 @@ mindmap
 
 > [!IMPORTANT]
 > **Dialex AI depends directly on the Kolt Ecosystem (`KoltLibs`) via a Gradle Composite Build (`includeBuild`).**  
-> If you are cloning, forking, or building the source code, you **must clone `KoltLibs` into the same parent directory alongside `DialexAI`**:
+> If you are building from source, clone `KoltLibs` into the same parent directory alongside `DialexAI`:
 
 ```bash
 # 1. Create a parent workspace directory
@@ -106,55 +124,6 @@ git clone https://github.com/Kolta-Labs/DialexAI.git
 ```
 
 See [Developer Guide: Kolt Ecosystem Setup](DEVELOPER_GUIDE.md#2-kolt-ecosystem-koltlibs-dependency--setup) for composite build configuration and dependency substitution details.
-
----
-
-## 📚 Complete Documentation Suite
-
-| Guide | Summary | Target Audience | Link |
-|---|---|---|---|
-| 👔 **Executive Overview & Strategic Rationale** | Business case, failure modes of single-prompt AI, Hegelian dialectic deliberation, enterprise ROI, and application matrices. | Executives, Product Leaders, Architects | [**EXECUTIVE_OVERVIEW.md**](EXECUTIVE_OVERVIEW.md) |
-| 🎯 **Comprehensive Project Scope & Specifications** | Exhaustive project requirements, dual-engine topology, cross-platform boundaries, and security model. | System Architects, Lead Engineers | [**01_PROJECT_SCOPE.md**](01_PROJECT_SCOPE.md) |
-| 🌟 **Feature Catalog & Beneficiaries Guide** | Full inventory of user-facing capabilities, status badges, style modifiers, guardrails, and target audience workflows. | All Users, Contributors | [**02_FEATURE_LIST.md**](02_FEATURE_LIST.md) |
-| 📐 **System Topology & Clean System Design** | High-level data flows, engine-to-client contracts, and module responsibility breakdown. | Backend & Mobile Engineers | [**03_ARCHITECTURE_AND_SYSTEM_DESIGN.md**](03_ARCHITECTURE_AND_SYSTEM_DESIGN.md) |
-| 🏛️ **Deep Architecture & Clean Call Chains** | Strict Clean Architecture layers, unidirectional MVI (`Contract.kt`), Go Turn State Machine, and AES-256 Vault. | Core Contributors, Architects | [**ARCHITECTURE.md**](ARCHITECTURE.md) |
-| 🖥️ **Server & Go Engine Setup Guide** | Standalone compilation, CLI commands, systemd/launchd daemons, Docker Compose stacks, Tailscale mesh, and reverse proxies. | DevOps, System Admins | [**SERVER_SETUP.md**](SERVER_SETUP.md) |
-| 📱 **Client Applications Setup (Desktop & Mobile)** | Native 1-click installer packaging (DMG/MSI/AppImage/APK), UI polish, Dialex AI Mobile (Android), and in-memory diagnostics (`AppLogStore`). | Application Engineers, Users | [**CLIENT_SETUP.md**](CLIENT_SETUP.md) |
-| 📖 **User Guide & Deliberation Manual** | Council topologies, 10 Universal Roles, 40+ Domain Personas, 3-Tier Anti-Fluff guardrails, human steering, and deliverables. | End Users, Researchers, Strategists | [**USER_GUIDE.md**](USER_GUIDE.md) |
-| 🛠️ **Developer Guide & Kolt Framework** | Developer workspace setup, **Kolt / KoltLibs** composite build (`compose-kmp`, `AsyncState`), adding AI model runners, and deliverable synthesizers. | Contributors, Extension Authors | [**DEVELOPER_GUIDE.md**](DEVELOPER_GUIDE.md) |
-| 🔮 **Advanced Features & Epistemic Specs** | Formal architectural specifications for Knowledge Graph, Problem Decomposition, Tension Detection, Dynamic Retrieval, Socratic Interview mode, Null Hypothesis Benchmarking, 8-Layer Persona DNA, Mobile Parity, Bayesian Credence Tracking, and Autonomous Artifact Sandbox. | Core Contributors, Researchers, Architects | [**04_PENDING_FEATURES_SPEC.md**](04_PENDING_FEATURES_SPEC.md) · [**Socratic Spec**](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md) · [**Benchmarking Spec**](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md) · [**Persona DNA Spec**](features/07_8_LAYER_PERSONA_DNA_SPEC.md) · [**Bayesian Credence Spec**](features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md) · [**Sandbox Spec**](features/10_AUTONOMOUS_ARTIFACT_SANDBOX_SPEC.md) |
-| 🔌 **REST & SSE API Reference** | Complete HTTP endpoints, JWT authentication, real-time Server-Sent Events (SSE) schemas, error codes, and curl payloads. | API Developers, Integrators | [**API_REFERENCE.md**](API_REFERENCE.md) |
-
----
-
-## 🎯 Quick Navigation to Critical Topics
-
-### 🚀 Getting Started & Installation
-- **No-Terminal Desktop Installers**: See [Client Setup Guide: 1-Click Installers](CLIENT_SETUP.md#2-no-terminal-1-click-installation-end-users).
-- **Self-Hosting Standalone Go Engine**: See [Server Setup Guide: Compilation](SERVER_SETUP.md#3-compiling-from-source).
-- **Docker Compose Stacks**: See [Server Setup Guide: Docker](SERVER_SETUP.md#5-containerized-deployment-docker--compose).
-- **In-Device Engine vs Remote Host Engine**: See [Server Setup Guide: Deployment Topology](SERVER_SETUP.md#1-deployment-topology-in-device-engine-vs-remote-host-engine).
-- **Zero-Port Private Mesh via Tailscale**: See [Server Setup Guide: Tailscale Mesh (`tsnet`)](SERVER_SETUP.md#6-private-tailscale-mesh-stack-tsnet).
-
-### 💡 Capabilities, USPs & Workflows
-- **Local Developer CLI Integration & Cost Savings**: See [User Guide: Local CLI Execution & Cost Savings](USER_GUIDE.md#6-local-developer-cli-execution--cost-savings-usp).
-- **10 Universal Debate Archetypes & 40+ Personas**: See [User Guide: Persona Registry](USER_GUIDE.md#3-the-persona-registry--live-customization).
-- **8-Layer Cognitive DNA Studio & MMOS Ingestion**: See [Persona DNA Architectural Spec](features/07_8_LAYER_PERSONA_DNA_SPEC.md) and [API Reference](API_REFERENCE.md#6-8-layer-cognitive-dna--mmos-endpoints).
-- **Mobile Epistemic Parity Suite & Zero-Wait Auto Mode**: See [Mobile Epistemic Parity Spec](features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md).
-- **3-Tier Anti-Fluff & Topic Drift Guardrails**: See [User Guide: Anti-Fluff Guardrails](USER_GUIDE.md#4-anti-fluff--topic-drift-guardrails).
-- **Live Human Interjections & Instant Interrupts**: See [User Guide: Live Interventions](USER_GUIDE.md#5-live-human-interjections--instant-interrupts).
-- **Consensus Outcome & Generative Deliverables**: See [User Guide: Deliverable Synthesis](USER_GUIDE.md#7-moderator-consensus--generative-deliverables).
-- **Dedicated 1-on-1 Socratic Interview Mode & Epistemic Ledger**: See [User Guide: Socratic Interview Mode](USER_GUIDE.md#23-dedicated-1-on-1-socratic-interview-mode) and [Socratic Architectural Spec](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md).
-- **Null Hypothesis Benchmarking Suite & Arena Radar**: See [User Guide: Benchmarking Suite](USER_GUIDE.md#9-null-hypothesis-benchmarking--quantitative-evaluation-suite-dialexbench) and [Benchmarking Spec](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md).
-- **Bayesian Credence Tracking & Epistemic Uncertainty Network**: See [Bayesian Credence Spec](features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md).
-- **Autonomous Artifact Sandbox & Code Verification Engine**: See [Sandbox Spec](features/10_AUTONOMOUS_ARTIFACT_SANDBOX_SPEC.md).
-
-### 📐 Architecture, Clean Code & Developers
-- **Clean Architecture Strict Call Chain**: See [Architecture Guide: Domain Layer](ARCHITECTURE.md#4-domain-layer--clean-architecture).
-- **MVI Pattern in Compose Multiplatform**: See [Architecture Guide: MVI Pattern](ARCHITECTURE.md#3-presentation-layer--mvi-pattern).
-- **Kolt Ecosystem Composite Build Setup**: See [Developer Guide: KoltLibs](DEVELOPER_GUIDE.md#2-kolt-ecosystem-koltlibs-dependency--setup).
-- **Adding AI Model Runners (Cloud API & Local CLI)**: See [Developer Guide: Adding Model Runners](DEVELOPER_GUIDE.md#5-adding-new-ai-providers-or-deliverable-formats).
-- **Diagnostics Ring Buffer (`AppLogStore`)**: See [Client Setup Guide: Logging & Diagnostics](CLIENT_SETUP.md#5-client-logging--diagnostics-applogstore).
 
 ---
 

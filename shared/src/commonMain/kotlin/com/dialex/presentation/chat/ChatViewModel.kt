@@ -2,6 +2,21 @@ package com.dialex.presentation.chat
 
 import androidx.lifecycle.viewModelScope
 import com.dialex.domain.repository.DiscussionRepository
+import com.dialex.domain.usecase.ConductSocraticTurnUseCase
+import com.dialex.domain.usecase.DuplicateDiscussionUseCase
+import com.dialex.domain.usecase.ElevateSocraticToCouncilUseCase
+import com.dialex.domain.usecase.GenerateDeliverableFormatUseCase
+import com.dialex.domain.usecase.GenerateDiscussionTitleUseCase
+import com.dialex.domain.usecase.GenerateHandoffPromptUseCase
+import com.dialex.domain.usecase.GenerateSocraticDigestUseCase
+import com.dialex.domain.usecase.GetDiscussionUsageUseCase
+import com.dialex.domain.usecase.GetDiscussionUseCase
+import com.dialex.domain.usecase.PauseDiscussionUseCase
+import com.dialex.domain.usecase.RecalculateCredenceUseCase
+import com.dialex.domain.usecase.ResumeDiscussionUseCase
+import com.dialex.domain.usecase.StopDiscussionUseCase
+import com.dialex.domain.usecase.StreamDiscussionUseCase
+import com.dialex.domain.usecase.UpdateDiscussionUseCase
 import com.dialex.export.exportFileName
 import com.dialex.export.toMarkdown
 import com.dialex.model.Discussion
@@ -10,6 +25,7 @@ import com.dialex.model.Provider
 import com.dialex.model.label
 import io.github.koltalabs.kolt.utils.state.AsyncState
 import com.dialex.presentation.base.MviViewModel
+import com.dialex.presentation.chat.components.resolveAllArtifacts
 import com.dialex.presentation.setup.TokenWarningLevel
 import com.dialex.util.formatTokenCount
 import kotlinx.collections.immutable.toImmutableList
@@ -24,14 +40,59 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 class ChatViewModel(
-    private val discussionRepository: DiscussionRepository,
+    private val getDiscussionUseCase: GetDiscussionUseCase,
+    private val streamDiscussionUseCase: StreamDiscussionUseCase,
+    private val updateDiscussionUseCase: UpdateDiscussionUseCase,
+    private val pauseDiscussionUseCase: PauseDiscussionUseCase,
+    private val resumeDiscussionUseCase: ResumeDiscussionUseCase,
+    private val stopDiscussionUseCase: StopDiscussionUseCase,
+    private val getDiscussionUsageUseCase: GetDiscussionUsageUseCase,
+    private val duplicateDiscussionUseCase: DuplicateDiscussionUseCase,
+    private val generateDiscussionTitleUseCase: GenerateDiscussionTitleUseCase,
+    private val generateDeliverableFormatUseCase: GenerateDeliverableFormatUseCase,
+    private val generateHandoffPromptUseCase: GenerateHandoffPromptUseCase,
     private val discussionId: String,
     private val tokenBudget: Int,
-    private val conductSocraticTurnUseCase: com.dialex.domain.usecase.ConductSocraticTurnUseCase? = null,
-    private val generateSocraticDigestUseCase: com.dialex.domain.usecase.GenerateSocraticDigestUseCase? = null,
-    private val elevateSocraticToCouncilUseCase: com.dialex.domain.usecase.ElevateSocraticToCouncilUseCase? = null,
-    private val recalculateCredenceUseCase: com.dialex.domain.usecase.RecalculateCredenceUseCase? = null,
+    private val conductSocraticTurnUseCase: ConductSocraticTurnUseCase? = null,
+    private val generateSocraticDigestUseCase: GenerateSocraticDigestUseCase? = null,
+    private val elevateSocraticToCouncilUseCase: ElevateSocraticToCouncilUseCase? = null,
+    private val recalculateCredenceUseCase: RecalculateCredenceUseCase? = null,
 ) : MviViewModel<ChatState, ChatIntent, ChatEffect>(ChatState()) {
+
+    constructor(
+        discussionRepository: DiscussionRepository,
+        discussionId: String,
+        tokenBudget: Int,
+        conductSocraticTurnUseCase: ConductSocraticTurnUseCase? = null,
+        generateSocraticDigestUseCase: GenerateSocraticDigestUseCase? = null,
+        elevateSocraticToCouncilUseCase: ElevateSocraticToCouncilUseCase? = null,
+        recalculateCredenceUseCase: RecalculateCredenceUseCase? = null,
+    ) : this(
+        getDiscussionUseCase = GetDiscussionUseCase(discussionRepository),
+        streamDiscussionUseCase = StreamDiscussionUseCase(discussionRepository),
+        updateDiscussionUseCase = UpdateDiscussionUseCase(discussionRepository),
+        pauseDiscussionUseCase = PauseDiscussionUseCase(discussionRepository),
+        resumeDiscussionUseCase = ResumeDiscussionUseCase(discussionRepository),
+        stopDiscussionUseCase = StopDiscussionUseCase(discussionRepository),
+        getDiscussionUsageUseCase = GetDiscussionUsageUseCase(discussionRepository),
+        duplicateDiscussionUseCase = DuplicateDiscussionUseCase(discussionRepository),
+        generateDiscussionTitleUseCase = GenerateDiscussionTitleUseCase(discussionRepository),
+        generateDeliverableFormatUseCase = GenerateDeliverableFormatUseCase(discussionRepository),
+        generateHandoffPromptUseCase = GenerateHandoffPromptUseCase(discussionRepository),
+        discussionId = discussionId,
+        tokenBudget = tokenBudget,
+        conductSocraticTurnUseCase = conductSocraticTurnUseCase ?: ConductSocraticTurnUseCase(discussionRepository),
+        generateSocraticDigestUseCase = generateSocraticDigestUseCase ?: GenerateSocraticDigestUseCase(discussionRepository),
+        elevateSocraticToCouncilUseCase = elevateSocraticToCouncilUseCase ?: ElevateSocraticToCouncilUseCase(discussionRepository),
+        recalculateCredenceUseCase = recalculateCredenceUseCase
+    )
+
+    private val socraticSessionDelegate = SocraticSessionDelegate(
+        conductSocraticTurnUseCase = conductSocraticTurnUseCase,
+        generateSocraticDigestUseCase = generateSocraticDigestUseCase,
+        elevateSocraticToCouncilUseCase = elevateSocraticToCouncilUseCase,
+        updateDiscussionUseCase = updateDiscussionUseCase
+    )
 
     private var streamJob: Job? = null
     private var lastLoggedErrorMsg: String? = null
@@ -39,7 +100,7 @@ class ChatViewModel(
     init {
         viewModelScope.launch {
             try {
-                val discussion = discussionRepository.getDiscussion(discussionId)
+                val discussion = getDiscussionUseCase(discussionId)
                 applyUpdatedDiscussion(discussion)
                 if (discussion.mode == com.dialex.domain.model.DiscussionMode.SOCRATIC_INTERVIEW) {
                     val lastExaminerMsg = discussion.transcript.lastOrNull { !it.isUserComment && !it.isError && !it.isSystem }
@@ -61,94 +122,6 @@ class ChatViewModel(
         }
     }
 
-    private fun sanitizeTranscript(transcript: List<com.dialex.model.DebateMessage>, config: com.dialex.model.DebateConfig): List<com.dialex.model.DebateMessage> {
-        if (transcript.isEmpty()) return transcript
-        val agentCount = config.agents.size.coerceAtLeast(1)
-        val sanitized = mutableListOf<com.dialex.model.DebateMessage>()
-        var currentAgentTurnsInRound = 0
-        var currentRound = 1
-
-        for (msg in transcript) {
-            if (msg.isUserComment) {
-                // If this user comment was placed in a round where all agents had already completed their turns,
-                // it belongs to the next round as the opening user directive/comment.
-                if (currentAgentTurnsInRound >= agentCount && msg.round <= currentRound) {
-                    val nextRound = currentRound + 1
-                    sanitized.add(msg.copy(round = nextRound))
-                    currentRound = nextRound
-                    currentAgentTurnsInRound = 0
-                } else {
-                    val effectiveRound = maxOf(msg.round, currentRound)
-                    sanitized.add(msg.copy(round = effectiveRound))
-                    currentRound = effectiveRound
-                }
-            } else if (!msg.isError && !msg.isSystem) {
-                if (msg.round > currentRound) {
-                    currentRound = msg.round
-                    currentAgentTurnsInRound = 1
-                } else {
-                    currentAgentTurnsInRound++
-                }
-                sanitized.add(msg)
-            } else {
-                sanitized.add(msg)
-            }
-        }
-        return sanitized
-    }
-
-    private fun mergeTranscripts(
-        local: List<com.dialex.model.DebateMessage>,
-        remote: List<com.dialex.model.DebateMessage>,
-        config: com.dialex.model.DebateConfig
-    ): List<com.dialex.model.DebateMessage> {
-        val rawMerged = if (local.isEmpty()) {
-            remote
-        } else if (remote.isEmpty()) {
-            local.dropLastWhile { it.isError }
-        } else {
-            val localUserComments = local.filter { it.isUserComment }
-            if (localUserComments.isEmpty()) {
-                remote
-            } else {
-                // Fix remote entries that match local user comments in case remote serialized/deserialized without isUserComment
-                val sanitizedRemote = remote.map { rm ->
-                    if (!rm.isUserComment && localUserComments.any { luc ->
-                        luc.content.trim() == rm.content.trim() && (luc.round == rm.round || (luc.timestampMs > 0L && rm.timestampMs > 0L && Math.abs(luc.timestampMs - rm.timestampMs) < 60_000L))
-                    }) {
-                        rm.copy(
-                            isUserComment = true,
-                            seatId = "observer",
-                            authorDisplayName = "You (Observer)"
-                        )
-                    } else {
-                        rm
-                    }
-                }
-
-                // Identify local comments that are truly not yet present in remote
-                val missingComments = localUserComments.filter { luc ->
-                    sanitizedRemote.none { rc ->
-                        rc.content.trim() == luc.content.trim() && (rc.isUserComment || rc.round == luc.round)
-                    }
-                }
-
-                val combined = if (missingComments.isEmpty()) sanitizedRemote else sanitizedRemote + missingComments
-
-                // Strict chronological ordering:
-                // 1. By round ascending
-                // 2. By timestampMs ascending (if available)
-                // 3. User comments (injected prompts) always precede agent responses within the same round if timestamps are identical
-                combined.sortedWith(
-                    compareBy<com.dialex.model.DebateMessage> { it.round }
-                        .thenBy { if (it.timestampMs > 0L) it.timestampMs else Long.MAX_VALUE }
-                        .thenBy { if (it.isUserComment) 0 else 1 }
-                )
-            }
-        }
-        return sanitizeTranscript(rawMerged, config)
-    }
-
     private fun applyUpdatedDiscussion(updatedDiscussion: Discussion) {
         val currentDisc = state.value.discussion
         val currentTranscript = currentDisc?.transcript.orEmpty()
@@ -157,7 +130,7 @@ class ChatViewModel(
         } else {
             currentTranscript
         }
-        val mergedTranscript = mergeTranscripts(cleanLocalTranscript, updatedDiscussion.transcript, updatedDiscussion.config)
+        val mergedTranscript = TranscriptMerger.mergeTranscripts(cleanLocalTranscript, updatedDiscussion.transcript, updatedDiscussion.config)
         val currentArts = currentDisc?.artifacts.orEmpty()
         val mergedArts = (updatedDiscussion.artifacts + currentArts).distinctBy { it.id }
         val currentDismissed = currentDisc?.dismissedArtifactIds.orEmpty()
@@ -196,7 +169,7 @@ class ChatViewModel(
         streamJob = viewModelScope.launch {
             while (isActive) {
                 try {
-                    discussionRepository.streamDiscussion(discussionId)
+                    streamDiscussionUseCase(discussionId)
                         .onEach { updatedDiscussion ->
                             // Stream is alive — clear any prior connection-lost flag.
                             if (state.value.engineConnectionLost) {
@@ -219,7 +192,7 @@ class ChatViewModel(
                 }
 
                 // If stream finishes or drops while still RUNNING, fetch latest snapshot
-                val latest = runCatching { discussionRepository.getDiscussion(discussionId) }.getOrNull()
+                val latest = runCatching { getDiscussionUseCase(discussionId) }.getOrNull()
                 if (latest != null) {
                     // Poll succeeded — engine is reachable again.
                     if (state.value.engineConnectionLost) {
@@ -287,19 +260,19 @@ class ChatViewModel(
 
                 if (isInterrupt && currentDisc.status == DiscussionStatus.RUNNING) {
                     // Abort active in-flight turn immediately and restart with comment injected
-                    runCatching { discussionRepository.stopDiscussion(discussionId) }
+                    runCatching { stopDiscussionUseCase(discussionId) }
                     delay(100)
-                    discussionRepository.updateDiscussion(updatedDisc)
-                    discussionRepository.resumeDiscussion(discussionId)
+                    updateDiscussionUseCase(updatedDisc)
+                    resumeDiscussionUseCase(discussionId)
                     startStreamingOrPolling()
                 } else if (currentDisc.status == DiscussionStatus.RUNNING) {
-                    discussionRepository.updateDiscussion(updatedDisc)
+                    updateDiscussionUseCase(updatedDisc)
                 } else if (currentDisc.status == DiscussionStatus.PAUSED || currentDisc.status.isCompleted || currentDisc.status.isFailed) {
-                    discussionRepository.updateDiscussion(updatedDisc)
-                    discussionRepository.resumeDiscussion(discussionId)
+                    updateDiscussionUseCase(updatedDisc)
+                    resumeDiscussionUseCase(discussionId)
                     startStreamingOrPolling()
                 } else {
-                    discussionRepository.updateDiscussion(updatedDisc)
+                    updateDiscussionUseCase(updatedDisc)
                 }
             } catch (e: Exception) {
                 com.dialex.logging.AppLogStore.error("DebateRunner", "Failed to send comment: ${e.message}", e)
@@ -367,8 +340,8 @@ class ChatViewModel(
                 streamJob?.cancel()
                 viewModelScope.launch {
                     try {
-                        discussionRepository.pauseDiscussion(discussionId)
-                        val updated = discussionRepository.getDiscussion(discussionId)
+                        pauseDiscussionUseCase(discussionId)
+                        val updated = getDiscussionUseCase(discussionId)
                         applyUpdatedDiscussion(updated)
                     } catch (e: Exception) {
                         setState { copy(isActionInProgress = false) }
@@ -382,8 +355,8 @@ class ChatViewModel(
                 streamJob?.cancel()
                 viewModelScope.launch {
                     try {
-                        discussionRepository.stopDiscussion(discussionId)
-                        val updated = discussionRepository.getDiscussion(discussionId)
+                        stopDiscussionUseCase(discussionId)
+                        val updated = getDiscussionUseCase(discussionId)
                         applyUpdatedDiscussion(updated)
                     } catch (e: Exception) {
                         setState { copy(isActionInProgress = false) }
@@ -402,7 +375,7 @@ class ChatViewModel(
                 val isResumingFromDone = currentDisc.status.isCompleted
                 val lastAgentRound = currentDisc.transcript.filterNot { it.isUserComment || it.isError }.maxOfOrNull { it.round } ?: 1
                 val transcriptWithoutTrailingErrors = currentDisc.transcript.dropLastWhile { it.isError }
-                val sanitizedTranscript = sanitizeTranscript(transcriptWithoutTrailingErrors, currentDisc.config)
+                val sanitizedTranscript = TranscriptMerger.sanitizeTranscript(transcriptWithoutTrailingErrors, currentDisc.config)
                 val targetMaxRound = sanitizedTranscript.maxOfOrNull { it.round } ?: lastAgentRound
                 val updatedConfig = if (currentDisc.config.roundMode == com.dialex.model.RoundMode.FIXED) {
                     if (targetMaxRound >= currentDisc.config.maxRounds) {
@@ -439,9 +412,9 @@ class ChatViewModel(
                 viewModelScope.launch {
                     try {
                         if (runningDisc != null) {
-                            discussionRepository.updateDiscussion(runningDisc)
+                            updateDiscussionUseCase(runningDisc)
                         }
-                        discussionRepository.resumeDiscussion(discussionId)
+                        resumeDiscussionUseCase(discussionId)
                         startStreamingOrPolling()
                     } catch (e: Exception) {
                         setState { copy(discussion = currentDisc, isActionInProgress = false) }
@@ -460,7 +433,7 @@ class ChatViewModel(
                 }
                 val currentDisc = state.value.discussion ?: return
                 val currentMaxRound = currentDisc.transcript.filterNot { it.isUserComment || it.isError }.maxOfOrNull { it.round } ?: 1
-                val sanitizedTranscript = sanitizeTranscript(currentDisc.transcript, currentDisc.config)
+                val sanitizedTranscript = TranscriptMerger.sanitizeTranscript(currentDisc.transcript, currentDisc.config)
                 val updatedConfig = if (intent.unlimited) {
                     currentDisc.config.copy(roundMode = com.dialex.model.RoundMode.UNLIMITED)
                 } else {
@@ -489,8 +462,8 @@ class ChatViewModel(
                 updateNextSpeaker(restartingDisc)
                 viewModelScope.launch {
                     try {
-                        discussionRepository.updateDiscussion(restartingDisc)
-                        discussionRepository.resumeDiscussion(discussionId)
+                        updateDiscussionUseCase(restartingDisc)
+                        resumeDiscussionUseCase(discussionId)
                         startStreamingOrPolling()
                     } catch (e: Exception) {
                         setState { copy(discussion = currentDisc, isActionInProgress = false) }
@@ -537,7 +510,7 @@ class ChatViewModel(
                         isUserComment = true,
                         timestampMs = System.currentTimeMillis()
                     )
-                    val updatedTranscript = sanitizeTranscript(currentDisc.transcript + userMsg, currentDisc.config)
+                    val updatedTranscript = TranscriptMerger.sanitizeTranscript(currentDisc.transcript + userMsg, currentDisc.config)
                     val existingArtifacts = if (lastAgentRound > 0) {
                         currentDisc.resolveAllArtifacts(snapshotRound = lastAgentRound)
                     } else {
@@ -562,8 +535,8 @@ class ChatViewModel(
                     updateNextSpeaker(updatedDisc)
                     viewModelScope.launch {
                         runCatching {
-                            discussionRepository.updateDiscussion(updatedDisc)
-                            discussionRepository.resumeDiscussion(updatedDisc.id)
+                            updateDiscussionUseCase(updatedDisc)
+                            resumeDiscussionUseCase(updatedDisc.id)
                             startStreamingOrPolling()
                         }.onFailure { err ->
                             val msg = err.message ?: "unknown error"
@@ -581,12 +554,12 @@ class ChatViewModel(
                         isUserComment = true,
                         timestampMs = System.currentTimeMillis()
                     )
-                    val updatedTranscript = sanitizeTranscript(currentDisc.transcript + userMsg, currentDisc.config)
+                    val updatedTranscript = TranscriptMerger.sanitizeTranscript(currentDisc.transcript + userMsg, currentDisc.config)
                     val updatedDisc = currentDisc.copy(transcript = updatedTranscript)
                     setState { copy(discussion = updatedDisc) }
                     viewModelScope.launch {
                         runCatching {
-                            discussionRepository.updateDiscussion(updatedDisc)
+                            updateDiscussionUseCase(updatedDisc)
                         }
                     }
                 }
@@ -605,7 +578,7 @@ class ChatViewModel(
                 setState { copy(discussion = updatedDisc) }
                 viewModelScope.launch {
                     runCatching {
-                        discussionRepository.updateDiscussion(updatedDisc)
+                        updateDiscussionUseCase(updatedDisc)
                     }
                 }
             }
@@ -616,7 +589,7 @@ class ChatViewModel(
                 setState { copy(discussion = updatedDisc) }
                 viewModelScope.launch {
                     runCatching {
-                        discussionRepository.updateDiscussion(updatedDisc)
+                        updateDiscussionUseCase(updatedDisc)
                         sendEffect(ChatEffect.ShowSnackbar("Artifact deleted"))
                     }
                 }
@@ -630,7 +603,7 @@ class ChatViewModel(
                 setState { copy(discussion = updatedDisc) }
                 viewModelScope.launch {
                     runCatching {
-                        discussionRepository.updateDiscussion(updatedDisc)
+                        updateDiscussionUseCase(updatedDisc)
                     }
                 }
             }
@@ -644,7 +617,7 @@ class ChatViewModel(
                     setState { copy(generatingDeliverableFormat = intent.format) }
                     try {
                         sendEffect(ChatEffect.ShowSnackbar("Generating $deliverableName…"))
-                        val content = discussionRepository.generateDeliverableFormat(
+                        val content = generateDeliverableFormatUseCase(
                             discussionId = currentDisc.id,
                             format = intent.format
                         )
@@ -669,7 +642,7 @@ class ChatViewModel(
                             artifacts = currentDisc.artifacts.filter { it.name != deliverableName } + artifact
                         )
                         setState { copy(discussion = updatedDisc, generatingDeliverableFormat = null) }
-                        discussionRepository.updateDiscussion(updatedDisc)
+                        updateDiscussionUseCase(updatedDisc)
                         sendEffect(ChatEffect.ShowSnackbar("$deliverableName generated"))
                     } catch (e: Exception) {
                         setState { copy(generatingDeliverableFormat = null) }
@@ -687,7 +660,7 @@ class ChatViewModel(
                 setState { copy(handoffState = HandoffState.Loading) }
                 viewModelScope.launch {
                     try {
-                        discussionRepository.generateHandoffPrompt(discussionId)
+                        generateHandoffPromptUseCase(discussionId)
                         setState { copy(handoffState = HandoffState.Idle) }
                         sendEffect(ChatEffect.ShowSnackbar("Handoff prompt copied — also shown below"))
                     } catch (e: Exception) {
@@ -731,7 +704,7 @@ class ChatViewModel(
             is ChatIntent.DuplicateConfig -> {
                 viewModelScope.launch {
                     try {
-                        val dup = discussionRepository.duplicateDiscussion(discussionId)
+                        val dup = duplicateDiscussionUseCase(discussionId)
                         sendEffect(ChatEffect.NavigateToSetup(dup.id))
                     } catch (e: Exception) {
                         sendEffect(ChatEffect.ShowSnackbar("Failed to duplicate configuration"))
@@ -753,7 +726,7 @@ class ChatViewModel(
                     val trimmed = intent.newName.trim()
                     if (trimmed.isNotBlank() && trimmed != current.name) {
                         try {
-                            val updated = discussionRepository.updateDiscussion(current.copy(name = trimmed))
+                            val updated = updateDiscussionUseCase(current.copy(name = trimmed))
                             setState { copy(discussion = updated) }
                         } catch (e: Exception) {
                             sendEffect(ChatEffect.ShowSnackbar("Failed to rename discussion"))
@@ -765,7 +738,7 @@ class ChatViewModel(
                 viewModelScope.launch {
                     val current = state.value.discussion ?: return@launch
                     try {
-                        val newTitle = discussionRepository.generateDiscussionTitle(current.id)
+                        val newTitle = generateDiscussionTitleUseCase(current.id)
                         if (newTitle.isNotBlank()) {
                             val updated = current.copy(name = newTitle)
                             setState { copy(discussion = updated) }
@@ -783,7 +756,7 @@ class ChatViewModel(
                 setState { copy(discussion = updated) }
                 viewModelScope.launch {
                     try {
-                        discussionRepository.updateDiscussion(updated)
+                        updateDiscussionUseCase(updated)
                         validateWorkspaceFolders(updated)
                     } catch (e: Exception) {}
                 }
@@ -831,57 +804,45 @@ class ChatViewModel(
             }
             is ChatIntent.GenerateSocraticDigest -> {
                 if (state.value.isGeneratingDigest) return
+                val currentDisc = state.value.discussion ?: return
                 setState { copy(isGeneratingDigest = true) }
                 viewModelScope.launch {
-                    try {
-                        val digest = if (generateSocraticDigestUseCase != null) {
-                            generateSocraticDigestUseCase.invoke(discussionId)
-                        } else {
-                            discussionRepository.socraticDigest(discussionId)
+                    socraticSessionDelegate.generateDigest(discussionId, currentDisc)
+                        .onSuccess { (updated, digest) ->
+                            setState {
+                                copy(
+                                    discussion = updated,
+                                    socraticDigest = digest,
+                                    isGeneratingDigest = false
+                                )
+                            }
+                            sendEffect(ChatEffect.ScrollToBottom)
+                            sendEffect(ChatEffect.ShowSnackbar("Socratic Epistemic Digest generated & synced to Knowledge Graph!"))
                         }
-                        val currentDisc = state.value.discussion ?: return@launch
-                        val updated = currentDisc.copy(socraticDigest = digest, status = DiscussionStatus.DONE)
-                        discussionRepository.updateDiscussion(updated)
-                        setState {
-                            copy(
-                                discussion = updated,
-                                socraticDigest = digest,
-                                isGeneratingDigest = false
-                            )
+                        .onFailure { e ->
+                            setState { copy(isGeneratingDigest = false) }
+                            val msg = e.message ?: "Failed to generate digest"
+                            sendEffect(ChatEffect.ShowSnackbar(msg))
                         }
-                        sendEffect(ChatEffect.ScrollToBottom)
-                        sendEffect(ChatEffect.ShowSnackbar("Socratic Epistemic Digest generated & synced to Knowledge Graph!"))
-                    } catch (e: Exception) {
-                        setState { copy(isGeneratingDigest = false) }
-                        val msg = e.message ?: "Failed to generate digest"
-                        sendEffect(ChatEffect.ShowSnackbar(msg))
-                    }
                 }
             }
             is ChatIntent.ElevateSocraticToCouncil -> {
                 if (state.value.isElevatingToCouncil) return
                 val digest = state.value.socraticDigest ?: return
+                val targetProject = intent.targetProjectId ?: (state.value.discussion?.projectId?.ifBlank { "default" } ?: "default")
                 setState { copy(isElevatingToCouncil = true) }
                 viewModelScope.launch {
-                    try {
-                        val req = com.dialex.domain.model.SocraticElevateRequest(
-                            projectId = intent.targetProjectId ?: (state.value.discussion?.projectId?.ifBlank { "default" } ?: "default"),
-                            digest = digest,
-                            parentDiscussionId = discussionId
-                        )
-                        val result = if (elevateSocraticToCouncilUseCase != null) {
-                            elevateSocraticToCouncilUseCase.invoke(discussionId, req)
-                        } else {
-                            discussionRepository.socraticElevate(discussionId, req)
+                    socraticSessionDelegate.elevateToCouncil(discussionId, digest, targetProject)
+                        .onSuccess { result ->
+                            setState { copy(isElevatingToCouncil = false) }
+                            sendEffect(ChatEffect.ElevateSuccess(result.newDiscussionId))
+                            sendEffect(ChatEffect.NavigateToSetup(result.newDiscussionId))
                         }
-                        setState { copy(isElevatingToCouncil = false) }
-                        sendEffect(ChatEffect.ElevateSuccess(result.newDiscussionId))
-                        sendEffect(ChatEffect.NavigateToSetup(result.newDiscussionId))
-                    } catch (e: Exception) {
-                        setState { copy(isElevatingToCouncil = false) }
-                        val msg = e.message ?: "Failed to elevate to council"
-                        sendEffect(ChatEffect.ShowSnackbar(msg))
-                    }
+                        .onFailure { e ->
+                            setState { copy(isElevatingToCouncil = false) }
+                            val msg = e.message ?: "Failed to elevate to council"
+                            sendEffect(ChatEffect.ShowSnackbar(msg))
+                        }
                 }
             }
         }
@@ -889,23 +850,8 @@ class ChatViewModel(
 
     private fun handleSocraticUserTurn(statement: String, currentDisc: Discussion) {
         if (state.value.isSocraticProcessing) return
-        val currentRound = (currentDisc.transcript.maxOfOrNull { it.round } ?: 0) + 1
-        val userMsg = com.dialex.model.DebateMessage(
-            seatId = "interlucotor",
-            provider = Provider.CUSTOM,
-            authorDisplayName = "You (Interlocutor)",
-            round = currentRound,
-            content = statement,
-            isUserComment = true,
-            timestampMs = System.currentTimeMillis()
-        )
-        val updatedDisc = currentDisc.copy(
-            transcript = currentDisc.transcript + userMsg,
-            status = DiscussionStatus.RUNNING
-        )
         setState {
             copy(
-                discussion = updatedDisc,
                 isSocraticProcessing = true,
                 nextSpeakerProvider = currentDisc.config.primary.provider
             )
@@ -913,46 +859,23 @@ class ChatViewModel(
         sendEffect(ChatEffect.ScrollToBottom)
 
         viewModelScope.launch {
-            try {
-                discussionRepository.updateDiscussion(updatedDisc)
-                val turnRequest = com.dialex.domain.model.SocraticTurnRequest(
-                    message = statement,
-                    topic = currentDisc.config.topic.ifBlank { currentDisc.name },
-                    stance = currentDisc.socraticConfig?.stance ?: com.dialex.domain.model.SocraticStance.RUTHLESS_ELENCHUS,
-                    stage = state.value.socraticStage ?: currentDisc.socraticConfig?.stage ?: com.dialex.domain.model.SocraticStage.HYPOTHESIS_EXTRACTION,
-                    context = currentDisc.config.commonContext,
-                    attachedFiles = currentDisc.attachedFiles
-                )
-                val response = if (conductSocraticTurnUseCase != null) {
-                    conductSocraticTurnUseCase.invoke(discussionId, turnRequest)
-                } else {
-                    discussionRepository.socraticTurn(discussionId, turnRequest)
-                }
-                val examinerMsg = com.dialex.model.DebateMessage(
-                    seatId = "interviewer",
-                    provider = currentDisc.config.primary.provider,
-                    authorDisplayName = currentDisc.socraticConfig?.interviewerName?.ifBlank { "Socratic Examiner" } ?: "Socratic Examiner",
-                    round = currentRound + 1,
-                    content = response.probeQuestion,
-                    timestampMs = System.currentTimeMillis()
-                )
-                val withExaminer = updatedDisc.copy(
-                    transcript = updatedDisc.transcript + examinerMsg,
-                    socraticLedger = (updatedDisc.socraticLedger + response.ledgerUpdates).distinctBy { it.id },
-                    status = DiscussionStatus.PAUSED
-                )
-                discussionRepository.updateDiscussion(withExaminer)
+            socraticSessionDelegate.handleUserTurn(
+                discussionId = discussionId,
+                statement = statement,
+                currentDisc = currentDisc,
+                currentStage = state.value.socraticStage
+            ).onSuccess { res ->
                 setState {
                     copy(
-                        discussion = withExaminer,
+                        discussion = res.updatedDiscussion,
                         isSocraticProcessing = false,
                         nextSpeakerProvider = null,
-                        activeProbe = response.probeQuestion,
-                        socraticStage = response.newStage
+                        activeProbe = res.probeQuestion,
+                        socraticStage = res.newStage
                     )
                 }
                 sendEffect(ChatEffect.ScrollToBottom)
-            } catch (e: Exception) {
+            }.onFailure { e ->
                 setState { copy(isSocraticProcessing = false, nextSpeakerProvider = null) }
                 val msg = e.message ?: "Failed to conduct Socratic turn"
                 sendEffect(ChatEffect.ShowSnackbar(msg))
@@ -966,7 +889,7 @@ class ChatViewModel(
         if (invalid.isNotEmpty() && discussion.status == DiscussionStatus.RUNNING) {
             viewModelScope.launch {
                 try {
-                    discussionRepository.pauseDiscussion(discussionId)
+                    pauseDiscussionUseCase(discussionId)
                 } catch (e: Exception) {}
             }
         }

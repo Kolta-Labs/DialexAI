@@ -23,11 +23,8 @@ import com.dialex.runner.checkCliAvailability
 import com.dialex.runner.checkCliLoginStatus
 import com.dialex.theme.AppTheme
 import com.dialex.theme.ThemeMode
-import com.dialex.ui.AppShell
 import com.dialex.ui.CliCatalog
-import com.dialex.ui.ConnectScreen
 import com.dialex.util.installCrashLogger
-import com.dialex.viewmodel.EngineViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking

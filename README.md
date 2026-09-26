@@ -1,54 +1,175 @@
-# Dialex AI — Sovereign Multi-Agent Deliberation & Synthetic Advisory Platform
+<div align="center">
 
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.1+-7F52FF.svg?logo=kotlin&logoColor=white)](https://kotlinlang.org)
-[![Compose Multiplatform](https://img.shields.io/badge/Compose_Multiplatform-1.10+-4285F4.svg?logo=jetpackcompose&logoColor=white)](https://www.jetbrains.com/lp/compose-multiplatform/)
-[![Go Engine](https://img.shields.io/badge/Go_Engine-1.22+-00ADD8.svg?logo=go&logoColor=white)](https://go.dev)
-[![Tailscale tsnet](https://img.shields.io/badge/Tailscale-tsnet-blue.svg?logo=tailscale&logoColor=white)](https://tailscale.com)
-[![Kolt Ecosystem](https://img.shields.io/badge/Kolt-Powered-FF6F00.svg)](docs/DEVELOPER_GUIDE.md#2-kolt-ecosystem-koltlibs-dependency--setup)
-[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm_Noncommercial_1.0.0-orange.svg)](LICENSE)
+<img src="logos/logo.png" alt="Dialex AI Logo" width="160" style="border-radius: 24px; margin-bottom: 16px;" />
 
-**Dialex AI** by **Kolta Labs** is a sovereign cross-platform multi-agent deliberation workspace and synthetic advisory platform. It orchestrates structured, multi-round dialectic debates among competing frontier AI models (**Anthropic Claude, OpenAI ChatGPT/Codex, Google Gemini/Antigravity, xAI Grok, DeepSeek, Mistral, and local Ollama/CLI agents**) to eliminate single-model hallucinations, stress-test complex trade-offs, and produce executive-ready consensus deliverables.
+# Dialex AI
+### Sovereign Multi-Agent Deliberation & Synthetic Advisory Platform
 
-Built upon a decoupled dual-engine topology, Dialex AI pairs a high-throughput **Go Orchestration Engine** with a sovereign, reactive **Kotlin Multiplatform (KMP) & Compose Multiplatform** presentation client for Desktop (macOS, Linux, Windows) and Mobile (Dialex AI Mobile / Android).
+**Stop trusting a single AI for mission-critical decisions.**  
+*Convene an adversarial council of competing frontier models (Anthropic Claude, OpenAI GPT, Google Gemini, DeepSeek R1, xAI Grok, Ollama). Eliminate hallucinations. Stress-test trade-offs. Extract executive consensus deliverables — at $0 marginal token cost.*
 
----
+<br/>
 
-## 📑 Complete Documentation Suite
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.1+-7F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![Compose Multiplatform](https://img.shields.io/badge/Compose_Multiplatform-1.10+-4285F4.svg?style=for-the-badge&logo=jetpackcompose&logoColor=white)](https://www.jetbrains.com/lp/compose-multiplatform/)
+[![Go Engine](https://img.shields.io/badge/Go_Engine-1.22+-00ADD8.svg?style=for-the-badge&logo=go&logoColor=white)](https://go.dev)
+[![Navigation 3](https://img.shields.io/badge/Navigation_3-MVI-00C853.svg?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com/guide/navigation)
+[![Tailscale tsnet](https://img.shields.io/badge/Tailscale-tsnet-blue.svg?style=for-the-badge&logo=tailscale&logoColor=white)](https://tailscale.com)
+[![Kolt Ecosystem](https://img.shields.io/badge/Kolt-Powered-FF6F00.svg?style=for-the-badge)](docs/DEVELOPER_GUIDE.md#2-kolt-ecosystem-koltlibs-dependency--setup)
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm_Noncommercial_1.0.0-orange.svg?style=for-the-badge)](LICENSE)
 
-Dialex AI features exhaustive technical and user documentation organized in the [`docs/`](docs/README.md) directory:
+<br/>
 
-| Guide | Summary | Link |
-|---|---|---|
-| 👔 **Executive Overview** | Business rationale, single-prompt LLM failure modes, Hegelian dialectic deliberation, and enterprise use cases. | [**docs/EXECUTIVE_OVERVIEW.md**](docs/EXECUTIVE_OVERVIEW.md) |
-| 🏛️ **System Architecture** | Clean Architecture layers, MVI state flow, Go turn state-machine, SSE hub, and security vault. | [**docs/ARCHITECTURE.md**](docs/ARCHITECTURE.md) |
-| 🖥️ **Server & Go Engine Setup** | Compilation, CLI commands, systemd/launchd daemons, Docker Compose, and Tailscale mesh (`tsnet`). | [**docs/SERVER_SETUP.md**](docs/SERVER_SETUP.md) |
-| 📱 **Client Applications Setup** | Desktop (macOS/Linux/Windows) packaging (DMG/DEB/MSI), Dialex AI Mobile (Android), JNI, and logging. | [**docs/CLIENT_SETUP.md**](docs/CLIENT_SETUP.md) |
-| 📖 **User & Deliberation Manual** | Council setup, 10 Universal Roles, 40+ Domain Personas, Anti-Fluff guardrails, and deliverables. | [**docs/USER_GUIDE.md**](docs/USER_GUIDE.md) |
-| 🛠️ **Developer & Kolt Guide** | Contributor setup, testing, and in-depth guide to the **Kolt / KoltLibs** ecosystem (`compose-kmp`, `AsyncState`). | [**docs/DEVELOPER_GUIDE.md**](docs/DEVELOPER_GUIDE.md) |
-| 🔮 **Advanced Features Specs** | Architectural specifications for Knowledge Graph, Problem Decomposition, Tension Detection, Dynamic Retrieval, Socratic Interview mode, Null Hypothesis Benchmarking, 8-Layer Persona DNA, Mobile Epistemic Parity Suite, Bayesian Credence Tracking, and Autonomous Artifact Sandbox. | [**docs/04_PENDING_FEATURES_SPEC.md**](docs/04_PENDING_FEATURES_SPEC.md) · [**Socratic Spec**](docs/features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md) · [**Benchmarking Spec**](docs/features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md) · [**Persona DNA Spec**](docs/features/07_8_LAYER_PERSONA_DNA_SPEC.md) · [**Mobile Parity Spec**](docs/features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md) · [**Bayesian Credence Spec**](docs/features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md) · [**Sandbox Spec**](docs/features/10_AUTONOMOUS_ARTIFACT_SANDBOX_SPEC.md) |
-| 🔌 **REST & SSE API Reference** | Complete HTTP REST endpoints, JWT authentication, and real-time Server-Sent Events specifications. | [**docs/API_REFERENCE.md**](docs/API_REFERENCE.md) |
+[**🚀 Quick Start**](#-quick-start--installation) · [**📖 Product Philosophy**](docs/PRODUCT_PHILOSOPHY.md) · [**🎯 Enterprise Playbooks**](docs/USE_CASES.md) · [**🏛️ System Architecture**](docs/ARCHITECTURE.md) · [**📑 Full Documentation Hub**](docs/README.md)
+
+</div>
 
 ---
 
-## 🏛️ System Topology
+## ⚡ The Problem: The Single-LLM Echo Chamber Trap
+
+When you ask a single frontier LLM (whether Claude, GPT, or Gemini) to evaluate an enterprise architecture, cybersecurity posture, or multi-million dollar strategy, you are walking into an invisible cognitive trap:
+
+```
+❌ The Single-Prompt Echo Chamber:
+You:        "We're planning to rewrite our core billing pipeline in Rust microservices."
+Single AI:  "What a fantastic, forward-thinking architecture! Here's how to write your first crate..."
+Outcome:    8 months later — distributed transaction deadlocks, cascading latency, and millions in wasted engineering.
+```
+
+### Why Single-Prompt AI Fails High-Stakes Decisions:
+1. **Sycophancy by Design**: Models trained via RLHF are incentivized to please the user, nodding along with flawed premises rather than attacking hidden risks.
+2. **Compounding Hallucination Cascades**: A subtle factual hallucination at Turn 1 becomes gospel by Turn 5, poisoning the entire decision tree.
+3. **Idiosyncratic Blind Spots**: Every AI lab has proprietary alignment biases. Relying on one model locks your organization into that specific model's cognitive blind spots.
+4. **Runaway Cloud API Invoices**: Autonomous multi-agent experimentation through raw cloud APIs quickly burns thousands of dollars in redundant token billing.
+
+---
+
+## 💡 The Solution: Dialex AI Hegelian Deliberation
+
+Dialex AI replaces passive conversational chat with **computational Hegelian dialectic tournaments**. It pits heterogeneous frontier models against each other in structured, multi-round debates:
+
+```
+               ┌────────────────────────────────────────────────────────┐
+               │              MISSION-CRITICAL DILEMMA                  │
+               │   "Migrate Monolith to Event-Driven Microservices?"    │
+               └───────────────────────────┬────────────────────────────┘
+                                           │
+                    ┌──────────────────────┴──────────────────────┐
+                    ▼                                             ▼
+       ┌─────────────────────────┐                   ┌─────────────────────────┐
+       │     THESIS (Round 1)    │                   │   ANTITHESIS (Round 2)  │
+       │ The Optimist / Architect│                   │ The Contrarian / SRE    │
+       │ Proposes high-upside    │◄─────────────────►│ Attacks network bounds, │
+       │ decoupled architecture  │   ADVERSARIAL     │ distributed data locks, │
+       │ and team velocity gains │ CROSS-EXAMINATION │ and debugging hell      │
+       └─────────────────────────┘                   └─────────────────────────┘
+                    │                                             │
+                    └──────────────────────┬──────────────────────┘
+                                           │
+                                           ▼
+               ┌────────────────────────────────────────────────────────┐
+               │                  SYNTHESIS (Round 3+)                  │
+               │               The Facilitator & Council                │
+               │   • Hardens unassailable invariants                    │
+               │   • Forces explicit concessions on operational debt    │
+               │   • Distills non-negotiable consensus decision         │
+               └───────────────────────────┬────────────────────────────┘
+                                           │
+         ┌──────────────────┬──────────────┴──────────────┬──────────────────┐
+         ▼                  ▼                             ▼                  ▼
+    📋 Action Plan    ⚖️ Decision Matrix            📊 Pro/Con Tradeoffs  📄 Exec Memo
+```
+
+- **Thesis**: Competing models independently construct distinct initial positions informed by specialized debate personas (*The Optimist*, *The Pragmatist*, *The Risk Analyst*).
+- **Antithesis**: Models directly cross-examine, dissect, and challenge their peers' arguments. Dialex AI’s **3-Tier Anti-Fluff Guardrails** prohibit conversational filler and empty pleasantries.
+- **Synthesis**: The Moderator reconciles verified facts, tracks Bayesian credence shifts, isolates residual dissents, and extracts an executive-ready deliverable.
+
+---
+
+## 🌟 Why Dialex AI Wins: Key Unique Selling Points (USPs)
+
+| Capability | Dialex AI | Single-Model Web UI (ChatGPT / Claude) | Agent Frameworks (AutoGen, CrewAI) | Raw API Scripts |
+|---|:---:|:---:|:---:|:---:|
+| **Adversarial Deliberation** | ✅ **Native Multi-Model Tournament** (Claude vs GPT vs Gemini vs DeepSeek) | ❌ Single Model Only | ⚠️ Code-heavy, high prompt drift | ❌ Manual scripting |
+| **Marginal Token Cost** | 💰 **$0 via Local Dev CLIs** (`claude`, `codex`, `antigravity`) | ❌ Monthly web seat fees | ❌ Expensive cloud API invoices | ❌ Pay per token |
+| **Data Sovereignty & Privacy** | 🔒 **100% Local / Zero-Cloud Vault** (Argon2id + AES-256) | ❌ Cloud telemetry & data retention | ⚠️ Depends on user hosting | ⚠️ Plaintext API keys |
+| **Epistemic Certainty** | 📊 **Bayesian Credence ($P(H\|E)$) Tracking** | ❌ Uncalibrated certainty | ❌ No probabilistic tracking | ❌ None |
+| **Human Steering** | ⚡ **Live Queue & Zero-Conflict Instant Interrupts** | ⚠️ Stop and edit prompt | ❌ Terminal loops / blocking | ❌ Hard kill script |
+| **Executable Outputs** | 🎯 **1-Tap ADRs, Matrices, Code Diffs & HTML Memos** | ⚠️ Unstructured text | ⚠️ Raw JSON dictionaries | ❌ Raw text strings |
+| **Cross-Platform Parity** | 📱 **macOS, Windows, Linux & Android** (with Biometrics) | ⚠️ Simplified mobile web | ❌ Terminal / Python scripts only | ❌ CLI only |
+
+---
+
+## 📸 Interface Showcase
+
+<div align="center">
+  <img src="docs/screenshots/02_deliberation_chat_transcript.png" alt="Dialex AI Live Deliberation Workspace" width="94%" style="border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.35);" />
+  <p><em>Figure 1: Live multi-agent deliberation stream with seat color coordination, round progression, token meter, and human interjection queue.</em></p>
+</div>
+
+<br/>
+
+<table align="center" width="100%">
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/screenshots/03_consensus_outcome_deliverables.png" alt="Moderator Consensus Outcome Bubble" width="100%" style="border-radius: 8px;" />
+      <br/><em>Figure 2: Moderator Consensus Outcome Bubble with 1-tap generative action buttons (ADR, Decision Matrix, Pro/Con, Exec Memo).</em>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/screenshots/04_artifacts_sliding_drawer.png" alt="Artifacts Sliding Drawer" width="100%" style="border-radius: 8px;" />
+      <br/><em>Figure 3: Deliverables Drawer (<code>Cmd+Shift+A</code>) with native Markdown and Executive Memorandum HTML exports.</em>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/screenshots/07_personas_registry_and_custom_library.png" alt="Two-Tab Persona Registry" width="100%" style="border-radius: 8px;" />
+      <br/><em>Figure 4: 10 Universal Roles, 40+ Domain Archetypes, and Custom Badges.</em>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/screenshots/05_mobile_qr_pairing_modal.png" alt="1-Tap QR Companion Pairing" width="100%" style="border-radius: 8px;" />
+      <br/><em>Figure 5: 1-Tap Mobile Companion Pairing with LAN IP and zero-port Tailscale WireGuard mesh support.</em>
+    </td>
+  </tr>
+</table>
+
+---
+
+## 🚀 Ten Breakthrough Epistemic Capabilities
+
+1. 🏛️ **Multi-Model Councils (Up to 6 Frontier Models)**: Convene Anthropic Claude, OpenAI GPT, Google Gemini, DeepSeek R1, xAI Grok, Mistral, and local Ollama in a synchronized deliberation.
+2. 🎯 **Dedicated 1-on-1 Socratic Interview Mode**: Interrogate hypotheses through *Brevis Interrogatio* ($\le 2$ sentences), a live Epistemic Ledger (Invariants vs Concessions), and 1-click Council Elevation.
+3. 🎭 **8-Layer Cognitive Persona DNA & MMOS Studio**: Model deep psychological and epistemological behavior (ontological anchors, cognitive biases, argumentation styles).
+4. 📊 **Real-Time Bayesian Credence Tracking**: Quantify confidence shifts ($P(H|E)$) across debate rounds as claims survive or crumble under cross-examination.
+5. 🔍 **Round-Aware Dynamic Evidence Retrieval**: Automatically detects disputed empirical claims, executes live web/vector searches, and injects ground truth into the next round.
+6. ⚡ **Contradiction & Tension Detection Matrix**: Identifies and surfaces latent diametric oppositions between agents in a dedicated inspection drawer.
+7. 🧩 **Problem Decomposition & Sub-Topic Tree**: Recursively breaks massive architectural dilemmas into parallel sub-debates with aggregated synthesis.
+8. 🛡️ **Autonomous Artifact Sandbox**: Execute, preview, and test generated code diffs, configuration scripts, and deliverables in a secure local runner.
+9. 📱 **Mobile Epistemic Parity with Biometric Security**: 100% feature parity on Android with Navigation 3, hardware biometric gate (Fingerprint/Face), and offline on-device engine.
+10. 🌐 **Sovereign Mesh via Tailscale (`tsnet`)**: Connect mobile and remote clients to your desktop or cloud engine over encrypted WireGuard with zero open firewall ports.
+
+---
+
+## 🏛️ System Topology: Decoupled Dual-Engine Architecture
+
+Dialex AI pairs a high-throughput **Go Orchestration Engine** with a sovereign, reactive **Kotlin Multiplatform (KMP) & Compose Multiplatform** presentation client:
 
 ```mermaid
 flowchart TD
-    subgraph Clients ["Clients (Compose Multiplatform & Web)"]
+    subgraph Clients ["Clients (Compose Multiplatform & Navigation 3)"]
         Desktop["Dialex AI Desktop (macOS / Linux / Windows)"]
-        Mobile["Dialex AI Mobile (Android)"]
-        WebAdmin["Web Admin Dashboard (:8080/admin)"]
+        Mobile["Dialex AI Mobile (Android - Full Parity)"]
     end
 
     subgraph Data ["KMP Data Layer (shared)"]
         EngineClient["EngineClient (Ktor HTTP + SSE Flow)"]
         EngineDS["EngineDataSource (DomainException Mapper)"]
-        AppLogStore["AppLogStore (In-Memory Diagnostics Ring Buffer)"]
+        AppLogStore["AppLogStore (In-Memory Ring Buffer)"]
     end
 
-    subgraph Backend ["Go Orchestration Engine (:8080 / Embedded)"]
-        Server["HTTP REST API & SSE Broadcast Hub"]
-        Orchestrator["Turn Orchestrator State Machine"]
+    subgraph Backend ["Go Orchestration Engine (:8787 / Embedded)"]
+        Server["HTTP REST API & SSE Hub"]
+        Orchestrator["Turn State Machine"]
         ConsensusEngine["Consensus Evaluator & Compactor"]
         Queue["Live Interjection & Interrupt Queue"]
         Store["Atomic JSON Store & Encrypted Vault"]
@@ -59,7 +180,7 @@ flowchart TD
     subgraph Providers ["AI Providers & Local CLI Subprocesses"]
         Anthropic["Anthropic (Claude 3.7 / 3.5 API & CLI)"]
         OpenAI["OpenAI (GPT-4o / Codex CLI)"]
-        Google["Google (Gemini 2.0 / Agy CLI)"]
+        Google["Google (Gemini 2.5 / Agy CLI)"]
         xAI["xAI (Grok API)"]
         DeepSeek["DeepSeek (R1 / V3)"]
         Mistral["Mistral (Large / Codestral)"]
@@ -70,7 +191,6 @@ flowchart TD
     Mobile --> EngineDS
     EngineDS --> EngineClient
     EngineClient --> Server
-    WebAdmin --> Server
     Server --> Orchestrator
     Queue --> Orchestrator
     Orchestrator --> ConsensusEngine
@@ -82,244 +202,106 @@ flowchart TD
 
 ---
 
----
+## 💼 Battle-Tested Enterprise Playbooks
 
-## 📸 Visual Walkthrough & UI Showcase
+Ready-to-run deliberations with battle-tested prompts, council compositions, and expected deliverables:
 
-<div align="center">
-  <img src="docs/screenshots/02_deliberation_chat_transcript.png" alt="Dialex AI Live Deliberation Transcript" width="90%" style="border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);" />
-  <p><em>Figure 1: Live multi-agent debate stream with seat color coding, round progression, cost tracker, and human interjection queue.</em></p>
-</div>
-
-<br/>
-
-<div align="center">
-  <img src="docs/screenshots/03_consensus_outcome_deliverables.png" alt="Moderator Consensus Outcome Bubble and Deliverables" width="90%" style="border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);" />
-  <p><em>Figure 2: Moderator Consensus Outcome Bubble with 1-tap instant generative action buttons (Action Plan, Decision Matrix, Pro/Con, Exec Brief).</em></p>
-</div>
-
-<br/>
-
-<table align="center" width="100%">
-  <tr>
-    <td width="50%" align="center">
-      <img src="docs/screenshots/06_ai_agents_and_cli_runners_settings.png" alt="AI Agents and Local CLI Subprocesses" width="100%" />
-      <br/><em>Figure 3: Multi-provider agents and $0 marginal cost local CLI runners (Claude, Codex, Antigravity, Ollama).</em>
-    </td>
-    <td width="50%" align="center">
-      <img src="docs/screenshots/05_mobile_qr_pairing_modal.png" alt="1-Tap QR Mobile Companion Pairing" width="100%" />
-      <br/><em>Figure 4: 1-Tap QR Companion Pairing with local LAN and zero-port Tailscale WireGuard mesh support.</em>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center">
-      <img src="docs/screenshots/07_personas_registry_and_custom_library.png" alt="Personas Registry and Custom Roles" width="100%" />
-      <br/><em>Figure 5: 10 Universal Debate Archetypes and 40+ Domain Personas with Custom Badges.</em>
-    </td>
-    <td width="50%" align="center">
-      <img src="docs/screenshots/08_persona_studio_ai_builder.png" alt="Persona Studio and AI Prompt Builder" width="100%" />
-      <br/><em>Figure 6: Persona Studio with Ponytail style switch and AI Persona Builder.</em>
-    </td>
-  </tr>
-</table>
+| Strategic Domain | Recommended Council Composition | Key Epistemic Output | Playbook Link |
+|---|---|---|:---:|
+| **Infrastructure Architecture** | Claude 3.7 (Facilitator), GPT-4o (Pragmatist), Gemini 2.5 (Optimist), DeepSeek R1 (Devil's Advocate) | **Architecture Decision Record (ADR)** & Migration Roadmap | [**Playbook 1.1**](docs/USE_CASES.md#playbook-11-event-streaming-infrastructure--apache-kafka-vs-apache-pulsar) |
+| **Cybersecurity Threat Modeling** | Claude 3.7 (Expert), DeepSeek R1 (Red-Team), GPT-4o (Risk Analyst), Gemini 2.5 (Ethicist) | **STRIDE Threat Modeling Matrix** & Blast Radius Map | [**Playbook 2.1**](docs/USE_CASES.md#playbook-21-zero-trust-api-gateway--service-to-service-authorization) |
+| **Executive Strategy & Capital Allocation** | Claude 3.7 (Facilitator), GPT-4o (Optimist), Gemini 2.5 (Pragmatist), Grok (Devil's Advocate) | **Executive Board Memorandum (HTML)** & 3-Year TCO Matrix | [**Playbook 3.1**](docs/USE_CASES.md#playbook-31-cloud-repatriation-vs-multi-cloud-expansion-tco) |
+| **AI / ML Infrastructure Selection** | Claude 3.7 (Facilitator), DeepSeek R1 (Expert), GPT-4o (Risk Analyst) | **Inference Serving ADR** & Cost-Per-Token Benchmark | [**Playbook 4.1**](docs/USE_CASES.md#playbook-41-frontier-cloud-api-vs-self-hosted-quantized-deepseek-r1) |
+| **Over-Engineering Elimination** | Socratic Interviewer: The Pragmatist (Radical First Principles Stance) | **Epistemic Ledger** (Validated Invariants vs Fluff) | [**Playbook 5.1**](docs/USE_CASES.md#playbook-51-the-over-engineered-architecture-challenge) |
 
 ---
 
-## 🌟 Core Capabilities & Features
+## 📑 Complete Documentation Suite Index
 
-### 1. 🏛️ Multi-Model Council (Up to 6 Frontier Models)
-- **Designated Moderator + Peer Seats**: Select a Primary Agent (e.g., Anthropic Claude 3.7 Sonnet) to frame the dilemma, moderate rounds, and synthesize conclusions, accompanied by up to 5 competing peer models.
-- **Dual Execution Modes (API vs CLI)**: Connect directly via encrypted cloud API keys, or shell out to local authenticated developer CLIs (`claude`, `codex`, `antigravity`, or custom bash scripts) with zero extra credentials.
+Explore our comprehensive guides organized in the [`docs/`](docs/README.md) hub:
 
-### 2. 🎭 Two-Tab Persona Registry & Live Customization
-- **10 Universal Debate Archetypes**: Plain-language roles including *The Facilitator*, *Devil's Advocate*, *The Optimist*, *The Pragmatist*, *The Contrarian*, *The Expert*, *The Risk Analyst*, *The Ethicist*, *The Historian*, and *The Futurist*.
-- **40+ Specialized Domain Personas**: Expandable domains covering Software Engineering, Scientific Research, Journalism, Product Strategy, Legal, and Healthcare.
-- **PersonaBadge & Live Edit Sheet**: Selected personas attach as clean chips without polluting context fields. Tap the pencil icon to modify instructions on the fly, toggle **Ponytail Mode** (executive structure), and save as a `(Custom)` persona.
-
-### 3. 🛡️ 3-Tier Anti-Fluff & Anti-Rabbit-Hole Guardrails
-- **Human Dialogue Mode**: Enforces concise turns (2–4 sentences), eliminates sycophantic pleasantries (*"I agree with my colleague"*), and requires direct technical challenges.
-- **Topic Drift Guardrail**: Forbids peripheral semantic debates, forcing agents to pull the deliberation back to the core question.
-- **3-Tier Cascade**: Editable master directives in **Global Settings**, with clean enable/disable toggles in **Project Settings** and **Discussion Setup**.
-
-### 4. ⚡ Live Human Interjections & Instant Interrupts
-- **Queue for Next Round**: Submit human guidance while models are speaking; Dialex queues and injects your comment before the next round begins.
-- **Instant Interrupt**: Immediately halt active model generation, safely finalize partial tokens, and force your interjection as the next turn without 409 conflicts.
-
-### 5. 🎯 Moderator Consensus Outcome & Generative Deliverables
-- **Crisp Consensus Synthesis**: Upon reaching consensus, the moderator generates a dedicated **Moderator Consensus Outcome Bubble** with a bottom-line answer, consensus points, and critical caveats.
-- **Instant Generative Action Buttons**: Directly below the outcome bubble, synthesize specialized deliverables in one tap:
-  - 📋 **Action Plan & Timeline**
-  - ⚖️ **Weighted Decision Matrix**
-  - 📊 **Pro/Con Trade-off Breakdown**
-  - 📄 **Executive Memorandum (HTML)**
-  - 📝 **Engineering Decision Summary**
-  - ✨ **Custom Deliverable Format**
-
-### 6. 🎯 Dedicated 1-on-1 Socratic Interview Mode
-- **Forensic 1-on-1 Interrogation**: Conduct targeted, high-intensity Socratic dialogues directly with an individual persona (e.g., *The Risk Analyst*, *The Ethicist*, *Staff Systems Architect*) without spinning up a full 6-agent council.
-- **5 Epistemic Socratic Stances**:
-  - 🏛️ *Classic Elenchus*: Cross-examines consistency and exposes latent contradictions.
-  - 🔨 *Maieutic Architecture*: Midwives latent system architectures from fuzzy requirements.
-  - ⚛️ *Radical First Principles*: Strips away enterprise dogma down to fundamental physics/math.
-  - 🛡️ *Adversarial Red-Team*: Relentlessly attacks blast radiuses and zero-trust vulnerabilities.
-  - 🌌 *Aporia Boundary-Pusher*: Drives assumptions into intentional paradoxical deadlocks.
-- **Strict *Brevis Interrogatio* Guardrail**: Enforces $\le 2$ sentences per turn, completely eliminating LLM conversational bloat and forcing sharp dialectic tension.
-- **Live Epistemic Ledger**: Real-time sidebar ledger tracking green **Hardened Invariants** vs red strike-through **Surrendered Concessions**.
-- **Dialogue Assist Chips**: 3 reactive Socratic direction chips (*"Defend Invariant"*, *"Concede & Narrow"*, *"Expose Edge Case"*) for rapid iteration.
-- **1-Click Council Elevation**: Conclude interviews with a structured **Socratic Digest** and seamlessly elevate uncovered tensions into a multi-agent Council Debate seeded with the interview's invariants.
-
-### 7. 🧠 Compounding Epistemic Cognitive Engine
-- 🕸️ **Self-Organizing Knowledge Graph**: Embedded SQLite + FTS5 graph with activation decay ($W(t) = W_0 \cdot 2^{-\Delta t / t_{\text{half}}}$) and Hebbian co-reference reinforcement.
-- 🔀 **Pre-Debate Problem Decomposition**: Divergent dual-mind breakdown of user dilemmas into orthogonal sub-axes before convening the council.
-- ⚡ **Paraconsistent Tension Pair Detection**: Real-time extraction of thesis vs antithesis contradictions with unresolved conflict tracking.
-- 🔍 **Round-Aware Dynamic Graph Retrieval (In-Debate RAG)**: Dynamic per-round query expansion retrieving empirical evidence from graph nodes and attached documents.
-
-### 8. ⚔️ Null Hypothesis Benchmarking & Quantitative Evaluation Suite (`DialexBench`)
-- **Automated $H_0$ Significance Testing**: Empirically validates whether multi-agent dialectic deliberation produces statistically superior outcomes compared to a single frontier model baseline.
-- **4 Quantitative Scoring Dimensions**: Factuality ($S_{\text{fact}}$, 30%), Blind Spot Coverage ($S_{\text{blind}}$, 25%), Trade-Off Completeness ($S_{\text{trade}}$, 25%), and Actionability ($S_{\text{action}}$, 20%).
-- **Double-Blind LLM Judge with Position Swapping**: Eliminates LLM primacy and presentation bias by evaluating Pass 1 ($A/B$) and Pass 2 ($B/A$) with anonymous deliverable labeling.
-- **Paired Two-Tailed Student's $t$-test**: Computes exact $p$-values via the regularized incomplete beta function ($I_x(a,b)$), formally rejecting $H_0$ at $p < 0.05$.
-- **Full-Stack Execution & Visuals**:
-  - **Desktop KMP Arena**: Interactive UI with a 4-axis spider/radar chart, head-to-head deliverable viewer, and one-click execution.
-  - **Standalone CLI (`dialexbench`)**: High-throughput terminal runner (`dialexbench list`, `run`, `stats`, `export`).
-  - **Bundled DialexBench-10**: 10 canonical architectural dilemmas with ground-truth traps and trade-off axes.
-  - **Multi-Format Export**: One-tap export to Markdown, CSV, and JSON.
-
-### 9. 🧬 8-Layer Cognitive DNA & MMOS Studio (v1.7)
-- **Standardized Cognitive Schema**: Standardizes personas across 8 foundational dimensions (*Core Identity*, *Epistemic Bias*, *Communication Vector*, *Heuristic Library*, *Taboo Space*, *Domain Ontology*, *Adversarial Posture*, *Synthesis Preference*).
-- **Taboo Space Negative Constraints**: Explicit negative constraints forbidding marketing buzzwords, ungrounded speculation, or anti-patterns.
-- **MMOS Interoperability**: Industry-standard YAML and JSON import/export matching Mind Matrix Open Standard.
-
-### 10. 📱 Mobile Epistemic Parity Suite & Zero-Wait Autopilot (v1.8)
-- **Full Mobile Parity**: Dedicated Socratic Interview FAB, Benchmark Arena mobile viewport with responsive radar charts, project hierarchy with knowledge graph links, and touch-optimized bottom sheets for Dynamic RAG evidence citations and Tension Matrix drawers.
-- **Zero-Wait Autonomous Autopilot**: Instant 1-tap initiation without requiring redundant human input or setup pauses.
-
-### 11. 📊 Bayesian Credence Tracking & Epistemic Uncertainty Network (v1.9)
-- **Quantitative Probability Invariants**: Dynamically extracts a finite hypothesis space ($\mathcal{H} = \{ H_1, \dots, H_K \}$) and tracks round-by-round prior and posterior probability distributions ($P(H \mid E)$) with DNA domain authority weights.
-- **Epistemic Shannon Entropy ($\mathcal{S}$)**: Computes real-time entropy in bits to mathematically quantify consensus convergence ($\mathcal{S} < 0.8$) vs deadlock ($\mathcal{S} > 1.4$).
-- **Likelihood Ratio ($\Lambda$) Tipping Points**: Detects decisive evidence citations ($\Lambda \ge 2.5$ or $\le 0.4$) shifting council belief.
-- **Interactive Bézier Credence Ribbon Canvas**: Desktop modal and mobile bottom sheet (`Cmd+Shift+B`) rendering smooth probability area flows across rounds.
-- **Audit-Ready Bayesian Decision Matrix**: Embeds probability shift tables and tipping points directly in generated ADRs, Markdown docs, and Executive Memorandums.
-
-### 12. ⚡ Autonomous Artifact Sandbox & Code Verification Engine (v2.0)
-- **Multi-Language Isolated Execution**: Micro-sandbox supporting Go, Python, TypeScript, Rust, SQLite, and Bash in ephemeral scratch directories (`0700`) with process group termination and environment sanitization.
-- **Closed-Loop Verification Feedback**: Code compilation errors or test failures during automated deliberation rounds feed compiler diagnostics directly back to council models as empirical challenges.
-- **Interactive Sandbox Terminal Drawer**: `Cmd+Shift+X` / `Ctrl+Shift+X` modal in desktop and mobile with live stdout/stderr streams, resource telemetry (execution time, memory), and "Run in Sandbox" buttons on transcript code blocks.
-- **Empirical Verification Badges**: Proof-of-execution seals embedded into exported Architecture Decision Records (ADRs) and Executive Memorandums.
+| Category | Guide | Purpose & Target Audience | Link |
+|---|---|---|:---:|
+| 📖 **Philosophy** | **Product Philosophy & Epistemology** | Hegelian dialectics, Bayesian updating, anti-fluff guardrails, and data sovereignty. | [**docs/PRODUCT_PHILOSOPHY.md**](docs/PRODUCT_PHILOSOPHY.md) |
+| 👔 **Strategy** | **Executive Overview** | Business ROI, synthetic advisory board economics, and enterprise risk. | [**docs/EXECUTIVE_OVERVIEW.md**](docs/EXECUTIVE_OVERVIEW.md) |
+| 🎯 **Playbooks** | **Enterprise Use Cases Guide** | Ready-to-run prompts, council matrices, and outputs for architects and executives. | [**docs/USE_CASES.md**](docs/USE_CASES.md) |
+| 📖 **Handbook** | **User Guide & Deliberation Manual** | Comprehensive manual: council setup, roles, Socratic mode, mobile pairing. | [**docs/USER_GUIDE.md**](docs/USER_GUIDE.md) |
+| 🏛️ **Architecture** | **System Architecture & Call Chains** | KMP Clean Architecture, Navigation 3, MVI flow, Go state machine, AES vault. | [**docs/ARCHITECTURE.md**](docs/ARCHITECTURE.md) |
+| 🖥️ **Server** | **Server & Go Engine Setup** | Binary compilation, systemd/launchd daemons, Docker Compose, Tailscale mesh. | [**docs/SERVER_SETUP.md**](docs/SERVER_SETUP.md) |
+| 📱 **Client** | **Client Applications Setup** | 1-Click Desktop installers (DMG/MSI/AppImage), Android APK, biometric lock. | [**docs/CLIENT_SETUP.md**](docs/CLIENT_SETUP.md) |
+| 🛠️ **Developers** | **Developer Guide & Kolt Framework** | Workspace setup, **KoltLibs** composite build (`compose-kmp`), adding model runners. | [**docs/DEVELOPER_GUIDE.md**](docs/DEVELOPER_GUIDE.md) |
+| 🔌 **API** | **REST & SSE API Reference** | Complete HTTP endpoints, JWT authentication, SSE schemas, and curl examples. | [**docs/API_REFERENCE.md**](docs/API_REFERENCE.md) |
+| 🔮 **Epistemics** | **Advanced Epistemic Specifications** | 10 formal technical specifications for all advanced intelligence modules. | [**docs/features/**](docs/README.md#5-advanced-feature-specifications-docsfeatures) |
 
 ---
 
-## 🛠️ Build Requirements & The Kolt Ecosystem Dependency
+## 🚀 Quick Start & Installation
 
-> [!IMPORTANT]
-> **Dialex depends on the Kolt Ecosystem (`KoltLibs`) via a Gradle Composite Build.**  
-> If you are building Dialex from source, you **must clone `KoltLibs` alongside `DialexAI`**.
+### 1. Standalone Desktop Installers (End-Users)
+Download the native, pre-packaged installer for your operating system from the latest release:
+- 🍏 **macOS**: `Dialex-x.x.x.dmg` (Apple Silicon & Intel)
+- 🪟 **Windows**: `Dialex-Setup-x.x.x.msi`
+- 🐧 **Linux**: `Dialex-x.x.x.AppImage` / `dialex_amd64.deb`
+- 🤖 **Android**: `Dialex-Mobile-x.x.x.apk`
 
-### Getting the Kolt Libraries
-Dialex utilizes `io.github.koltsystems.koltx` libraries (`compose-kmp`, `utils`, `logutils`) developed by **Kolta Labs**. In `settings.gradle.kts`, Dialex includes `../KoltLibs` as a composite build:
+*No terminal commands or external dependencies required. Simply install and launch.*
 
-```kotlin
-includeBuild("../KoltLibs") {
-    dependencySubstitution {
-        substitute(module("io.github.koltsystems.koltx:utils")).using(project(":libs:utils"))
-        substitute(module("io.github.koltsystems.koltx:logutils")).using(project(":libs:logutils"))
-        substitute(module("io.github.koltsystems.koltx:compose-kmp")).using(project(":libs:compose-kmp"))
-    }
-}
-```
-
-### Step-by-Step Clone & Build Instructions
+### 2. Self-Hosting the Standalone Go Engine (Docker Compose)
+To host a dedicated, persistent deliberation engine on your private server:
 
 ```bash
-# 1. Create a parent workspace directory
+# Clone the repository
+git clone https://github.com/Kolta-Labs/DialexAI.git && cd DialexAI
+
+# Launch via Docker Compose with private volume storage
+docker compose -f selfhosting/docker-compose.yml up -d
+```
+The engine exposes its REST API and SSE stream on `http://localhost:8787` (or securely across your Tailnet via `tsnet`).
+
+### 3. Developer Source Build: The Kolt Ecosystem (`KoltLibs`)
+
+> [!IMPORTANT]
+> Dialex AI relies on the **Kolt Ecosystem (`KoltLibs`)** via Gradle Composite Build (`includeBuild`).  
+> Clone `KoltLibs` into the same parent directory alongside `DialexAI`:
+
+```bash
+# 1. Create a parent workspace
 mkdir -p ~/Workspace && cd ~/Workspace
 
-# 2. Clone the KoltLibs repository
+# 2. Clone KoltLibs and DialexAI
 git clone https://github.com/Kolta-Labs/KoltLibs.git
-
-# 3. Clone DialexAI into the same parent directory
 git clone https://github.com/Kolta-Labs/DialexAI.git
 
-# Verify directory layout:
+# 3. Verify directory structure:
 # ~/Workspace/
 #   ├── KoltLibs/
 #   └── DialexAI/
 
-# 4. Navigate into DialexAI and run the Desktop application
+# 4. Run test suite and launch Desktop
 cd DialexAI
+./gradlew desktopTest
 ./gradlew :desktopApp:run
 ```
 
-*For more details on Kolt architecture and module substitutions, refer to the [Developer Guide](docs/DEVELOPER_GUIDE.md#2-kolt-ecosystem-koltlibs-dependency--setup).*
+---
+
+## 🔒 Security & Data Sovereignty Guarantees
+
+- **Zero Third-Party SaaS Tracking**: Deliberation transcripts never touch a proprietary Dialex cloud. All data is persisted to your local disk or self-hosted server.
+- **Hardware-Backed Cryptography**: Stored API keys are encrypted with **Argon2id + AES-256-GCM**, leveraging the Android Hardware Keystore (TEE/StrongBox) on mobile.
+- **Air-Gapped Operation**: Completely functional offline when paired with local models via **Ollama**.
 
 ---
 
-## 🚀 Quick Start Workflows
+## 📄 License & Commercial Terms
 
-### 1. Run the Desktop GUI (macOS / Linux / Windows)
-Prerequisites: JDK 17 or 21, and the `KoltLibs` directory in place.
+Dialex AI is published under the **PolyForm Noncommercial License 1.0.0**.
 
-```bash
-./gradlew :desktopApp:run
-```
-*The desktop app automatically starts a managed local Go engine if one is not already running on port 8080.*
+- **Free for Personal, Academic & Open-Source Research**: Individuals, researchers, students, and hobbyists may freely inspect, modify, run, and distribute the platform.
+- **Commercial & Enterprise Licensing**: Any use to operate a commercial business, generate revenue, or provide paid advisory services requires a commercial license from **Kolta Labs**. For commercial inquiries, contact `licensing@koltalabs.com`.
 
 ---
 
-### 2. Run with Docker Compose
-Deploy the Go orchestration engine in a Docker container:
-
-```bash
-cd selfhosting
-docker compose up -d
-```
-Access the embedded **Web Admin Dashboard** at `http://localhost:8080/admin`.
-
----
-
-### 3. Deploy via Tailscale Mesh (Zero Port Forwarding)
-```bash
-cd selfhosting
-TS_AUTHKEY="tskey-auth-xxxx" docker compose -f docker-compose.tailscale.yml up -d
-```
-Your server is now securely accessible across all your devices at `http://dialex:8080`.
-
----
-
-### 4. Run Dialex AI Mobile (Android)
-```bash
-# Build and install to connected phone or emulator
-./gradlew :androidApp:installDebug
-```
-*Use the built-in QR Code Scanner to link your phone to your desktop or self-hosted server in one tap.*
-
----
-
-## 🔒 Security & Credential Vault
-
-- **AES-256-GCM Vault**: API keys stored at rest are encrypted with keys derived using Argon2id.
-- **Hardware Keystore**: Android keys are anchored in the device's hardware security module (TEE/StrongBox).
-- **Subprocess Environment Sanitization**: Local CLI child processes have parent environment variables stripped to prevent credential leaks.
-- **In-Memory Diagnostics (`AppLogStore`)**: High-speed circular ring buffer storing up to 1,000 events viewable under **Settings > Logs**.
-
----
-
-## 🤝 Contributing & Standards
-
-Contributions are welcome! Please ensure all pull requests comply with our architectural standards:
-- Check out the [Developer Guide](docs/DEVELOPER_GUIDE.md).
-- Verify the Desktop target compiles cleanly: `./gradlew :shared:compileKotlinDesktop`.
-- Verify the Go engine test suite passes: `cd engine && go test -race ./pkg/...`.
-
----
-
-## 📄 License
-
-Dialex AI is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE).
-
-- **Free for Individuals & Noncommercial Use**: You are free to use, modify, test, and distribute the software for personal study, research, education, hobby, or noncommercial pursuits.
-- **Commercial Use**: Any use to run a commercial business or provide services for a fee requires a commercial agreement from **Kolta Labs**. For commercial inquiries, contact `licensing@koltalabs.com`.
-
----
-
-*Copyright (c) 2026 Kolta Labs. Licensed under the [PolyForm Noncommercial License 1.0.0](file:///LICENSE).*
+<div align="center">
+  <sub>Built with ❤️ by <strong>Kolta Labs</strong> · Empowering Sovereign Collective Machine Intelligence</sub>
+</div>
