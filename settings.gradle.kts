@@ -27,6 +27,10 @@ includeBuild(koltPath) {
         substitute(module("io.github.koltsystems.koltx:utils")).using(project(":libs:utils"))
         substitute(module("io.github.koltsystems.koltx:logutils")).using(project(":libs:logutils"))
         substitute(module("io.github.koltsystems.koltx:compose-kmp")).using(project(":libs:compose-kmp"))
+        substitute(module("io.github.koltalabs.kolt:kolt-bom")).using(project(":libs:bom"))
+        substitute(module("io.github.koltalabs.kolt:utils")).using(project(":libs:utils"))
+        substitute(module("io.github.koltalabs.kolt:logutils")).using(project(":libs:logutils"))
+        substitute(module("io.github.koltalabs.kolt:compose-kmp")).using(project(":libs:compose-kmp"))
     }
 }
 
