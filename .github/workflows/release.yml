@@ -222,12 +222,15 @@ jobs:
       - name: Stage Android Artifacts
         run: |
           mkdir -p staging-android
-          if [ -f DialexAI/androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk ]; then
-            cp DialexAI/androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}.apk
-          elif [ -f DialexAI/androidApp/build/outputs/apk/release/androidApp-release.apk ]; then
-            cp DialexAI/androidApp/build/outputs/apk/release/androidApp-release.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}.apk
-          else
-            cp DialexAI/androidApp/build/outputs/apk/debug/androidApp-debug.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}-debug.apk
+          # Copy universal installable APK (signed with debug keystore, ready to sideload)
+          if [ -f DialexAI/androidApp/build/outputs/apk/debug/androidApp-debug.apk ]; then
+            cp DialexAI/androidApp/build/outputs/apk/debug/androidApp-debug.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}.apk
+          fi
+          # Also copy release APK if generated
+          if [ -f DialexAI/androidApp/build/outputs/apk/release/androidApp-release.apk ]; then
+            cp DialexAI/androidApp/build/outputs/apk/release/androidApp-release.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}-release.apk
+          elif [ -f DialexAI/androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk ]; then
+            cp DialexAI/androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}-unsigned.apk
           fi
 
       - name: Upload Android Artifacts
@@ -363,6 +366,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare-release.outputs.tag_name }}
+          target_commitish: ${{ github.sha }}
           name: Dialex AI ${{ needs.prepare-release.outputs.tag_name }}
           body_path: release_notes.md
           draft: ${{ needs.prepare-release.outputs.is_draft == 'true' }}
@@ -378,5 +382,7 @@ jobs:
           if git status --porcelain | grep -q CHANGELOG.md; then
             git add CHANGELOG.md gradle.properties
             git commit -m "docs(changelog): update release notes for ${{ needs.prepare-release.outputs.tag_name }} [skip ci]"
-            git push origin HEAD:${{ github.ref_name }}
+            if [[ "${{ github.ref }}" != refs/tags/* ]]; then
+              git push origin HEAD:${{ github.ref_name }}
+            fi
           fi

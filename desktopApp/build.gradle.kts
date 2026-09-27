@@ -42,7 +42,7 @@ compose.desktop {
             macOS {
                 bundleID = "com.koltalabs.dialex"
                 dockName = "Dialex AI"
-                iconFile.set(project.file("src/jvmMain/resources/icons/icon.icns"))
+                iconFile.set(project.file("src/jvmMain/resources/icon.icns"))
             }
             windows {
                 menuGroup = "Kolta Labs"
