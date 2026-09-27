@@ -77,6 +77,7 @@ jobs:
         with:
           repository: Kolta-Labs/KoltLibs
           path: KoltLibs
+          token: ${{ secrets.KOLTLIBS_PAT || secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Setup Java JDK 21
         uses: actions/setup-java@v4
@@ -117,6 +118,7 @@ jobs:
         with:
           repository: Kolta-Labs/KoltLibs
           path: KoltLibs
+          token: ${{ secrets.KOLTLIBS_PAT || secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Setup Java JDK 21
         uses: actions/setup-java@v4
@@ -158,6 +160,7 @@ jobs:
         with:
           repository: Kolta-Labs/KoltLibs
           path: KoltLibs
+          token: ${{ secrets.KOLTLIBS_PAT || secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Setup Java JDK 21
         uses: actions/setup-java@v4
@@ -202,6 +205,7 @@ jobs:
         with:
           repository: Kolta-Labs/KoltLibs
           path: KoltLibs
+          token: ${{ secrets.KOLTLIBS_PAT || secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Setup Java JDK 21
         uses: actions/setup-java@v4
