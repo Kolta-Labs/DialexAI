@@ -90,7 +90,7 @@ jobs:
 
       - name: Package macOS DMG
         working-directory: DialexAI
-        run: ./gradlew :desktopApp:packageDmg -Papp.version=${{ needs.prepare-release.outputs.version }} --no-daemon
+        run: ./gradlew :desktopApp:packageDmg "-Papp.version=${{ needs.prepare-release.outputs.version }}" --no-daemon
 
       - name: Stage macOS Artifacts
         run: |
@@ -131,7 +131,8 @@ jobs:
 
       - name: Package Windows MSI Installer
         working-directory: DialexAI
-        run: ./gradlew :desktopApp:packageMsi -Papp.version=${{ needs.prepare-release.outputs.version }} --no-daemon
+        shell: bash
+        run: ./gradlew :desktopApp:packageMsi "-Papp.version=${{ needs.prepare-release.outputs.version }}" --no-daemon
 
       - name: Stage Windows Artifacts
         shell: bash
@@ -176,7 +177,7 @@ jobs:
 
       - name: Package Linux DEB and RPM
         working-directory: DialexAI
-        run: ./gradlew :desktopApp:packageDeb :desktopApp:packageRpm -Papp.version=${{ needs.prepare-release.outputs.version }} --no-daemon
+        run: ./gradlew :desktopApp:packageDeb :desktopApp:packageRpm "-Papp.version=${{ needs.prepare-release.outputs.version }}" --no-daemon
 
       - name: Stage Linux Artifacts
         run: |
@@ -221,7 +222,7 @@ jobs:
 
       - name: Build Android APKs
         working-directory: DialexAI
-        run: ./gradlew :androidApp:assembleRelease :androidApp:assembleDebug -Papp.version=${{ needs.prepare-release.outputs.version }} --no-daemon
+        run: ./gradlew :androidApp:assembleRelease :androidApp:assembleDebug "-Papp.version=${{ needs.prepare-release.outputs.version }}" --no-daemon
 
       - name: Stage Android Artifacts
         run: |
