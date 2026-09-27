@@ -292,22 +292,22 @@ docker compose -f selfhosting/docker-compose.yml up -d
 ```
 The engine exposes its REST API and SSE stream on `http://localhost:8787` (or securely across your Tailnet via `tsnet`).
 
-### 3. Developer Source Build: The Kolt Ecosystem (`KoltLibs`)
+### 3. Developer Source Build: The Kolt Ecosystem (`Kolt`)
 
-Dialex AI relies on the **Kolt Ecosystem (`KoltLibs`)** via Gradle Composite Build (`includeBuild`).  
-Clone `KoltLibs` into the same parent directory alongside `DialexAI`:
+Dialex AI relies on the **Kolt Ecosystem** via Gradle Composite Build (`includeBuild`).  
+Clone `Kolt` into the same parent directory alongside `DialexAI`:
 
 ```bash
 # 1. Create a parent workspace
 mkdir -p ~/Workspace && cd ~/Workspace
 
-# 2. Clone KoltLibs and DialexAI
-git clone https://github.com/Kolta-Labs/KoltLibs.git
+# 2. Clone Kolt and DialexAI
+git clone https://github.com/Kolta-Labs/Kolt.git
 git clone https://github.com/Kolta-Labs/DialexAI.git
 
 # 3. Verify directory structure:
 # ~/Workspace/
-#   ├── KoltLibs/
+#   ├── Kolt/ (or KoltLibs/)
 #   └── DialexAI/
 
 # 4. Run test suite and launch Desktop

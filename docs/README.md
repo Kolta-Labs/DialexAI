@@ -101,25 +101,25 @@ mindmap
 
 ---
 
-## 🛠️ Essential Setup for Developers: The Kolt Ecosystem (`KoltLibs`)
+## Essential Setup for Developers: The Kolt Ecosystem (`Kolt`)
 
 > [!IMPORTANT]
-> **Dialex AI depends directly on the Kolt Ecosystem (`KoltLibs`) via a Gradle Composite Build (`includeBuild`).**  
-> If you are building from source, clone `KoltLibs` into the same parent directory alongside `DialexAI`:
+> **Dialex AI depends directly on the Kolt Ecosystem (`Kolt`) via a Gradle Composite Build (`includeBuild`).**  
+> If you are building from source, clone `Kolt` into the same parent directory alongside `DialexAI`:
 
 ```bash
 # 1. Create a parent workspace directory
 mkdir -p ~/Workspace && cd ~/Workspace
 
-# 2. Clone KoltLibs
-git clone https://github.com/Kolta-Labs/KoltLibs.git
+# 2. Clone Kolt
+git clone https://github.com/Kolta-Labs/Kolt.git
 
-# 3. Clone DialexAI alongside KoltLibs
+# 3. Clone DialexAI alongside Kolt
 git clone https://github.com/Kolta-Labs/DialexAI.git
 
 # 4. Confirm directory structure:
 # ~/Workspace/
-#   ├── KoltLibs/
+#   ├── Kolt/ (or KoltLibs/)
 #   └── DialexAI/
 ```
 

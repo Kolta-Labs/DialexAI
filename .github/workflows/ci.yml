@@ -20,10 +20,10 @@ jobs:
         with:
           path: DialexAI
 
-      - name: Checkout KoltLibs Dependency
+      - name: Checkout Kolt Dependency
         uses: actions/checkout@v4
         with:
-          repository: Kolta-Labs/KoltLibs
+          repository: Kolta-Labs/Kolt
           path: KoltLibs
           token: ${{ secrets.KOLTLIBS_PAT || secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 
@@ -51,10 +51,10 @@ jobs:
         with:
           path: DialexAI
 
-      - name: Checkout KoltLibs Dependency
+      - name: Checkout Kolt Dependency
         uses: actions/checkout@v4
         with:
-          repository: Kolta-Labs/KoltLibs
+          repository: Kolta-Labs/Kolt
           path: KoltLibs
           token: ${{ secrets.KOLTLIBS_PAT || secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 

@@ -17,7 +17,12 @@ dependencyResolutionManagement {
         mavenLocal()
     }
 }
-includeBuild("../KoltLibs") {
+val koltPath = when {
+    File(rootDir.parentFile, "KoltLibs").exists() -> "../KoltLibs"
+    File(rootDir.parentFile, "Kolt").exists() -> "../Kolt"
+    else -> "../KoltLibs"
+}
+includeBuild(koltPath) {
     dependencySubstitution {
         substitute(module("io.github.koltsystems.koltx:utils")).using(project(":libs:utils"))
         substitute(module("io.github.koltsystems.koltx:logutils")).using(project(":libs:logutils"))

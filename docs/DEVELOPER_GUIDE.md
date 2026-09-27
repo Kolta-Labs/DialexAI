@@ -61,15 +61,15 @@ To build Dialex AI from source, follow this workspace layout:
 # 1. Create a parent workspace directory
 mkdir -p ~/Workspace && cd ~/Workspace
 
-# 2. Clone the KoltLibs repository
-git clone https://github.com/Kolta-Labs/KoltLibs.git
+# 2. Clone the Kolt repository
+git clone https://github.com/Kolta-Labs/Kolt.git
 
-# 3. Clone DialexAI alongside KoltLibs
+# 3. Clone DialexAI alongside Kolt
 git clone https://github.com/Kolta-Labs/DialexAI.git
 
 # 4. Confirm the sibling directory layout:
 # ~/Workspace/
-#   ├── KoltLibs/
+#   ├── Kolt/ (or KoltLibs/)
 #   └── DialexAI/
 ```
 

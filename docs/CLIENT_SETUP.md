@@ -60,15 +60,15 @@ If you are an end-user and do **not** want to use terminal commands or build fro
 # 1. Create a parent workspace directory
 mkdir -p ~/Workspace && cd ~/Workspace
 
-# 2. Clone KoltLibs
-git clone https://github.com/Kolta-Labs/KoltLibs.git
+# 2. Clone Kolt
+git clone https://github.com/Kolta-Labs/Kolt.git
 
-# 3. Clone DialexAI alongside KoltLibs
+# 3. Clone DialexAI alongside Kolt
 git clone https://github.com/Kolta-Labs/DialexAI.git
 
 # 4. Verify directory layout:
 # ~/Workspace/
-#   ├── KoltLibs/
+#   ├── Kolt/ (or KoltLibs/)
 #   └── DialexAI/
 ```
 
