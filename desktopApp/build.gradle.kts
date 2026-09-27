@@ -46,6 +46,9 @@ compose.desktop {
             }
             windows {
                 menuGroup = "Kolta Labs"
+                upgradeUuid = "B9F01447-2442-4818-A9D3-7BD6718C80DE"
+                shortcut = true
+                menu = true
                 iconFile.set(project.file("src/jvmMain/resources/icon.ico"))
             }
             linux {

@@ -108,6 +108,10 @@ jobs:
     needs: prepare-release
     runs-on: windows-latest
     steps:
+      - name: Configure Git Line Endings
+        shell: bash
+        run: git config --global core.autocrlf false
+
       - name: Checkout DialexAI
         uses: actions/checkout@v4
         with:
@@ -125,6 +129,16 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+
+      - name: Verify and Add WiX Toolset to PATH
+        shell: bash
+        run: |
+          for p in "C:/Program Files (x86)/WiX Toolset v3.11/bin" "C:/Program Files (x86)/WiX Toolset v3.14/bin"; do
+            if [ -d "$p" ]; then
+              echo "$p" >> $GITHUB_PATH
+              echo "WiX found at $p"
+            fi
+          done
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
