@@ -191,37 +191,138 @@ Dialex includes ready-to-run **Playbooks**—pre-configured debate templates wit
 
 ## Quick Start & Installation
 
-### Option 1: Install with Homebrew (macOS)
-The fastest way to install on macOS without manual downloading:
+Install Dialex AI via your platform's package manager, or download the pre-packaged binary directly for your operating system.
 
+<table align="center" width="100%">
+  <thead>
+    <tr>
+      <th align="center">Platform</th>
+      <th align="center">Homebrew Available?</th>
+      <th align="center">Package / Binary</th>
+      <th align="center">Direct Download</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td align="center">
+        <img src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS" /><br/>
+        <strong>macOS</strong>
+      </td>
+      <td align="center">
+        ✅ <strong>Yes</strong><br/>
+        <code>brew install --cask dialex</code> (GUI)<br/>
+        <code>brew install dialex</code> (CLI)
+      </td>
+      <td align="center">Native <code>.dmg</code> & Go binary</td>
+      <td align="center">
+        <a href="https://github.com/Kolta-Labs/DialexAI/releases/latest"><strong>⬇️ Download .dmg</strong></a><br/>
+        <small>Apple Silicon & Intel</small>
+      </td>
+    </tr>
+    <tr>
+      <td align="center">
+        <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows" /><br/>
+        <strong>Windows</strong>
+      </td>
+      <td align="center">
+        ❌ <em>Use <code>winget</code> or MSI</em><br/>
+        <code>winget install KoltaLabs.DialexAI</code>
+      </td>
+      <td align="center">Windows <code>.msi</code> installer</td>
+      <td align="center">
+        <a href="https://github.com/Kolta-Labs/DialexAI/releases/latest"><strong>⬇️ Download .msi</strong></a><br/>
+        <small>Windows 10 / 11 (64-bit)</small>
+      </td>
+    </tr>
+    <tr>
+      <td align="center">
+        <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux" /><br/>
+        <strong>Linux</strong>
+      </td>
+      <td align="center">
+        ✅ <strong>Yes (Engine & CLI)</strong><br/>
+        <code>brew install dialex</code>
+      </td>
+      <td align="center"><code>.deb</code> (Debian/Ubuntu)<br/><code>.rpm</code> (Fedora/RHEL)</td>
+      <td align="center">
+        <a href="https://github.com/Kolta-Labs/DialexAI/releases/latest"><strong>⬇️ Download .deb</strong></a> · 
+        <a href="https://github.com/Kolta-Labs/DialexAI/releases/latest"><strong>.rpm</strong></a><br/>
+        <small>x86_64 & ARM64</small>
+      </td>
+    </tr>
+    <tr>
+      <td align="center">
+        <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android" /><br/>
+        <strong>Android</strong>
+      </td>
+      <td align="center">❌ <em>Mobile APK</em></td>
+      <td align="center">Android <code>.apk</code></td>
+      <td align="center">
+        <a href="https://github.com/Kolta-Labs/DialexAI/releases/latest"><strong>⬇️ Download .apk</strong></a><br/>
+        <small>Phone & Tablet</small>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<br/>
+
+### Platform-Specific Setup
+
+#### 🍏 macOS
+Tap the repository once, then install with standard Homebrew commands:
 ```bash
 # 1. Tap this repository (one-time setup)
 brew tap kolta-labs/dialex https://github.com/Kolta-Labs/DialexAI.git
 
-# Option A: Desktop App + Engine (GUI)
+# Option A: Full Desktop App + Engine (GUI)
 brew install --cask dialex
 
-# Option B: Engine + CLI only (Headless / Terminal / Server)
+# Option B: Engine + CLI only (Headless / Server)
 brew install dialex
 brew services start dialex
 ```
+*Or manually download the [macOS .dmg installer](https://github.com/Kolta-Labs/DialexAI/releases/latest).*
 
 ---
 
-### Option 2: Pre-packaged Installers (Direct Download)
-Download the installer for your operating system from the latest release:
-
-* 🍏 **macOS**: `Dialex-x.x.x.dmg` *(Apple Silicon & Intel)*
-* 🪟 **Windows**: `Dialex-Setup-x.x.x.msi`
-* 🐧 **Linux**: `Dialex-x.x.x.AppImage` or `.deb`
-* 📱 **Android**: `Dialex-Mobile-x.x.x.apk`
-
-*No terminal commands or programming knowledge required. Simply download, install, and open.*
+#### 🪟 Windows
+Install via the native Windows Package Manager (`winget`) or standard installer:
+```powershell
+# Install via winget
+winget install --id KoltaLabs.DialexAI -e
+```
+*Or manually download and run the [DialexAI-Windows-x64.msi installer](https://github.com/Kolta-Labs/DialexAI/releases/latest).*
 
 ---
 
-### Option 3: Self-Hosting the Server (Docker)
-If you want to host a private deliberation engine on your home lab or office server:
+#### 🐧 Linux
+Install the deliberation engine and CLI via Homebrew on Linux, or download native desktop packages:
+```bash
+# Engine + CLI via Homebrew on Linux:
+brew tap kolta-labs/dialex https://github.com/Kolta-Labs/DialexAI.git
+brew install dialex
+
+# Desktop GUI via native package manager:
+# Ubuntu / Debian (.deb):
+sudo apt install ./DialexAI-*-Linux-amd64.deb
+
+# Fedora / RHEL (.rpm):
+sudo dnf install ./DialexAI-*-Linux-amd64.rpm
+```
+*Direct download: [Debian/Ubuntu (.deb)](https://github.com/Kolta-Labs/DialexAI/releases/latest) · [Fedora/RHEL (.rpm)](https://github.com/Kolta-Labs/DialexAI/releases/latest).*
+
+---
+
+#### 📱 Android Companion App
+Download the [Dialex Mobile APK](https://github.com/Kolta-Labs/DialexAI/releases/latest), open it on your Android device, and pair with your desktop instance in seconds using the in-app QR code.
+
+---
+
+### Docker & Developer Builds
+
+<details>
+<summary><strong>🐳 Self-Hosting with Docker Compose</strong></summary>
 
 ```bash
 # Clone the repository
@@ -231,11 +332,10 @@ git clone https://github.com/Kolta-Labs/DialexAI.git && cd DialexAI
 docker compose -f selfhosting/docker-compose.yml up -d
 ```
 The server will be available on `http://localhost:8787` (or across your private network via Tailscale).
+</details>
 
----
-
-### Option 4: Building from Source (Developers)
-Dialex AI is built with **Kotlin Multiplatform** and **Go**:
+<details>
+<summary><strong>🛠️ Building from Source (Developers)</strong></summary>
 
 ```bash
 # 1. Clone Kolt and DialexAI side-by-side in your workspace
@@ -248,6 +348,7 @@ cd DialexAI
 ./gradlew :desktopApp:run
 ```
 *For detailed setup instructions, see the [Developer Guide](docs/DEVELOPER_GUIDE.md).*
+</details>
 
 ---
 
