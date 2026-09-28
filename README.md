@@ -191,7 +191,24 @@ Dialex includes ready-to-run **Playbooks**—pre-configured debate templates wit
 
 ## Quick Start & Installation
 
-### Option 1: Desktop & Mobile Apps (Easiest)
+### Option 1: Install with Homebrew (macOS)
+The fastest way to install on macOS without manual downloading:
+
+```bash
+# 1. Tap this repository (one-time setup)
+brew tap kolta-labs/dialex https://github.com/Kolta-Labs/DialexAI.git
+
+# Option A: Desktop App + Engine (GUI)
+brew install --cask dialex
+
+# Option B: Engine + CLI only (Headless / Terminal / Server)
+brew install dialex
+brew services start dialex
+```
+
+---
+
+### Option 2: Pre-packaged Installers (Direct Download)
 Download the installer for your operating system from the latest release:
 
 * 🍏 **macOS**: `Dialex-x.x.x.dmg` *(Apple Silicon & Intel)*
@@ -203,7 +220,7 @@ Download the installer for your operating system from the latest release:
 
 ---
 
-### Option 2: Self-Hosting the Server (Docker)
+### Option 3: Self-Hosting the Server (Docker)
 If you want to host a private deliberation engine on your home lab or office server:
 
 ```bash
@@ -217,7 +234,7 @@ The server will be available on `http://localhost:8787` (or across your private 
 
 ---
 
-### Option 3: Building from Source (Developers)
+### Option 4: Building from Source (Developers)
 Dialex AI is built with **Kotlin Multiplatform** and **Go**:
 
 ```bash

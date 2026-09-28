@@ -394,14 +394,63 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Commit & Push Updated Changelog if Modified
+      - name: Update Homebrew Formula & Cask
+        run: |
+          VER="${{ needs.prepare-release.outputs.version }}"
+          
+          get_sha() {
+            grep "$1" dist-release/SHA256SUMS.txt | awk '{print $1}' | head -n 1
+          }
+
+          SHA_DMG=$(get_sha "DialexAI-${VER}-macOS-arm64.dmg")
+          SHA_DARWIN_ARM64=$(get_sha "dialex-engine-v${VER}-darwin-arm64.tar.gz")
+          SHA_DARWIN_AMD64=$(get_sha "dialex-engine-v${VER}-darwin-amd64.tar.gz")
+          SHA_LINUX_ARM64=$(get_sha "dialex-engine-v${VER}-linux-arm64.tar.gz")
+          SHA_LINUX_AMD64=$(get_sha "dialex-engine-v${VER}-linux-amd64.tar.gz")
+
+          if [ -f Casks/dialex.rb ] && [ -n "$SHA_DMG" ]; then
+            sed -i.bak "s/version \".*\"/version \"${VER}\"/" Casks/dialex.rb
+            sed -i.bak "s/sha256 \".*\"/sha256 \"${SHA_DMG}\"/" Casks/dialex.rb
+            rm -f Casks/dialex.rb.bak
+          fi
+
+          if [ -f Formula/dialex.rb ]; then
+            sed -i.bak "s/version \".*\"/version \"${VER}\"/" Formula/dialex.rb
+            rm -f Formula/dialex.rb.bak
+
+            python3 -c "
+import re
+
+shas = {
+    'darwin-arm64': '${SHA_DARWIN_ARM64}',
+    'darwin-amd64': '${SHA_DARWIN_AMD64}',
+    'linux-arm64': '${SHA_LINUX_ARM64}',
+    'linux-amd64': '${SHA_LINUX_AMD64}',
+}
+
+with open('Formula/dialex.rb', 'r') as f:
+    text = f.read()
+
+for target, sha in shas.items():
+    if sha:
+        pattern = rf'(url ".*dialex-engine-v.*-{target}\.tar\.gz"\s+sha256 ")[^"]+(")'
+        text = re.sub(pattern, rf'\g<1>{sha}\g<2>', text)
+
+with open('Formula/dialex.rb', 'w') as f:
+    f.write(text)
+"
+          fi
+
+      - name: Commit & Push Release Metadata & Homebrew Tap
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git status --porcelain | grep -q CHANGELOG.md; then
-            git add CHANGELOG.md gradle.properties
-            git commit -m "docs(changelog): update release notes for ${{ needs.prepare-release.outputs.tag_name }} [skip ci]"
-            if [[ "${{ github.ref }}" != refs/tags/* ]]; then
+          git add CHANGELOG.md gradle.properties Formula/dialex.rb Casks/dialex.rb
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): update metadata and Homebrew tap for ${{ needs.prepare-release.outputs.tag_name }} [skip ci]"
+            if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+              git push origin HEAD:main
+            else
               git push origin HEAD:${{ github.ref_name }}
             fi
           fi
