@@ -138,22 +138,22 @@ This document outlines the phased, granular tasks for developing **Kritix AI**.
 
 ---
 
-## Phase 9: Standalone Cockpit App & Steering Studio (Compose Multiplatform + Kolt)
+## Phase 9: Standalone Cockpit App & Steering Studio (Compose Multiplatform + Kolt) (Completed)
 
 *Objective: Build the graphical developer workbench reusing KoltLibs.*
 
-- [ ] **TASK-0901**: Configure `kritix/app/build.gradle.kts`:
-  - Add to root `settings.gradle.kts` (`include(":kritix:app")`).
-  - Implement Kolt dependencies: `koltx:compose-kmp`, `koltx:utils`, `koltx:logutils`.
-- [ ] **TASK-0902**: Implement Kolt MVI Presentation layer (`MviViewModel`, `AsyncState`).
-- [ ] **TASK-0903**: Implement Council Chamber UI:
-  - Stakeholder avatar row, live debate transcript, credence meters, live markdown spec preview.
-- [ ] **TASK-0904**: Implement Engineering Lab UI:
+- [x] **TASK-0901**: Configure `kritix/app/build.gradle.kts`:
+  - Added `:kritix:app` to `settings.gradle.kts`.
+  - Implemented Kolt dependencies: `io.github.koltalabs.kolt:compose-kmp`, `utils`, `logutils`.
+- [x] **TASK-0902**: Implement Kolt MVI Presentation layer (`MviViewModel`, `AsyncState`).
+- [x] **TASK-0903**: Implement Council Chamber UI (`CouncilChamberView.kt`):
+  - Stakeholder avatar row, live debate transcript, influence meters, live markdown spec preview.
+- [x] **TASK-0904**: Implement Engineering Lab UI (`EngineeringLabView.kt`):
   - Split view: Coder patch editor on left, Reviewer critique & live terminal test output on right.
   - Interactive unified diff viewer with chunk-by-chunk accept/reject buttons.
-- [ ] **TASK-0905**: Implement Steering Studio UI:
+- [x] **TASK-0905**: Implement Steering Studio UI (`SteeringStudioView.kt`):
   - Dynamic Persona-to-Rule Binding Matrix.
-  - Live Prompt Simulator & Taboo Space inspector.
-  - Remote Git/URL standards feed synchronizer.
-- [ ] **TASK-0906**: Implement Persona Studio UI:
-  - Reusable radar chart visualizer and 8-layer DNA editor.
+  - Rule inspector & remote Git/URL standards feed synchronizer.
+- [x] **TASK-0906**: Implement Persona Studio UI (`PersonaStudioView.kt`):
+  - Custom Canvas Radar Chart visualizer and 8-layer DNA editor.
+- [x] **TASK-0907**: Implement Native CLI entrypoint (`kritix/cli/main.go`) and Daemon (`cmd/kritixd/main.go`).
