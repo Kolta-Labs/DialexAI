@@ -58,11 +58,11 @@ This document outlines the phased, granular tasks for developing **Kritix AI**.
 
 *Objective: Provide isolated execution and safe file mutation primitives.*
 
-- [ ] **TASK-0401**: Implement `kritix/pkg/sandbox/exec.go`:
+- [x] **TASK-0401**: Implement `kritix/pkg/sandbox/exec.go`:
   - Command execution sandbox (`exec.CommandContext`) supporting timeout, cwd containment, stdout/stderr streaming, and exit code checking.
-- [ ] **TASK-0402**: Implement `kritix/pkg/git/driver.go`:
+- [x] **TASK-0402**: Implement `kritix/pkg/git/driver.go`:
   - Git status, branch creation, unified diff extraction, and commit operations.
-- [ ] **TASK-0403**: Implement `kritix/pkg/git/patch.go`:
+- [x] **TASK-0403**: Implement `kritix/pkg/git/patch.go`:
   - Atomic patch applier with backup and rollback on failure.
 
 ---
