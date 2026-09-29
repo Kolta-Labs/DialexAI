@@ -90,17 +90,17 @@ This document outlines the phased, granular tasks for developing **Kritix AI**.
 
 *Objective: Implement the iterative coding and verification engine.*
 
-- [ ] **TASK-0601**: Implement `kritix/pkg/coder/engine.go`:
+- [x] **TASK-0601**: Implement `kritix/pkg/coder/engine.go`:
   - Domain Coder prompt compiler incorporating selected domain persona (e.g., Android, Backend) and active story spec.
-- [ ] **TASK-0602**: Implement `kritix/pkg/reviewer/engine.go`:
+- [x] **TASK-0602**: Implement `kritix/pkg/reviewer/engine.go`:
   - Adversarial Reviewer prompt compiler checking AST diffs against bound steering rules and test outputs.
-- [ ] **TASK-0603**: Implement the Convergence Loop:
+- [x] **TASK-0603**: Implement the Convergence Loop:
   - Step 1: Coder generates atomic patch $\rightarrow$ Sandbox applies patch.
   - Step 2: Sandbox executes project test command (e.g., `./gradlew testDebugUnitTest` or `go test ./...`).
   - Step 3: Reviewer inspects diff and test results.
   - Step 4: If tests fail or bugs found, Reviewer sends feedback $\rightarrow$ repeat (Max $N$ rounds).
   - Step 5: If tests pass and Reviewer signs off $\rightarrow$ mark task completed.
-- [ ] **TASK-0604**: Implement Autonomy Gates:
+- [x] **TASK-0604**: Implement Autonomy Gates:
   - `supervised`: Interactive prompt asking user to confirm before applying final diff or committing.
   - `interactive`: Pause after each round for developer feedback.
   - `autonomous`: Auto-commit if git status is clean and test exit code is 0.
