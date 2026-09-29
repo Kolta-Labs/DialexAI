@@ -16,7 +16,7 @@ flowchart TD
         MobileHub["Dialex AI Mobile (Stadium Arena / Voice / QR)"]
     end
 
-    subgraph KoltLibs ["Kolt Framework (io.github.koltsystems.koltx)"]
+    subgraph KoltLibs ["Kolt Framework (io.github.koltalabs.kolt)"]
         ComposeKmp["compose-kmp (CcPalette, LocalCcColors, ThemeMode)"]
         Utils["utils (AsyncState Monad, Coroutine Scope Utils)"]
         LogUtils["logutils (Release-Gated Structured Logging)"]

@@ -19,9 +19,9 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.collections.immutable)
             // Kolt Library Inclusion
-            implementation("io.github.koltsystems.koltx:utils")
-            implementation("io.github.koltsystems.koltx:logutils")
-            implementation("io.github.koltsystems.koltx:compose-kmp")
+            implementation("io.github.koltalabs.kolt:utils")
+            implementation("io.github.koltalabs.kolt:logutils")
+            implementation("io.github.koltalabs.kolt:compose-kmp")
             // api: ApiAgentRunner's constructor takes an HttpClient, so callers need this type too.
             api(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)

@@ -19,7 +19,7 @@ kotlin {
             implementation(libs.lifecycle.viewmodel)
             implementation(libs.lifecycle.viewmodel.compose)
             implementation(libs.lifecycle.runtime.compose)
-            implementation("io.github.koltsystems.koltx:logutils")
+            implementation("io.github.koltalabs.kolt:logutils")
         }
     }
 }
