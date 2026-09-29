@@ -12,6 +12,7 @@ import (
 	"kritix/pkg/coder"
 	"kritix/pkg/forge"
 	"kritix/pkg/git"
+	"kritix/pkg/lsp"
 	"kritix/pkg/persona"
 	"kritix/pkg/repo"
 	"kritix/pkg/reviewer"
@@ -31,6 +32,7 @@ Usage:
 
 Commands:
   repl          Launch interactive TUI shell with @mentions and /grill-me
+  lsp           Launch Language Server Protocol backend for IDEs (VS Code, Zed, etc.)
   plan, spec    Deliberate with Stakeholder Council to produce Story Spec
   code          Execute Domain Coder <-> Reviewer convergence loop
   review        Run Adversarial Reviewer against current git diff and tests
@@ -54,7 +56,6 @@ func main() {
 	registry := persona.NewRegistry(cwd)
 
 	if len(os.Args) < 2 {
-		// Default to interactive REPL
 		repl := tui.NewREPL(cwd, registry, os.Stdin, os.Stdout)
 		_ = repl.Run(context.Background())
 		return
@@ -67,6 +68,12 @@ func main() {
 	case "repl":
 		repl := tui.NewREPL(cwd, registry, os.Stdin, os.Stdout)
 		_ = repl.Run(context.Background())
+	case "lsp":
+		server := lsp.NewServer(cwd, os.Stdin, os.Stdout)
+		if err := server.Serve(); err != nil {
+			fmt.Fprintf(os.Stderr, "LSP server error: %v\n", err)
+			os.Exit(1)
+		}
 	case "plan", "spec":
 		handlePlan(cwd, registry, args)
 	case "code":

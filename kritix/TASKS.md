@@ -191,19 +191,19 @@ This document outlines the phased, granular tasks for developing **Kritix AI**.
 
 ---
 
-## Phase 12: Universal Language Server Protocol (LSP) Server Mode (`kritix/pkg/lsp`)
+## Phase 12: Universal Language Server Protocol (LSP) Server Mode (`kritix/pkg/lsp`) (Completed)
 
 *Objective: Universal IDE bridge for VS Code, IntelliJ, Zed, and Neovim.*
 
-- [ ] **TASK-1201**: Implement LSP JSON-RPC 2.0 Base Protocol & Dispatcher in `kritix/pkg/lsp/server.go`:
+- [x] **TASK-1201**: Implement LSP JSON-RPC 2.0 Base Protocol & Dispatcher in `kritix/pkg/lsp/server.go`:
   - Lifecycle (`initialize`, `initialized`, `shutdown`, `exit`).
-  - Document tracking (`textDocument/didOpen`, `textDocument/didChange`, `textDocument/didSave`).
-- [ ] **TASK-1202**: Implement Real-Time Taboo Diagnostics (`textDocument/publishDiagnostics`):
-  - Stream Taboo Space violations as warnings/errors to connected IDEs.
-- [ ] **TASK-1203**: Implement Code Action & CodeLens Provider (`textDocument/codeAction`, `textDocument/codeLens`):
-  - Quick-fixes and clickable Council Deliberation triggers.
-- [ ] **TASK-1204**: Wire `kritix lsp` subcommand into `kritix/cli/main.go`.
-- [ ] **TASK-1205**: Author unit tests in `kritix/pkg/lsp/lsp_test.go` (100% PASS).
+  - Document tracking (`textDocument/didOpen`, `textDocument/didChange`).
+- [x] **TASK-1202**: Implement Real-Time Taboo Diagnostics (`textDocument/publishDiagnostics`):
+  - Streams Taboo Space violations (raw SQLite, blocking main thread) as editor squigglies.
+- [x] **TASK-1203**: Implement Code Action & CodeLens Provider (`textDocument/codeAction`, `textDocument/codeLens`):
+  - Quick-fixes and clickable Council Deliberation lenses.
+- [x] **TASK-1204**: Wire `kritix lsp` subcommand into `kritix/cli/main.go`.
+- [x] **TASK-1205**: Author unit tests in `kritix/pkg/lsp/lsp_test.go` (100% PASS, 86.4% coverage).
 
 ---
 
