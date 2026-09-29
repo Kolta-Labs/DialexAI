@@ -71,16 +71,16 @@ This document outlines the phased, granular tasks for developing **Kritix AI**.
 
 *Objective: Enable stakeholder planning councils that deliberate on user stories and output verified specifications.*
 
-- [ ] **TASK-0501**: Implement `kritix/pkg/spec/council.go`:
+- [x] **TASK-0501**: Implement `kritix/pkg/spec/council.go`:
   - Assemble Stakeholder Council using `engine/pkg/orchestrator` read-only.
   - Pass repository AST map, file tree, and bound steering rules to Council context.
-- [ ] **TASK-0502**: Implement multi-round planning debate:
+- [x] **TASK-0502**: Implement multi-round planning debate:
   - Round 1: PO outlines User Story & Acceptance Criteria.
   - Round 2: Architect proposes technical design & file targets; QA Lead challenges failure modes.
   - Round 3: Synthesis into consolidated spec.
-- [ ] **TASK-0503**: Implement Style Vectors:
+- [x] **TASK-0503**: Implement Style Vectors:
   - Support `ponytail` (structured executive bullets) and `caveman` (zero-fluff technical commands).
-- [ ] **TASK-0504**: Implement `kritix/pkg/spec/formatter.go`:
+- [x] **TASK-0504**: Implement `kritix/pkg/spec/formatter.go`:
   - Write formatted markdown to `docs/specs/STORY-<id>.md` including Gherkin acceptance criteria, ADR rationale, file mutation manifest, and test verification commands.
 - [ ] **TASK-0505**: Wire `kritix spec` and `kritix plan` CLI subcommands.
 
