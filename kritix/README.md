@@ -1,240 +1,467 @@
-# Kritix AI — User Guide for Developers & Product Owners
-
-> **The Sovereign Multi-Agent Software Engineering Platform**  
-> *Where Product Planning meets Adversarial Verification.*
+# Kritix AI — Professional Platform Guide
+### Sovereign Multi-Agent Software Engineering & Autonomous Coding
 
 ---
 
-## 1. What is Kritix AI? (In Plain English)
+## 1. Architectural Philosophy: The Dialectic Engine
 
-Most AI coding assistants act like **"yes-men"**: when you ask them to build a feature, they immediately start typing code, hallucinate missing requirements, and declare victory without ever testing if the code actually compiles or runs.
+Most AI coding tools operate under the **"Solo Sycophant Problem"**: a single LLM attempts to act as product manager, architect, developer, and tester simultaneously. It invents missing requirements, validates its own assumptions, and generates unverified code directly into the developer's working files.
 
-**Kritix AI works like a real-world elite software engineering team.** It splits software creation into two separate, checks-and-balances chambers:
+**Kritix AI decouples software engineering into two separate checks-and-balances chambers:**
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                   CHAMBER 1: PLANNING                  │
-│               The Stakeholder Council                  │
-│   (Product Owner + Architect + QA Lead + Eng Manager)  │
-│   • Asks clarifying questions ("What if offline?")    │
-│   • Agrees on acceptance criteria & boundaries         │
-│   • Outputs a verified Story Spec (docs/specs/STORY.md)│
-└──────────────────────────┬─────────────────────────────┘
-                           │ Approved Spec
-                           ▼
-┌────────────────────────────────────────────────────────┐
-│                  CHAMBER 2: EXECUTION                  │
-│          Domain Coder ⟷ Adversarial Reviewer           │
-│   • Coder writes the code in an isolated sandbox       │
-│   • Sandbox runs your actual tests (Gradle, Go, etc.) │
-│   • Reviewer scrutinizes diffs & checks Taboo Spaces   │
-│   • Loops until tests pass 100% and Reviewer approves  │
-└────────────────────────────────────────────────────────┘
+                                 ┌──────────────────────────────────────────────┐
+                                 │              USER / DEVELOPER / PO           │
+                                 └──────────────────────┬───────────────────────┘
+                                                        │
+                         Prompt / Story Idea            │  Target Spec / Review
+                                                        ▼
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                       CHAMBER 1: STAKEHOLDER COUNCIL                                    │
+│                                           (Requirements Planning)                                      │
+├────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│  • Product Owner Lead:    Value maximization, user story framing, scope boundary defense.             │
+│  • Senior Architect:      Layer isolation, clean boundaries, ADR trade-off synthesis.                  │
+│  • QA Testing Lead:       Adversarial edge-case modeling, negative scenarios, test command tailoring.  │
+│  • Engineering Manager:   Delivery feasibility, complexity pruning, risk balancing.                   │
+│                                                                                                        │
+│  Output ────────► Canonical Story Spec with Gherkin Scenarios (docs/specs/STORY-<id>.md)               │
+└───────────────────────────────────────────────────┬────────────────────────────────────────────────────┘
+                                                    │
+                                                    ▼
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                       CHAMBER 2: ENGINEERING LAB                                       │
+│                                           (Grounded Execution)                                         │
+├────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│  • Shadow Git Worktree:   Isolated execution branch (.kritix/worktrees/); zero workspace disruption.  │
+│  • Domain Coder:          Selected specialist (Android, Backend, iOS) produces atomic unified diffs.   │
+│  • Local Test Sandbox:    Deterministic process-group execution (./gradlew test, go test, cargo test). │
+│  • Adversarial Reviewer:  Scrutinizes AST diffs against test results and Taboo Space constraints.       │
+│                                                                                                        │
+│  Loop (Rounds 1..N) ────► 100% Green Tests & Reviewer Sign-Off ────► Clean Merge / PR Creation         │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Who is this for?
+## 2. Installation & Quick Start
 
-| Role | What you get out of Kritix |
+### 2.1 System Requirements
+- **macOS** (Apple Silicon or Intel), **Linux** (x86_64 or aarch64), or **Windows** (WSL2).
+- **Go 1.22+** (for native CLI and LSP server).
+- **Java JDK 21+** (for Compose Multiplatform Desktop Cockpit App).
+- **Git 2.30+** (with support for `git worktree`).
+
+### 2.2 Installing the Native CLI
+
+To build and install the native binary locally:
+```bash
+cd kritix
+go build -ldflags="-s -w" -o /usr/local/bin/kritix ./cli/main.go
+go build -ldflags="-s -w" -o /usr/local/bin/kritixd ./cmd/kritixd/main.go
+
+# Verify installation:
+kritix version
+# Output: kritix version 1.0.0
+```
+
+### 2.3 Shell Autocompletion
+Add to your `~/.zshrc` or `~/.bashrc`:
+```bash
+# Kritix CLI aliases
+alias k="kritix"
+alias kr="kritix repl"
+alias kp="kritix plan"
+alias kc="kritix code"
+alias kl="kritix lsp"
+```
+
+---
+
+## 3. Professional IDE Integration Guide
+
+Kritix operates a standard **Language Server Protocol (LSP 3.17)** server via `kritix lsp`. This allows any modern editor to get real-time Taboo Space diagnostics, CodeLens triggers, and quick-fix actions without maintaining fragile custom plugins.
+
+### 3.1 Visual Studio Code & Cursor Setup
+
+#### Method: Using Generic LSP Client
+1. Install the **Generic LSP Client** or **Language Server Protocol Inspector** extension from the VS Code Marketplace.
+2. Open your repository's `.vscode/settings.json` and add:
+
+```json
+{
+  "languageServerExample.trace.server": "verbose",
+  "kritix.lsp.enabled": true,
+  "kritix.lsp.path": "/usr/local/bin/kritix",
+  "kritix.lsp.arguments": ["lsp"],
+  
+  // Custom editor integration
+  "[kotlin]": {
+    "editor.codeLens": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit"
+    }
+  },
+  "[go]": {
+    "editor.codeLens": true
+  }
+}
+```
+
+#### What You Experience in VS Code / Cursor:
+- **Real-Time Taboo Warnings:** If you type forbidden code (such as `android.database.sqlite` in presentation layers or `Thread.sleep` on the main thread), red squiggly lines appear instantly.
+- **CodeLens Over Headings:** A clickable lens appears above class headers:  
+  `⚡ Kritix: Deliberate Story Spec` (click to run the Stakeholder Council).
+- **Quick-Fix Lightbulb (`Cmd + .`):** Select `"Kritix: Fix Taboo Space Violation"` to prompt the Domain Coder to generate an architectural refactor.
+
+---
+
+### 3.2 JetBrains IDEs (IntelliJ IDEA, Android Studio, GoLand)
+
+1. Open **Settings / Preferences** (`Cmd + ,`) $\rightarrow$ **Plugins**.
+2. Install the **LSP4IJ (Language Server Protocol for IntelliJ)** plugin.
+3. Navigate to **Settings** $\rightarrow$ **Languages & Frameworks** $\rightarrow$ **Language Servers**.
+4. Click **`+` Add Language Server**:
+   - **Name:** `Kritix AI`
+   - **Executable Path:** `/usr/local/bin/kritix`
+   - **Arguments:** `lsp`
+   - **File Types:** `Kotlin (.kt, .kts)`, `Java (.java)`, `Go (.go)`, `Rust (.rs)`, `TypeScript (.ts)`
+5. Click **Apply** and **OK**.
+
+You will now receive live Taboo Space squigglies, intentions, and CodeLens directly in your editor.
+
+---
+
+### 3.3 Zed Editor Setup
+
+Add the following to `~/.config/zed/settings.json`:
+
+```json
+{
+  "lsp": {
+    "kritix": {
+      "binary": {
+        "path": "/usr/local/bin/kritix",
+        "arguments": ["lsp"]
+      }
+    }
+  },
+  "languages": {
+    "Kotlin": {
+      "language_servers": ["kritix", "!kotlin-language-server"]
+    },
+    "Go": {
+      "language_servers": ["kritix", "gopls"]
+    }
+  }
+}
+```
+
+---
+
+### 3.4 Neovim Setup
+
+Add the following to your `init.lua`:
+
+```lua
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = { "kotlin", "go", "rust", "typescript" },
+  callback = function()
+    vim.lsp.start({
+      name = "kritix-lsp",
+      cmd = { "kritix", "lsp" },
+      root_dir = vim.fs.dirname(vim.fs.find({ ".git", "go.mod", "build.gradle.kts" }, { upward = true })[1]),
+    })
+  end,
+})
+```
+
+---
+
+## 4. Product Owner & Manager Guide: The Art of Verified Requirements
+
+As a non-technical Product Owner or Engineering Manager, your primary challenge is ensuring that AI agents do not write code based on hallucinated assumptions or ambiguous requirements.
+
+```
+Idea ──► /grill-me (Alignment Interview) ──► /plan (Deliberation) ──► docs/specs/STORY-101.md
+```
+
+### Step 1: Conduct an Alignment Interview (`/grill-me`)
+Before creating specifications, run the Socratic interview in the terminal shell:
+
+```bash
+kritix repl
+kritix> /grill-me "Add biometric FaceID authentication to mobile checkout"
+```
+
+The Stakeholder Council immediately challenges you with 3 targeted questions:
+1. **[Product Owner Lead]**: *"What happens when the biometric hardware is locked after 5 failed attempts? Should the system fall back to PIN, SMS OTP, or password re-entry?"*
+2. **[Senior Architect]**: *"Which layer encapsulates biometric keychain tokens, and how are secrets scrubbed from memory after checkout completion?"*
+3. **[QA Testing Lead]**: *"What deterministic test scenarios must pass to ensure biometric bypass is impossible on rooted/jailbroken devices?"*
+
+Answering these questions upfront eliminates 90% of downstream rework and bug cycles.
+
+### Step 2: Deliberate and Generate the Story Spec (`/plan`)
+Once aligned, trigger the Stakeholder Council debate:
+
+```bash
+kritix> /plan "Implement FaceID biometric authentication with PIN fallback and Keychain isolation"
+```
+
+The Council deliberates across 3 structured rounds and writes a verified spec to:  
+`docs/specs/STORY-<id>.md`.
+
+### Step 3: Understanding the Story Spec Anatomy
+
+Every generated spec contains:
+1. **User Story Statement**: Standard business objective.
+2. **Strict In-Scope vs. Out-of-Scope Manifest**: Explicit fences against scope creep.
+3. **Acceptance Criteria in Gherkin Syntax**:
+   ```gherkin
+   Scenario: Successful Biometric Authorization
+     Given the user has enrolled FaceID in device settings
+     When checkout total exceeds $50.00
+     Then prompt system biometric dialog
+     And proceed to order placement upon cryptographic signature confirmation
+
+   Scenario: Biometric Failure Fallback
+     Given biometric sensor fails or times out after 10 seconds
+     When the fallback button is tapped
+     Then display secure 6-digit PIN pad
+     And lock session after 3 invalid attempts
+   ```
+4. **Architecture Decision Records (ADRs)**: Documents why a pattern was chosen and its consequences.
+5. **Deterministic Verification Commands**: Project-tailored test scripts (e.g. `./gradlew testDebugUnitTest`, `go test -v ./...`).
+
+### Step 4: Tailoring Communication with Style Vectors
+- **For Executives & Non-Technical Stakeholders (`--style ponytail`):**  
+  `kritix plan --style ponytail "..."` produces executive summaries, trade-off tables, and business ROI justifications.
+- **For Deep Technical Teams (`--style caveman`):**  
+  `kritix plan --style caveman "..."` produces dense, high-signal, zero-fluff code commands.
+
+---
+
+## 5. Software Engineer Guide: Zero-Disruption Coding
+
+### 5.1 The Danger of Other Coding Agents
+Traditional AI tools execute edits directly on your active working files. If the AI makes a syntax error or breaks tests, your git tree is dirty, your local compile fails, and multitasking is impossible.
+
+### 5.2 The Kritix Solution: Isolated Shadow Worktrees
+When you run `kritix code`, Kritix calls `git worktree add` to create an ephemeral, isolated workspace (`.kritix/worktrees/<task-id>`).
+- You can continue typing in your active branch uninterrupted.
+- The Coder generates atomic patches in the shadow worktree.
+- The Sandbox runs test commands inside the shadow worktree.
+- The Adversarial Reviewer tests the patch against Taboo Spaces.
+- **Only when tests pass 100% does Kritix prompt you to merge the result.**
+
+```
+Your Active Workspace (Clean & Intact) ───────────► Keep coding without interruption
+                                                     ▲
+                                                     │ 1-Click Fast-Forward / Squash Merge
+                                                     ▼
+Isolated Shadow Worktree               ───────────► Coder modifies files
+(.kritix/worktrees/task-101)                         Sandbox executes ./gradlew test
+                                                     Reviewer evaluates diffs & sign-off
+```
+
+### 5.3 Interactive Terminal REPL (`kritix repl`)
+Launch the stateful developer shell:
+```bash
+kritix repl
+```
+
+#### Context Mentions (`@` and `#`)
+Inject targeted context into prompts without copying and pasting:
+- `@file:src/auth/AuthManager.kt` — attaches file contents directly into context.
+- `@spec:STORY-101` — grounds the Coder in a specific Story Spec.
+- `@rule:taboo-storage` — enforces a specific steering invariant.
+- `#symbol:RefreshToken` — focuses context extraction on a specific symbol.
+
+```bash
+kritix> Inspect @file:src/auth/AuthManager.kt against @spec:STORY-101 and fix timeout retries
+```
+
+#### Slash Commands
+- `/plan <story>` — assemble Stakeholder Council.
+- `/code [spec]` — run convergence loop in shadow worktree.
+- `/grill-me [story]` — trigger 3-question alignment interview.
+- `/review` — evaluate current uncommitted diffs against Taboo Spaces.
+- `/compact` — prune conversation history while preserving ADRs.
+- `/undo` — cleanly roll back working tree modifications.
+- `/exit` — quit shell.
+
+---
+
+## 6. Steering Studio & Institutional Governance
+
+### 6.1 What are Taboo Spaces?
+A **Taboo Space** is a non-negotiable negative constraint. While ordinary prompts offer suggestions, Taboo Spaces are hard architectural barriers enforced by the Adversarial Reviewer.
+
+| Example Taboo Constraint | Why It Exists |
 | :--- | :--- |
-| **Product Owners & Managers** | Turn rough feature ideas into ironclad, verified specifications with automated acceptance tests (Gherkin format). Never worry about missing edge cases or technical debt. |
-| **Software Engineers** | Build features and fix bugs without the AI messing up your open files or dirtying your workspace. Code runs in an isolated background sandbox and merges only when tests are green. |
-| **Tech Leads & Architects** | Enforce "Taboo Spaces" (strict architectural rules the AI is forbidden from violating, such as *"Never import database drivers directly into UI presentation code"*). |
+| `Do not allow raw sqlite imports in UI layer` | Enforces Clean Architecture / prevents UI coupling to disk. |
+| `Do not block main thread with Thread.sleep` | Prevents Application Not Responding (ANR) crashes on Android. |
+| `Do not commit hardcoded secrets or JWTs` | Prevents security leakage in git history. |
+| `Do not use java.util.Date in commonMain` | Enforces Kotlin Multiplatform cross-platform portability. |
+
+### 6.2 Managing Steering Configuration (`.kritix/steering.json`)
+Manage rules and persona bindings with the CLI:
+
+```bash
+# List all discovered steering documents (local, standard symlinks, remote):
+kritix steering list
+
+# Bind a taboo rule to a specific persona:
+kritix steering bind android_engineer taboo-sqlite
+kritix steering bind backend_engineer taboo-storage
+
+# Sync external standards feeds from Git or remote URLs:
+kritix steering sync
+```
+
+### 6.3 PR-to-Rule Synthesizer (Learning from Human Reviews)
+Kritix includes an automatic synthesizer that converts human PR comments into permanent institutional rules:
+- Human senior engineer comments on a PR:  
+  `"Never use GlobalScope.launch in our viewmodels, always use viewModelScope!"`
+- The Synthesizer parses the comment:
+  - **Category:** Taboo Constraint.
+  - **Target Persona:** `android_engineer`, `adversarial_code_reviewer`.
+  - **Action:** Persists rule to `.kritix/steering.json`.
+- The mistake is permanently prevented from occurring again.
 
 ---
 
-## 3. Quick Start (5-Minute Guide)
+## 7. Autonomous Server & GitHub CI/CD Pipeline
 
-You can use Kritix in three ways:
-1. **Interactive Terminal (CLI)** — Instant, keyboard-driven shell.
-2. **Standalone Desktop Cockpit App** — Beautiful visual workbench.
-3. **Your Favorite Editor** — Works inside VS Code, IntelliJ, Zed, or Neovim via standard Language Server Protocol (LSP).
+### 7.1 Running the Headless Daemon (`kritixd`)
+For centralized servers or CI machines:
 
-### Option A: Launch the Interactive Terminal
-
-In your project folder, simply run:
 ```bash
-./bin/kritix
+# Start the webhook daemon on port 8080:
+kritixd --addr :8080 --gh-secret $GITHUB_WEBHOOK_SECRET
 ```
 
-You are greeted by the Kritix Shell:
-```text
-Kritix AI Shell — Dialectic Coding & Alignment Studio
-Type /help for available commands or /exit to quit.
+#### Available Endpoints:
+- `GET  /healthz` — healthcheck probe.
+- `POST /webhook/github` — receives GitHub Issue and PR webhooks (validates HMAC-SHA256 signature).
+- `POST /webhook/gitlab` — receives GitLab Issue events (validates `X-Gitlab-Token`).
+- `GET  /jobs` — inspect status of active and completed autonomous background runs.
 
-kritix> 
+---
+
+### 7.2 GitHub Actions Automated CI/CD Workflow
+Kritix includes a complete continuous integration pipeline at `.github/workflows/kritix.yml`:
+
+```yaml
+name: Kritix AI Verification Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  go-verification:
+    name: Go Test Suite & Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+      - run: go vet ./pkg/... ./cli/...
+      - run: go test -v -race -cover ./pkg/...
+      - run: go build -o bin/kritix ./cli/main.go
+
+  cockpit-kmp-build:
+    name: Desktop Cockpit Compilation
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :kritix:app:compileKotlinJvm --no-daemon
+
+  adversarial-pr-check:
+    name: Adversarial Reviewer PR Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+      - run: |
+          go build -o bin/kritix ./cli/main.go
+          git diff origin/${{ github.base_ref }}...HEAD > pr.diff
+          ./bin/kritix review
 ```
 
-### Option B: Launch the Desktop Cockpit App
+---
 
-Run the desktop application:
+## 8. Standalone Desktop Cockpit App (KMP + KoltLibs)
+
+For developers and managers who prefer a graphical workbench, Kritix provides a standalone Desktop Cockpit built with **Compose Multiplatform** and **KoltLibs** (`io.github.koltalabs.kolt:compose-kmp`).
+
 ```bash
+# Launch the desktop app:
 ./gradlew :kritix:app:run
 ```
 
----
-
-## 4. Guide for Product Owners: Planning Features
-
-As a Product Owner, your goal is to make sure developers build **the right thing** without scope creep or missed requirements.
-
-### Step 1: Run an Alignment Interview (`/grill-me`)
-Before writing specifications, ask the Council to interview you on potential blind spots:
-
-```bash
-kritix> /grill-me "Add Google OAuth2 login and token refresh"
-```
-
-The Stakeholder Council immediately analyzes your prompt and asks 3 critical questions:
-1. **[Product Owner]**: *"What is the exact fallback behavior when the Google authentication server is offline or times out?"*
-2. **[Senior Architect]**: *"Which layer manages token storage, and what security constraints must be enforced?"*
-3. **[QA Lead]**: *"What negative test scenarios (e.g., expired refresh token, network drop) must pass before release?"*
-
-### Step 2: Generate the Verified Story Spec (`/plan`)
-Once aligned, generate the specification:
-
-```bash
-kritix> /plan "Implement Google OAuth2 login with silent token refresh"
-```
-
-Kritix deliberates and writes a clean, version-controlled markdown file into your repository:  
-`docs/specs/STORY-101.md`.
-
-### Step 3: Review the Story Spec
-Open `docs/specs/STORY-101.md`. It contains:
-- **User Story**: High-level value summary.
-- **In-Scope & Out-of-Scope**: Explicit boundaries to prevent scope creep.
-- **Acceptance Criteria (Gherkin)**:
-  ```gherkin
-  Scenario: Silent Background Refresh
-    Given the access token is expired
-    When an API call is initiated
-    Then the refresh token seamlessly fetches a new access token
-    And the user session is uninterrupted
-  ```
-- **Architectural Decision Records (ADRs)**: Technical decisions and trade-offs.
-- **Verification Commands**: The exact test commands required to pass (e.g., `./gradlew testDebugUnitTest` or `go test ./...`).
-
-> **💡 Pro-Tip for POs:** You can choose your communication style:
-> - `kritix plan --style ponytail "..."`: Executive bullet points for stakeholders and leadership.
-> - `kritix plan --style caveman "..."`: Direct, zero-fluff commands for technical engineers.
+### Visual Workbench Features:
+1. **Council Chamber View:** Live avatar row for stakeholders (PO, Architect, QA Lead, EM) with real-time influence bars, deliberation debate transcript, and verified markdown spec preview.
+2. **Engineering Lab View:** Split-screen workbench featuring a chunk-by-chunk diff accept/reject editor on the left, and Adversarial Reviewer critique with live sandbox terminal output on the right.
+3. **Steering Studio View:** Interactive Persona-to-Rule Binding Matrix allowing 1-click toggling of rule constraints per persona, plus live remote standards synchronizer.
+4. **Persona Studio View:** Interactive Canvas Radar Chart visualizer rendering the 8-layer Persona DNA cognitive priors (Strictness, Skepticism, Modularity, Velocity, Paranoia).
 
 ---
 
-## 5. Guide for Developers: Zero-Disruption Coding
+## 9. CLI Command Reference & Cheat Sheet
 
-### Problem Kritix Solves:
-Other tools edit your files live on disk, breaking your build and ruining your active git workspace.
+```text
+Usage:
+  kritix [command] [options] [arguments]
 
-### How Kritix Works (Shadow Worktrees):
-Kritix creates an isolated background clone of your repository (a **Shadow Worktree** in `.kritix/worktrees/`). The Domain Coder and Adversarial Reviewer iterate in that private space.
+Core Commands:
+  repl                     Launch interactive TUI shell with @mentions and /grill-me
+  lsp                      Launch Language Server Protocol backend for IDEs (VS Code, Zed, etc.)
+  plan, spec <story>       Deliberate with Stakeholder Council and produce docs/specs/STORY-<id>.md
+  code [spec-file]         Execute Domain Coder <-> Reviewer convergence loop in shadow worktree
+  review                   Run Adversarial Reviewer against current uncommitted diffs
+  steering [list|sync|bind] Manage dynamic steering rules and persona bindings
+  persona [list]           Inspect and manage SWE Personas
+  daemon [--addr :8080]    Launch headless server daemon for GitHub/GitLab automation
+  version                  Display version
 
-```
-Your Active Workspace (Untouched)  ─────────► You keep working on your branch
-                                                ▲
-                                                │ Clean Merge when Verified
-                                                ▼
-Isolated Shadow Worktree           ─────────► Coder modifies code
-                                              Sandbox runs actual tests
-                                              Reviewer rejects / approves
-```
+Options for 'plan':
+  --style standard         Default balanced specification format
+  --style ponytail         Executive summary bullet points for leadership
+  --style caveman          Dense, zero-fluff code commands for technical engineers
 
-### Step 1: Start the Convergence Loop
-In your terminal, pass the Story Spec you want to build:
-
-```bash
-kritix> /code docs/specs/STORY-101.md
-```
-
-Kritix executes the loop:
-1. **Round 1**: Coder generates a patch.
-2. **Sandbox Run**: Sandbox executes project tests (e.g., `go test -v ./...` or `./gradlew test`).
-3. **Reviewer Check**: Adversarial Reviewer inspects both the code diff and the test results.
-   - If a test fails, or if a Taboo rule is broken, the Reviewer rejects the patch and gives specific feedback.
-4. **Round 2**: Coder fixes the exact issue based on reviewer feedback.
-5. **Round 3**: Tests pass! Reviewer signs off with `"SIGN-OFF APPROVED"`.
-
-### Step 2: Use Context Mentions (`@` and `#`)
-When talking to Kritix, easily pull in repository context:
-- `@file:src/auth/TokenManager.kt` — attaches the file content into the prompt.
-- `@spec:STORY-101` — attaches the active story specification.
-- `@rule:taboo-sqlite` — binds a specific steering invariant.
-- `#symbol:AuthRepository` — focuses the Coder on a specific class or function.
-
-```bash
-kritix> Check @file:src/auth/TokenManager.kt against @spec:STORY-101 and fix timeout handling
+Options for 'code':
+  --domain <domain>        Target SWE persona (default: backend_engineer, android_engineer)
+  --autonomy <gate>        supervised (confirm diff), interactive (pause per round), autonomous (auto-commit)
+  --rounds <n>             Maximum convergence rounds (default: 3)
 ```
 
 ---
 
-## 6. Steering Studio: Setting the Rules of the Road
+## 10. Frequently Asked Questions (FAQ)
 
-### What is a "Taboo Space"?
-A **Taboo Space** is a hard constraint that the AI is forbidden from violating under any circumstance.
+#### Q: How does Kritix prevent breaking my active branch?
+**A:** Kritix executes coder/reviewer iterations in an isolated **Shadow Worktree** (`git worktree add`). Your local unstaged edits and working directory are completely untouched until you review and approve the final result.
 
-**Common Examples:**
-- 🚫 *"Never import direct SQLite libraries in the UI/ViewModel layer."*
-- 🚫 *"Never use Thread.sleep or block the Android main thread."*
-- 🚫 *"Never commit plaintext API tokens or hardcoded secrets."*
+#### Q: What happens if tests fail during the Coder loop?
+**A:** The Adversarial Reviewer captures the exact test exit code and error trace, rolls back the broken patch, provides constructive feedback to the Domain Coder, and prompts for an amended patch in Round 2. If tests do not pass after $N$ rounds, the worktree is safely discarded without polluting your git history.
 
-### How to Bind Rules to Personas
-You can link rules to specific agent personas:
-```bash
-# Bind the taboo-sqlite rule to the Android engineer persona:
-./bin/kritix steering bind android_engineer taboo-sqlite
+#### Q: Can I run Kritix in an air-gapped or private enterprise network?
+**A:** Yes. Kritix can run entirely against local sandboxes and supports local model backends (via Ollama or llama.cpp) as well as self-hosted GitHub Enterprise / GitLab instances.
 
-# List all active steering rules in the project:
-./bin/kritix steering list
-```
-
-### Learning from Human Reviews (PR-to-Rule)
-Whenever a human senior engineer leaves a review comment on GitHub/GitLab:
-> *"Never use java.util.Date in our Kotlin Multiplatform code, use kotlinx.datetime instead!"*
-
-Kritix's **Rule Synthesizer** automatically turns that feedback into a permanent Taboo rule so no AI agent (or future developer) repeats that mistake.
-
----
-
-## 7. Universal IDE Support (VS Code, IntelliJ, Zed, Neovim)
-
-You do **not** need to install separate, fragile editor plugins. Kritix includes a built-in Language Server Protocol backend:
-
-```bash
-./bin/kritix lsp
-```
-
-### Features inside your editor:
-1. **Real-Time Taboo Warnings**: Red/yellow squiggly lines appear as you type whenever code violates architectural rules.
-2. **CodeLens Action**: A clickable button appears above class declarations:  
-   `[⚡ Kritix: Deliberate Story Spec]`.
-3. **Quick Fixes**: Lightbulb menu offers:  
-   `[Kritix: Fix Taboo Space Violation]`.
-
----
-
-## 8. CLI Command Cheat Sheet
-
-| Command | What it does |
-| :--- | :--- |
-| `kritix` (or `kritix repl`) | Opens the interactive terminal shell. |
-| `kritix plan "<prompt>"` | Assembles Stakeholder Council and produces `docs/specs/STORY-<id>.md`. |
-| `kritix plan --style ponytail` | Produces an executive-level summary for leadership. |
-| `kritix plan --style caveman` | Produces terse, code-only commands for engineers. |
-| `kritix code [spec-file]` | Runs the Coder $\leftrightarrow$ Reviewer verification loop in an isolated worktree. |
-| `kritix review` | Scrutinizes your current uncommitted git diff against active Taboo Spaces. |
-| `kritix steering list` | Lists all discovered repository and external steering rules. |
-| `kritix steering bind <role> <rule>` | Binds a rule to an agent persona. |
-| `kritix persona` | Lists all 11 built-in SWE Personas (Architect, PO, QA, Backend, Android, etc.). |
-| `kritix lsp` | Launches Language Server Protocol backend for IDEs. |
-| `kritix daemon --addr :8080` | Starts headless server for GitHub/GitLab PR automation. |
-
----
-
-## 9. Summary: Why Teams Love Kritix AI
-
-1. **Requirements are crystal clear before coding starts** (PO Council deliberation).
-2. **Developers' workspaces are protected** (Isolated Shadow Worktrees).
-3. **No untested code enters main branches** (Deterministic sandbox verification).
-4. **Architectural rules are strictly enforced** (Taboo Spaces and Steering Studio).
-5. **The platform learns continuously** (Auto-evolving Knowledge Items and PR-to-rule synthesis).
+#### Q: Can our team share steering rules across multiple repositories?
+**A:** Yes. You can register a central Git repository or HTTP endpoint in `.kritix/steering.json` using `kritix steering sync`. All team members inherit the organization's architectural and taboo standards automatically.
