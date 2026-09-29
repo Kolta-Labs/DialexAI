@@ -32,7 +32,7 @@ Commands:
   plan, spec    Deliberate with Stakeholder Council to produce Story Spec
   code          Execute Domain Coder <-> Reviewer convergence loop
   review        Run Adversarial Reviewer against current git diff and tests
-  steering      Manage dynamic steering rules (list, sync)
+  steering      Manage dynamic steering rules (list, sync, bind)
   persona       Inspect and manage SWE Personas
   daemon        Launch webhook server for GitHub & GitLab automation
   version       Print version
@@ -140,12 +140,10 @@ func handleCode(cwd string, reg *persona.Registry, args []string) {
 		os.Exit(1)
 	}
 
-	// Find active spec
 	var specFile string
 	if len(fs.Args()) > 0 {
 		specFile = fs.Args()[0]
 	} else {
-		// Default to latest in docs/specs
 		specs, _ := filepath.Glob(filepath.Join(cwd, "docs", "specs", "STORY-*.md"))
 		if len(specs) > 0 {
 			specFile = specs[len(specs)-1]
@@ -180,7 +178,6 @@ func handleCode(cwd string, reg *persona.Registry, args []string) {
 	box := sandbox.NewSandbox(cwd)
 	coord := coder.NewCoordinator(domainCoder, advReviewer, driver, box)
 
-	// Ingest steering
 	agg := steering.NewAggregator(cwd)
 	rules, _ := agg.CollectLocalRules()
 	binder := steering.NewBinder(steering.SteeringConfig{}, rules)
@@ -234,9 +231,10 @@ func handleReview(cwd string, reg *persona.Registry, args []string) {
 }
 
 func handleSteering(cwd string, args []string) {
+	mgr := steering.NewManager(cwd)
+
 	if len(args) == 0 || args[0] == "list" {
-		agg := steering.NewAggregator(cwd)
-		rules, err := agg.CollectLocalRules()
+		rules, err := mgr.ListRules()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error collecting steering rules: %v\n", err)
 			os.Exit(1)
@@ -248,6 +246,17 @@ func handleSteering(cwd string, args []string) {
 		return
 	}
 
+	if args[0] == "bind" && len(args) >= 3 {
+		personaID := args[1]
+		ruleID := args[2]
+		if err := mgr.BindRule(personaID, ruleID); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to bind rule: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Bound rule %q to persona %q\n", ruleID, personaID)
+		return
+	}
+
 	if args[0] == "sync" {
 		fmt.Println("Syncing external steering rules...")
 		syncer := steering.NewRemoteSyncer()
@@ -256,7 +265,7 @@ func handleSteering(cwd string, args []string) {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "Unknown steering subcommand: %s. Supported: list, sync\n", args[0])
+	fmt.Fprintf(os.Stderr, "Unknown steering subcommand: %s. Supported: list, sync, bind <persona> <rule>\n", args[0])
 }
 
 func handlePersona(reg *persona.Registry, args []string) {

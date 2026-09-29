@@ -107,3 +107,40 @@ func TestRemoteSyncerSibling(t *testing.T) {
 		t.Errorf("unexpected rule name: %s", rules[0].Name)
 	}
 }
+
+func TestSteeringManager_BindAndUnbind(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "kritix-mgr-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	mgr := NewManager(tempDir)
+	cfg, err := mgr.LoadConfig()
+	if err != nil {
+		t.Fatalf("failed to load initial config: %v", err)
+	}
+	if len(cfg.Bindings) != 0 {
+		t.Errorf("expected empty bindings")
+	}
+
+	// Bind
+	if err := mgr.BindRule("android_engineer", "taboo-sqlite"); err != nil {
+		t.Fatalf("failed to bind rule: %v", err)
+	}
+
+	cfg, _ = mgr.LoadConfig()
+	if len(cfg.Bindings["android_engineer"]) != 1 || cfg.Bindings["android_engineer"][0] != "taboo-sqlite" {
+		t.Errorf("unexpected bindings after bind: %+v", cfg.Bindings)
+	}
+
+	// Unbind
+	if err := mgr.UnbindRule("android_engineer", "taboo-sqlite"); err != nil {
+		t.Fatalf("failed to unbind rule: %v", err)
+	}
+
+	cfg, _ = mgr.LoadConfig()
+	if len(cfg.Bindings["android_engineer"]) != 0 {
+		t.Errorf("unexpected bindings after unbind: %+v", cfg.Bindings)
+	}
+}

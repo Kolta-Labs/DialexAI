@@ -49,8 +49,9 @@ This document outlines the phased, granular tasks for developing **Kritix AI**.
 - [x] **TASK-0305**: Implement `kritix/pkg/steering/binder.go`:
   - Dynamic Persona-to-Rule Binding Matrix configured in `.kritix/steering.json`.
   - Translates bound rules into Persona DNA `TabooSpace` constraints and `HeuristicRule` lists.
-- [ ] **TASK-0306**: Implement `kritix/pkg/steering/manager.go`:
-  - CLI operations: `kritix steering list`, `kritix steering add <file>`, `kritix steering sync`, `kritix steering bind`.
+- [x] **TASK-0306**: Implement `kritix/pkg/steering/manager.go`:
+  - Programmatic steering manager with persistence in `.kritix/steering.json`.
+  - CLI operations: `kritix steering list`, `kritix steering sync`, `kritix steering bind <persona> <rule>`.
 
 ---
 
@@ -82,7 +83,7 @@ This document outlines the phased, granular tasks for developing **Kritix AI**.
   - Support `ponytail` (structured executive bullets) and `caveman` (zero-fluff technical commands).
 - [x] **TASK-0504**: Implement `kritix/pkg/spec/formatter.go`:
   - Write formatted markdown to `docs/specs/STORY-<id>.md` including Gherkin acceptance criteria, ADR rationale, file mutation manifest, and test verification commands.
-- [ ] **TASK-0505**: Wire `kritix spec` and `kritix plan` CLI subcommands.
+- [x] **TASK-0505**: Wire `kritix spec` and `kritix plan` CLI subcommands (`kritix/cli/main.go`).
 
 ---
 
@@ -104,7 +105,7 @@ This document outlines the phased, granular tasks for developing **Kritix AI**.
   - `supervised`: Interactive prompt asking user to confirm before applying final diff or committing.
   - `interactive`: Pause after each round for developer feedback.
   - `autonomous`: Auto-commit if git status is clean and test exit code is 0.
-- [ ] **TASK-0605**: Wire `kritix code` CLI subcommand.
+- [x] **TASK-0605**: Wire `kritix code` CLI subcommand (`kritix/cli/main.go`).
 
 ---
 
