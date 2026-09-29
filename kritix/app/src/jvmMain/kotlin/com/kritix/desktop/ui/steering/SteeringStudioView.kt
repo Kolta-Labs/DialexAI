@@ -22,6 +22,9 @@ import com.kritix.desktop.ui.theme.*
 
 @Composable
 fun SteeringStudioView() {
+    var prCommentInput by remember { mutableStateOf("Never use GlobalScope.launch in viewmodels, always use viewModelScope!") }
+    var codeSimulatorInput by remember { mutableStateOf("import android.database.sqlite.SQLiteDatabase\nclass MyViewModel : ViewModel() {\n    fun load() { Thread.sleep(500) }\n}") }
+
     var rules by remember {
         mutableStateOf(
             listOf(
@@ -33,7 +36,7 @@ fun SteeringStudioView() {
         )
     }
 
-    var selectedRule by remember { mutableStateOf(rules.first()) }
+    var selectedRule by remember { mutableStateOf(rules[1]) }
     var isSyncing by remember { mutableStateOf(false) }
 
     Column(
@@ -50,36 +53,80 @@ fun SteeringStudioView() {
         ) {
             Column {
                 Text("STEERING STUDIO", color = AccentCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                Text("Dynamic Persona-to-Rule Binding Matrix & Remote Standards Sync", color = TextSecondary, fontSize = 12.sp)
+                Text("Dynamic Persona-to-Rule Binding Matrix, PR-to-Rule Synthesizer & Standards Sync", color = TextSecondary, fontSize = 12.sp)
             }
 
             Button(
                 onClick = { isSyncing = true },
                 colors = ButtonDefaults.buttonColors(containerColor = AccentCyan, contentColor = Color.Black)
             ) {
-                Text(if (isSyncing) "Syncing Feeds..." else "Sync External Standards", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(if (isSyncing) "Syncing Standards..." else "Sync External Standards", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // PR-to-Rule Synthesizer Bar (GUI Feature)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(SurfaceCard)
+                .border(1.dp, AccentPurple, RoundedCornerShape(8.dp))
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("PR-TO-RULE SYNTHESIZER (LEARN FROM HUMAN CODE REVIEWS)", color = AccentPurple, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = prCommentInput,
+                    onValueChange = { prCommentInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Paste senior developer PR comment...", fontSize = 11.sp) },
+                    singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp)
+                )
+            }
+            Button(
+                onClick = {
+                    val newRule = SteeringRuleUI(
+                        id = "rule-syn-${rules.size + 1}",
+                        name = "No GlobalScope in ViewModels",
+                        path = ".standards/steering/kmp/concurrency.md",
+                        type = "synthesized_pr",
+                        isEnabled = true,
+                        boundPersonas = listOf("android_engineer", "adversarial_code_reviewer")
+                    )
+                    rules = rules + newRule
+                    selectedRule = newRule
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = AccentPurple, contentColor = Color.White),
+                modifier = Modifier.padding(top = 16.dp)
+            ) {
+                Text("Synthesize & Bind Rule", fontWeight = FontWeight.Bold, fontSize = 11.sp)
             }
         }
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Split: Left = Active Rules List, Right = Dynamic Binding Matrix & Taboo Inspector
+        // Split: Left = Active Rules List, Center = Binding Matrix, Right = Live Taboo Simulator
         Row(
             modifier = Modifier.weight(1f).fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Rules List
             Column(
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(0.9f)
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(8.dp))
                     .background(SurfaceDark)
                     .border(1.dp, BorderDark, RoundedCornerShape(8.dp))
-                    .padding(14.dp)
+                    .padding(12.dp)
             ) {
-                Text("DISCOVERED STEERING DOCUMENTS", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(10.dp))
+                Text("STEERING DOCUMENTS", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
 
                 LazyColumn(
                     modifier = Modifier.weight(1f),
@@ -101,7 +148,7 @@ fun SteeringStudioView() {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(r.name, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(r.name, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(4.dp))
@@ -112,27 +159,27 @@ fun SteeringStudioView() {
                                 }
                             }
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(r.path, color = TextMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                            Text(r.path, color = TextMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                         }
                     }
                 }
             }
 
-            // Binding Matrix & Taboo Inspector
+            // Binding Matrix
             Column(
                 modifier = Modifier
-                    .weight(1.1f)
+                    .weight(1f)
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(8.dp))
                     .background(SurfaceDark)
                     .border(1.dp, BorderDark, RoundedCornerShape(8.dp))
-                    .padding(14.dp)
+                    .padding(12.dp)
             ) {
                 Text("PERSONA BINDING MATRIX", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Target Document: ${selectedRule.name}", color = AccentCyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text("Target: ${selectedRule.name}", color = AccentCyan, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 val availablePersonas = listOf(
                     "product_owner_lead" to "Product Owner Lead",
@@ -155,21 +202,17 @@ fun SteeringStudioView() {
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(SurfaceCard)
                                 .clickable {
-                                    val newBound = if (isBound) {
-                                        selectedRule.boundPersonas - id
-                                    } else {
-                                        selectedRule.boundPersonas + id
-                                    }
+                                    val newBound = if (isBound) selectedRule.boundPersonas - id else selectedRule.boundPersonas + id
                                     selectedRule = selectedRule.copy(boundPersonas = newBound)
                                     rules = rules.map { if (it.id == selectedRule.id) selectedRule else it }
                                 }
-                                .padding(12.dp),
+                                .padding(10.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text(label, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                                Text(id, color = TextMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                                Text(label, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                Text(id, color = TextMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                             }
                             Switch(
                                 checked = isBound,
@@ -184,6 +227,51 @@ fun SteeringStudioView() {
                                 )
                             )
                         }
+                    }
+                }
+            }
+
+            // Live Taboo Simulator (GUI Feature)
+            Column(
+                modifier = Modifier
+                    .weight(1.1f)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(SurfaceDark)
+                    .border(1.dp, BorderDark, RoundedCornerShape(8.dp))
+                    .padding(12.dp)
+            ) {
+                Text("LIVE TABOO SIMULATOR", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Type speculative code below to inspect triggered Taboos in real time:", color = TextMuted, fontSize = 10.sp)
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = codeSimulatorInput,
+                    onValueChange = { codeSimulatorInput = it },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Highlight detected Taboo violations
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(SurfaceCard)
+                        .padding(8.dp)
+                ) {
+                    if (codeSimulatorInput.contains("android.database.sqlite")) {
+                        Text("🚫 TABOO: Direct SQLite import violates UI isolation!", color = AccentRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                    if (codeSimulatorInput.contains("Thread.sleep")) {
+                        Text("⚠️ TABOO: Blocking main thread with Thread.sleep!", color = AccentAmber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                    if (!codeSimulatorInput.contains("android.database.sqlite") && !codeSimulatorInput.contains("Thread.sleep")) {
+                        Text("✅ Code complies with active Taboo Spaces.", color = AccentGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

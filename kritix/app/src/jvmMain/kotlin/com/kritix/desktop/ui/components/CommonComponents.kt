@@ -29,7 +29,13 @@ fun TabHeader(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
-    val tabs = listOf("Council Chamber", "Engineering Lab", "Steering Studio", "Persona Studio")
+    val tabs = listOf(
+        "Council Chamber",
+        "Engineering Lab",
+        "Steering Studio",
+        "Persona Studio",
+        "Knowledge & Rules"
+    )
 
     Row(
         modifier = Modifier
@@ -43,7 +49,7 @@ fun TabHeader(
         // App Brand
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(end = 32.dp)
+            modifier = Modifier.padding(end = 24.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -65,17 +71,17 @@ fun TabHeader(
             val isSelected = selectedTab == index
             Box(
                 modifier = Modifier
-                    .padding(horizontal = 4.dp)
+                    .padding(horizontal = 3.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(if (isSelected) SurfaceCard else Color.Transparent)
                     .clickable { onTabSelected(index) }
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Text(
                     text = title,
                     color = if (isSelected) AccentCyan else TextSecondary,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                    fontSize = 13.sp
+                    fontSize = 12.sp
                 )
             }
         }
@@ -97,7 +103,7 @@ fun TabHeader(
                     .background(AccentGreen)
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text("Engine Grounded", color = TextSecondary, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            Text("GUI Active • Sandbox Grounded", color = TextSecondary, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
         }
     }
 }

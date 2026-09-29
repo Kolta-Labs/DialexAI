@@ -11,6 +11,7 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import com.kritix.desktop.ui.components.TabHeader
 import com.kritix.desktop.ui.council.CouncilChamberView
+import com.kritix.desktop.ui.knowledge.KnowledgeInsightsView
 import com.kritix.desktop.ui.lab.EngineeringLabView
 import com.kritix.desktop.ui.persona.PersonaStudioView
 import com.kritix.desktop.ui.steering.SteeringStudioView
@@ -20,7 +21,7 @@ fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
         title = "Kritix AI — Autonomous Engineering & Cockpit Studio",
-        state = WindowState(width = 1200.dp, height = 800.dp)
+        state = WindowState(width = 1280.dp, height = 850.dp)
     ) {
         KritixTheme {
             var selectedTab by remember { mutableStateOf(0) }
@@ -37,6 +38,7 @@ fun main() = application {
                         1 -> EngineeringLabView()
                         2 -> SteeringStudioView()
                         3 -> PersonaStudioView()
+                        4 -> KnowledgeInsightsView()
                     }
                 }
             }

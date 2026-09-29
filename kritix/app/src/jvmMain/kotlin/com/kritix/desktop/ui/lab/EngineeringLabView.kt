@@ -22,8 +22,13 @@ import com.kritix.desktop.ui.theme.*
 
 @Composable
 fun EngineeringLabView() {
-    var roundNumber by remember { mutableStateOf(1) }
+    var selectedRound by remember { mutableStateOf(2) }
     var isRunningLoop by remember { mutableStateOf(false) }
+
+    val roundHistory = listOf(
+        1 to "Round 1 (Initial patch — Reviewer rejected missing exponential backoff test)",
+        2 to "Round 2 (Current — Added AuthTest with MockWebServer, tests pass 100%)"
+    )
 
     val initialChunks = remember {
         listOf(
@@ -64,30 +69,68 @@ fun EngineeringLabView() {
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(SurfaceCard)
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Text("Round $roundNumber / 3", color = AccentCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-
                 Button(
                     onClick = {
                         isRunningLoop = true
-                        roundNumber = (roundNumber % 3) + 1
+                        selectedRound = (selectedRound % 2) + 1
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = AccentCyan, contentColor = Color.Black)
                 ) {
-                    Text("Run Iteration", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text(if (isRunningLoop) "Iterating..." else "Run Iteration", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
 
                 Button(
                     onClick = {},
                     colors = ButtonDefaults.buttonColors(containerColor = AccentGreen, contentColor = Color.Black)
                 ) {
-                    Text("Commit & Push PR", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("Merge Shadow Worktree", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Shadow Worktree Status & Time-Travel Scrubber Bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(6.dp))
+                .background(SurfaceDark)
+                .border(1.dp, BorderDark, RoundedCornerShape(6.dp))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Shadow Worktree Indicator
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🛡️ Shadow Worktree:", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(".kritix/worktrees/task-101", color = AccentCyan, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("• Active workspace clean", color = AccentGreen, fontSize = 11.sp)
+            }
+
+            // Time Travel Round Checkpoint Scrubber
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Time-Travel Checkpoints:", color = TextMuted, fontSize = 11.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                roundHistory.forEach { (round, _) ->
+                    val isSelected = selectedRound == round
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (isSelected) AccentCyan else SurfaceCard)
+                            .clickable { selectedRound = round }
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            "Round $round",
+                            color = if (isSelected) Color.Black else TextSecondary,
+                            fontSize = 10.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
                 }
             }
         }
@@ -191,16 +234,24 @@ fun EngineeringLabView() {
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(AccentGreen.copy(alpha = 0.2f))
+                                .background(if (selectedRound == 2) AccentGreen.copy(alpha = 0.2f) else AccentRed.copy(alpha = 0.2f))
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
-                            Text("SIGN-OFF APPROVED", color = AccentGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (selectedRound == 2) "SIGN-OFF APPROVED" else "REVISION REQUIRED",
+                                color = if (selectedRound == 2) AccentGreen else AccentRed,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "Reviewer Verdict: Diff conforms strictly to layer isolation boundaries. No direct sqlite references in UI layer. Tests cover timeout and retry limits.",
+                        if (selectedRound == 2)
+                            "Reviewer Verdict (Round 2): Code satisfies all acceptance criteria, meets active steering invariants, and passes all tests without main thread blocking."
+                        else
+                            "Reviewer Verdict (Round 1): Found 1 blocking issue: Missing unit test verification covering 401 retry limits.",
                         color = TextPrimary,
                         fontSize = 11.sp,
                         lineHeight = 15.sp
