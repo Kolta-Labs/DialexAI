@@ -122,18 +122,19 @@ This document outlines the phased, granular tasks for developing **Kritix AI**.
 
 ---
 
-## Phase 8: Plugin Architecture & MCP Extensibility (`kritix/pkg/plugins`, `kritix/pkg/mcp`)
+## Phase 8: Plugin Architecture & MCP Extensibility (`kritix/pkg/plugins`, `kritix/pkg/mcp`, `kritix/pkg/skills`) (Completed)
 
 *Objective: Support pluggable build drivers, VCS forges, and external MCP tools.*
 
-- [ ] **TASK-0801**: Implement Build Driver Plugin Interface:
-  - Define `BuildDriver` interface (`Compile`, `Test`, `Lint`, `ParseErrorTrace`).
-  - Implement built-in drivers: Gradle (Android/KMP), Go, Cargo, npm.
-- [ ] **TASK-0802**: Implement MCP Client in `kritix/pkg/mcp/client.go`:
-  - Support JSON-RPC 2.0 over stdio and HTTP/SSE.
-  - Connect to Jira, PostgreSQL, and Figma MCP servers.
-- [ ] **TASK-0803**: Implement Project Skills loader in `kritix/pkg/skills`:
-  - Discover and execute custom repo tools from `.kritix/skills/*`.
+- [x] **TASK-0801**: Implement Build Driver Plugin Interface (`kritix/pkg/plugins/build_driver.go`):
+  - Defined `BuildDriver` interface (`Compile`, `Test`, `Lint`, `ParseErrorTrace`).
+  - Implemented built-in drivers: Go, Gradle (Android/KMP), Cargo (Rust), and npm (Node/TypeScript) with structured error trace parsing.
+- [x] **TASK-0802**: Implement MCP Client in `kritix/pkg/mcp/client.go` & `connectors.go`:
+  - JSON-RPC 2.0 client supporting stdio and HTTP transports for tools and resources.
+  - Pre-configured connectors for Jira, PostgreSQL, and Figma MCP servers.
+- [x] **TASK-0803**: Implement Project Skills loader in `kritix/pkg/skills/loader.go`:
+  - Discovers and executes custom tools and workflows from `.kritix/skills/*` and `~/.kritix/skills/*` (Markdown `SKILL.md` frontmatter & JSON).
+- [x] **TASK-0804**: Author and verify unit tests in `pkg/plugins`, `pkg/mcp`, and `pkg/skills` (100% PASS).
 
 ---
 
