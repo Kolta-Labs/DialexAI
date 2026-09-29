@@ -407,18 +407,93 @@ jobs:
 
 ## 8. Standalone Desktop Cockpit App (KMP + KoltLibs)
 
-For developers and managers who prefer a graphical workbench, Kritix provides a standalone Desktop Cockpit built with **Compose Multiplatform** and **KoltLibs** (`io.github.koltalabs.kolt:compose-kmp`).
+**YES! Kritix AI features a 100% full-parity Graphical User Interface (GUI).**
+
+For Product Owners, Engineering Managers, and developers who prefer a modern visual workbench over terminal commands, Kritix provides a standalone Desktop Cockpit built natively with **Compose Multiplatform** and **KoltLibs** (`io.github.koltalabs.kolt:compose-kmp`, `utils`, `logutils`).
+
+Every capability available in the CLI and LSP—from Socratic alignment interviews to shadow worktree time-travel scrubbers—is accessible visually with clicks, sliders, and toggles.
 
 ```bash
 # Launch the desktop app:
 ./gradlew :kritix:app:run
 ```
 
-### Visual Workbench Features:
-1. **Council Chamber View:** Live avatar row for stakeholders (PO, Architect, QA Lead, EM) with real-time influence bars, deliberation debate transcript, and verified markdown spec preview.
-2. **Engineering Lab View:** Split-screen workbench featuring a chunk-by-chunk diff accept/reject editor on the left, and Adversarial Reviewer critique with live sandbox terminal output on the right.
-3. **Steering Studio View:** Interactive Persona-to-Rule Binding Matrix allowing 1-click toggling of rule constraints per persona, plus live remote standards synchronizer.
-4. **Persona Studio View:** Interactive Canvas Radar Chart visualizer rendering the 8-layer Persona DNA cognitive priors (Strictness, Skepticism, Modularity, Velocity, Paranoia).
+```
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│  KRITIX AI COCKPIT  v1.0.0               [● Council Chamber]  [Lab]  [Steering]  [Personas]  [Knowledge]     ⚙ Settings│
+├────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│  Story Prompt: [ Build user authentication flow with JWT refresh tokens                        ]  [⚡ Deliberate Spec] │
+│  Style Vector: (●) Balanced (Standard)   ( ) Executive (Ponytail)   ( ) Technical (Caveman)                           │
+│  [🎙️ Toggle Socratic Alignment Interview ("Grill-Me")]                                                                │
+│  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ 🎙️ Socratic Alignment Interview (Interactive Clarifications)                                                      │  │
+│  │  • Product Owner:  [ "Should failed token refreshes trigger immediate logout or silent retry?"                 ] │  │
+│  │  • Lead Architect: [ "Store tokens in HTTP-only Secure Cookies or OS Keychain Encrypted SharedPreferences?"     ] │  │
+│  │  • QA Testing Lead:[ "Do we test clock drift of +/- 300 seconds on expired refresh tokens?"                    ] │  │
+│  └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘  │
+│  Stakeholder Council:                                                                                                  │
+│  [PO Lead 90%]         [Architect 95%]        [QA Lead 85%]         [Eng Manager 90%]                                  │
+│  ┌──────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────┐  │
+│  │ Stakeholder Deliberation Feed:               │ Canonical Verified Story Spec (Markdown Live Preview):            │  │
+│  │ • PO: "Tokens must refresh seamlessly."      │ # STORY-AUTH-001: JWT Authentication & Refresh                    │  │
+│  │ • Arch: "No JWT secrets in client storage."  │ ## Gherkin Acceptance Scenarios                                   │  │
+│  │ • QA: "Enforce expired token test suite."    │ Given valid refresh token When /api/refresh Then return 200 OK    │  │
+│  └──────────────────────────────────────────────┴───────────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### The 5 Visual Workspaces:
+
+#### 1. 🏛️ Chamber 1: Council Chamber (Requirements & Planning)
+Designed for Product Owners and Engineers to co-create bulletproof specifications:
+- **Interactive Socratic Alignment Drawer (`/grill-me` GUI):** Click the microphone button to expose questions asked by PO, Architect, and QA agents. Type your answers directly into the fields to resolve ambiguities before generation.
+- **Style Vector Toggle Pills:** Choose between **Balanced (Standard)**, **Executive (Ponytail)**, or **Technical (Caveman)** tone with a single click.
+- **Live Avatar Influence Stream:** Watch stakeholders deliberate, defend architectural boundaries, and reach consensus in real time.
+- **Export & Approve:** Preview the rendered Markdown spec and save it directly to `docs/specs/STORY-<id>.md`.
+
+#### 2. 🔬 Chamber 2: Engineering Lab (Isolated Execution & Scrubber)
+The visual control center for autonomous code generation:
+- **🛡️ Shadow Worktree Indicator:** Displays active background worktree path (`.kritix/worktrees/<task-id>`) ensuring zero risk to your current branch or uncommitted files.
+- **⏪ Interactive Time-Travel Checkpoint Scrubber:** Scrub back and forth across execution rounds (`[Round 1]`, `[Round 2]`, `[Round 3]`) to inspect the AST diff evolution and test outcomes at each step.
+- **Side-by-Side Diff Inspector:** Unified and split-screen diff view with chunk-by-chunk Accept/Reject buttons.
+- **Live Sandbox Terminal:** Displays streaming test execution output (`./gradlew test`, `go test`, `cargo test`) with process exit codes.
+- **One-Click Squash & Merge:** When tests pass 100% and the Reviewer signs off, click **Squash & Merge** to incorporate the verified changes into your active branch.
+
+#### 3. 🧭 Steering Studio (Dynamic Governance & Synthesizer)
+Manage repository rules, taboo spaces, and team standards visually:
+- **Persona-to-Rule Binding Matrix:** Interactive grid with toggle switches to assign rules (e.g., `clean-architecture-invariants`, `no-reflection`) to specific personas.
+- **🪄 PR-to-Rule Synthesizer Drawer:** Paste any PR comment or review feedback into the input field and click **"Synthesize & Bind Rule"** to automatically turn PR reviews into permanent repo governance rules.
+- **🧪 Live Taboo Space Sandbox Simulator:** Paste candidate code snippets to instantly verify whether they trigger taboo AST violations (e.g., forbidden reflection or banned imports) in real time.
+- **1-Click Remote Standards Sync:** Pull team steering standards down from GitHub/GitLab org repositories.
+
+#### 4. 🧬 Persona Studio (SWE Cognitive Priors)
+Inspect and fine-tune the AI personas running inside your repo:
+- **Interactive Radar Chart:** Canvas-rendered 8-layer cognitive visualization of priors: *Strictness*, *Skepticism*, *Modularity*, *Velocity*, and *Paranoia*.
+- **Persona Switcher:** Inspect predefined personas (Android, iOS, Backend, Security Auditor, QA Lead, Architect) and examine their prompt baselines and tooling permissions.
+
+#### 5. 💡 Knowledge Insights (Repository Memory Explorer)
+Visual dashboard of the self-evolving `.kritix/knowledge/` store:
+- **Breakthrough Cards:** Browse learned testing heuristics, architectural invariants, and debugging breakthroughs auto-extracted when hard loops converge.
+- **Full Text Search & Category Filter:** Filter by Architecture, Testing, Performance, and Security.
+- **Markdown Detail Viewer:** Read complete context, reproduction steps, and suggested remedies for any documented pattern.
+
+---
+
+### Interface Modality Comparison: Choose What Fits You
+
+| Feature | Desktop Cockpit (GUI) | Interactive CLI (TUI / REPL) | Universal LSP (VS Code / Zed) |
+| :--- | :---: | :---: | :---: |
+| **Primary Audience** | Product Owners, Tech Leads, Visual Devs | Terminal Power Users | In-Editor Developers |
+| **Stakeholder Deliberation** | Live Avatars & Chat Transcript | Rich ANSI Colored Stream | In-editor Spec generation |
+| **Socratic Alignment ("Grill-Me")** | Interactive Visual Drawer | Interactive TUI REPL (`/grill-me`) | QuickPick Prompts |
+| **Execution Safety** | Shadow Worktree Badge | Isolated Worktree Subshell | Isolated Worktree Background Task |
+| **Time-Travel Checkpoints** | Visual Clickable Scrubber | Git Checkpoint Tree | Git History Lens |
+| **Diff Review** | Chunk-by-chunk Visual Accept/Reject | ANSI Unified Diff Pager | Editor Diff Tab |
+| **Taboo Space Violations** | Interactive Simulator | Stderr Rule Report | Real-time Inline Squigglies & Diagnostics |
+| **PR-to-Rule Synthesizer** | Visual Paste & 1-Click Bind | `kritix steering synthesize` | CodeAction: "Synthesize Rule from Diff" |
+| **Knowledge Base Explorer** | Interactive Card & Detail View | `kritix knowledge list` | Auto-injected Prompt Context |
 
 ---
 
