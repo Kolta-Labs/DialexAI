@@ -207,14 +207,14 @@ This document outlines the phased, granular tasks for developing **Kritix AI**.
 
 ---
 
-## Phase 13: Auto-Evolving Knowledge Items (KI) & PR-to-Rule Synthesizer (`kritix/pkg/knowledge`)
+## Phase 13: Auto-Evolving Knowledge Items (KI) & PR-to-Rule Synthesizer (`kritix/pkg/knowledge`) (Completed)
 
 *Objective: Institutional memory that learns from every coding session and PR comment.*
 
-- [ ] **TASK-1301**: Implement Knowledge Item Store in `kritix/pkg/knowledge/store.go`:
-  - CRUD and indexing of repository learnings in `.kritix/knowledge/*.json`.
-- [ ] **TASK-1302**: Implement Auto-Learning Extractor in `kritix/pkg/knowledge/extractor.go`:
-  - Synthesize breakthroughs from converged multi-round coder/reviewer loops.
-- [ ] **TASK-1303**: Implement PR-to-Rule Synthesizer in `kritix/pkg/knowledge/synthesizer.go`:
-  - Convert human reviewer feedback into proposed Taboo Space and Heuristic rules.
-- [ ] **TASK-1304**: Author unit tests in `kritix/pkg/knowledge/knowledge_test.go` (100% PASS).
+- [x] **TASK-1301**: Implement Knowledge Item Store in `kritix/pkg/knowledge/store.go`:
+  - Thread-safe CRUD and indexing of repository learnings in `.kritix/knowledge/*.json`.
+- [x] **TASK-1302**: Implement Auto-Learning Extractor in `kritix/pkg/knowledge/extractor.go`:
+  - Synthesizes breakthrough insights from converged multi-round coder/reviewer loops.
+- [x] **TASK-1303**: Implement PR-to-Rule Synthesizer in `kritix/pkg/knowledge/synthesizer.go`:
+  - Converts natural code review comments into proposed Taboo Space constraints and Heuristics.
+- [x] **TASK-1304**: Author unit tests in `kritix/pkg/knowledge/knowledge_test.go` (100% PASS, 90.2% coverage).
