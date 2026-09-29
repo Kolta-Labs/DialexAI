@@ -176,18 +176,18 @@ This document outlines the phased, granular tasks for developing **Kritix AI**.
 
 ---
 
-## Phase 11: Shadow Worktrees & Time-Travel Isolation (`kritix/pkg/git/worktree.go`)
+## Phase 11: Shadow Worktrees & Time-Travel Isolation (`kritix/pkg/git/worktree.go`) (Completed)
 
 *Objective: Provide zero-disruption background execution without dirtying developer workspaces.*
 
-- [ ] **TASK-1101**: Implement Shadow Worktree Manager in `kritix/pkg/git/worktree.go`:
-  - Create and manage isolated `.kritix/worktrees/<task-id>` via `git worktree add`.
-  - Cache sharing and automatic cleanup on exit (`git worktree remove --force`).
-- [ ] **TASK-1102**: Implement Time-Travel Snapshotting & Round Checkpoints:
-  - Ephemeral branch commits per round (`round-1`, `round-2`) capturing code diffs and reviewer feedback.
-- [ ] **TASK-1103**: Implement Safe Merge & Cherry-Pick Gate:
-  - Fast-forward or squash-merge shadow worktree results into working branch.
-- [ ] **TASK-1104**: Author unit tests in `kritix/pkg/git/worktree_test.go` (100% PASS).
+- [x] **TASK-1101**: Implement Shadow Worktree Manager in `kritix/pkg/git/worktree.go`:
+  - Created isolated `.kritix/worktrees/<task-id>` via `git worktree add` with `.standards` symlinking.
+  - Automatic worktree removal and pruning on exit.
+- [x] **TASK-1102**: Implement Time-Travel Snapshotting & Round Checkpoints (`RecordCheckpoint`):
+  - Ephemeral commits per round with diffs and reviewer feedback preservation.
+- [x] **TASK-1103**: Implement Safe Merge & Cherry-Pick Gate (`MergeInto`):
+  - Fast-forward or squash-merges shadow worktree results into working branch.
+- [x] **TASK-1104**: Author unit tests in `kritix/pkg/git/worktree_test.go` (100% PASS, 81.2% coverage).
 
 ---
 
