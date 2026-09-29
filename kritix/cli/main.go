@@ -18,6 +18,7 @@ import (
 	"kritix/pkg/sandbox"
 	"kritix/pkg/spec"
 	"kritix/pkg/steering"
+	"kritix/pkg/tui"
 )
 
 const version = "1.0.0"
@@ -26,9 +27,10 @@ func printUsage() {
 	fmt.Printf(`Kritix AI - Dialectic Software Engineering & Autonomous Coding (v%s)
 
 Usage:
-  kritix <command> [options] [arguments]
+  kritix [command] [options] [arguments]
 
 Commands:
+  repl          Launch interactive TUI shell with @mentions and /grill-me
   plan, spec    Deliberate with Stakeholder Council to produce Story Spec
   code          Execute Domain Coder <-> Reviewer convergence loop
   review        Run Adversarial Reviewer against current git diff and tests
@@ -37,19 +39,12 @@ Commands:
   daemon        Launch webhook server for GitHub & GitLab automation
   version       Print version
 
+Running 'kritix' without arguments enters interactive REPL mode.
 Use "kritix <command> -h" for detailed options on any command.
 `, version)
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(0)
-	}
-
-	cmd := os.Args[1]
-	args := os.Args[2:]
-
 	cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error getting current directory: %v\n", err)
@@ -58,7 +53,20 @@ func main() {
 
 	registry := persona.NewRegistry(cwd)
 
+	if len(os.Args) < 2 {
+		// Default to interactive REPL
+		repl := tui.NewREPL(cwd, registry, os.Stdin, os.Stdout)
+		_ = repl.Run(context.Background())
+		return
+	}
+
+	cmd := os.Args[1]
+	args := os.Args[2:]
+
 	switch cmd {
+	case "repl":
+		repl := tui.NewREPL(cwd, registry, os.Stdin, os.Stdout)
+		_ = repl.Run(context.Background())
 	case "plan", "spec":
 		handlePlan(cwd, registry, args)
 	case "code":

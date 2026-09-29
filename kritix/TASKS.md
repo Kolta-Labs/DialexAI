@@ -158,3 +158,63 @@ This document outlines the phased, granular tasks for developing **Kritix AI**.
 - [x] **TASK-0906**: Implement Persona Studio UI (`PersonaStudioView.kt`):
   - Custom Canvas Radar Chart visualizer and 8-layer DNA editor.
 - [x] **TASK-0907**: Implement Native CLI entrypoint (`kritix/cli/main.go`) and Daemon (`cmd/kritixd/main.go`).
+
+---
+
+## Phase 10: Interactive TUI REPL & Alignment Interviews (`kritix repl`, `@mentions`, `/grill-me`) (Completed)
+
+*Objective: Deliver a high-ergonomics terminal REPL with context mentions and alignment interviews.*
+
+- [x] **TASK-1001**: Implement TUI Engine & Shell in `kritix/pkg/tui/repl.go`:
+  - Interactive REPL loop with prompt formatting, ANSI colorized output, and command dispatch.
+- [x] **TASK-1002**: Implement Context Mention Parser in `kritix/pkg/tui/mentions.go`:
+  - Resolves `@file:<path>`, `@spec:<id>`, `@rule:<id>`, and `#symbol:<name>` into live context attachments.
+- [x] **TASK-1003**: Implement Slash Commands & Alignment Interview (`kritix/pkg/tui/interview.go`):
+  - Stakeholder Council conducts 3-question Socratic alignment interview (`/grill-me`) before planning.
+- [x] **TASK-1004**: Wire `kritix repl` subcommand into `kritix/cli/main.go` (and default interactive mode).
+- [x] **TASK-1005**: Author unit tests in `kritix/pkg/tui/tui_test.go` (100% PASS).
+
+---
+
+## Phase 11: Shadow Worktrees & Time-Travel Isolation (`kritix/pkg/git/worktree.go`)
+
+*Objective: Provide zero-disruption background execution without dirtying developer workspaces.*
+
+- [ ] **TASK-1101**: Implement Shadow Worktree Manager in `kritix/pkg/git/worktree.go`:
+  - Create and manage isolated `.kritix/worktrees/<task-id>` via `git worktree add`.
+  - Cache sharing and automatic cleanup on exit (`git worktree remove --force`).
+- [ ] **TASK-1102**: Implement Time-Travel Snapshotting & Round Checkpoints:
+  - Ephemeral branch commits per round (`round-1`, `round-2`) capturing code diffs and reviewer feedback.
+- [ ] **TASK-1103**: Implement Safe Merge & Cherry-Pick Gate:
+  - Fast-forward or squash-merge shadow worktree results into working branch.
+- [ ] **TASK-1104**: Author unit tests in `kritix/pkg/git/worktree_test.go` (100% PASS).
+
+---
+
+## Phase 12: Universal Language Server Protocol (LSP) Server Mode (`kritix/pkg/lsp`)
+
+*Objective: Universal IDE bridge for VS Code, IntelliJ, Zed, and Neovim.*
+
+- [ ] **TASK-1201**: Implement LSP JSON-RPC 2.0 Base Protocol & Dispatcher in `kritix/pkg/lsp/server.go`:
+  - Lifecycle (`initialize`, `initialized`, `shutdown`, `exit`).
+  - Document tracking (`textDocument/didOpen`, `textDocument/didChange`, `textDocument/didSave`).
+- [ ] **TASK-1202**: Implement Real-Time Taboo Diagnostics (`textDocument/publishDiagnostics`):
+  - Stream Taboo Space violations as warnings/errors to connected IDEs.
+- [ ] **TASK-1203**: Implement Code Action & CodeLens Provider (`textDocument/codeAction`, `textDocument/codeLens`):
+  - Quick-fixes and clickable Council Deliberation triggers.
+- [ ] **TASK-1204**: Wire `kritix lsp` subcommand into `kritix/cli/main.go`.
+- [ ] **TASK-1205**: Author unit tests in `kritix/pkg/lsp/lsp_test.go` (100% PASS).
+
+---
+
+## Phase 13: Auto-Evolving Knowledge Items (KI) & PR-to-Rule Synthesizer (`kritix/pkg/knowledge`)
+
+*Objective: Institutional memory that learns from every coding session and PR comment.*
+
+- [ ] **TASK-1301**: Implement Knowledge Item Store in `kritix/pkg/knowledge/store.go`:
+  - CRUD and indexing of repository learnings in `.kritix/knowledge/*.json`.
+- [ ] **TASK-1302**: Implement Auto-Learning Extractor in `kritix/pkg/knowledge/extractor.go`:
+  - Synthesize breakthroughs from converged multi-round coder/reviewer loops.
+- [ ] **TASK-1303**: Implement PR-to-Rule Synthesizer in `kritix/pkg/knowledge/synthesizer.go`:
+  - Convert human reviewer feedback into proposed Taboo Space and Heuristic rules.
+- [ ] **TASK-1304**: Author unit tests in `kritix/pkg/knowledge/knowledge_test.go` (100% PASS).
