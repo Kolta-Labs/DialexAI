@@ -57,7 +57,7 @@ You agree not to use Dialex AI for any purpose that is prohibited by these Terms
 
 ## 5. Software License & Commercial Usage Restrictions
 
-1. **PolyForm Noncommercial License 1.0.0:** Dialex AI source code and distributed binaries are governed by the [PolyForm Noncommercial License 1.0.0](file:///LICENSE).
+1. **PolyForm Noncommercial License 1.0.0:** Dialex AI source code and distributed binaries are governed by the [PolyForm Noncommercial License 1.0.0](LICENSE) (dual-licensed: see [COMMERCIAL_LICENSE.md](../COMMERCIAL_LICENSE.md)).
 2. **Permitted Noncommercial Use:** You may freely download, execute, modify, and redistribute Dialex AI for personal study, academic research, education, non-profit community activities, or noncommercial development.
 3. **Commercial License Requirement:** Any use of Dialex AI to operate a commercial business, provide paid consulting or advisory services, charge subscription fees, or conduct internal for-profit commercial activities **requires a separate commercial enterprise license** issued in writing by Kolta Labs. For commercial licensing terms, contact `licensing@koltalabs.com`.
 4. **Attribution:** You must preserve all copyright notices, license headers, and trademark references in all copies or derivative works of the Software.

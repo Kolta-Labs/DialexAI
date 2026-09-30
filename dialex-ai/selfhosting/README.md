@@ -164,7 +164,7 @@ Creates an encrypted tarball of your discussion history, accounts, and AES keys 
 
 ## 📄 License
 
-Dialex AI is licensed under the [PolyForm Noncommercial License 1.0.0](file:///LICENSE).  
+Dialex AI is licensed under the [PolyForm Noncommercial License 1.0.0](../LICENSE) (dual-licensed: see [COMMERCIAL_LICENSE.md](../../COMMERCIAL_LICENSE.md)).  
 Copyright (c) 2026 Kolta Labs. Free for personal, academic, and noncommercial research. Commercial deployments require an enterprise license from Kolta Labs.
 
 ---

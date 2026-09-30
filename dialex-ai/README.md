@@ -258,10 +258,10 @@ We welcome contributions from researchers, software developers, writers, and des
 
 ## License & Usage
 
-Dialex AI is open-source under the **PolyForm Noncommercial License 1.0.0**.
+Dialex AI is **source-available and dual-licensed** by Kolta Labs. It is not OSI open source.
 
-* ✅ **Free for Noncommercial Use**: You are free to use, test, study, and research with Dialex AI for personal, academic, educational, and non-profit purposes.
-* 💼 **Commercial Use**: Using Dialex AI to operate a commercial business, sell advisory services, or run enterprise operations requires a commercial license. Contact `licensing@koltalabs.com` for details.
+* ✅ **Noncommercial use (free)**: personal, academic, educational, research and non-profit use under the **PolyForm Noncommercial License 1.0.0**.
+* 💼 **Commercial use**: using it in or for a business, or offering it to customers, requires a commercial license. See [COMMERCIAL_LICENSE.md](../COMMERCIAL_LICENSE.md) or email `licensing@koltalabs.com`.
 
 *For full legal terms, see the [LICENSE](LICENSE) file.*
 
