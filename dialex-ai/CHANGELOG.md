@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hegelian Multi-Agent Adversarial Deliberation**:
   - Pits up to 6 competing frontier AI models (Anthropic Claude, OpenAI GPT, Google Gemini, xAI Grok, DeepSeek, Mistral Large, and local Ollama) in multi-round structured dialectic debates.
   - Designated Moderator (Seat 1) who frames topic agendas, leads round-by-round syntheses, and generates the final consensus outcome.
-- **$0 Marginal Token Cost via Local Developer CLIs**:
+- **No Extra Per-Token Billing via Local CLIs or Ollama**:
   - Direct execution through local authenticated developer subshells (`claude`, `codex`, `antigravity`/`agy`, `ollama`) to eliminate metered enterprise API bills.
 - **Two-Tab Persona Registry & Style Modifiers**:
   - 10 Universal General Debate Archetypes (*The Facilitator*, *Devil's Advocate*, *The Optimist*, *The Pragmatist*, *The Contrarian*, *The Expert*, *The Risk Analyst*, *The Ethicist*, *The Historian*, *The Futurist*).

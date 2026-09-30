@@ -51,7 +51,7 @@ Dialex AI supports up to 6 distinct agent seats in a single deliberation:
    - Add up to 5 additional peer models from competing providers (Anthropic Claude, OpenAI GPT, Google Gemini, xAI Grok, DeepSeek, Mistral, or local Ollama).
 3. **Execution Modes (API vs CLI)**:
    - **Cloud API Mode**: Directly connects to cloud REST endpoints using encrypted API keys stored in your local AES-256 vault.
-   - **Local CLI Mode ($0 Marginal Token Billing)**: Shells out to authenticated developer tools already installed on your workstation (`claude`, `codex`, `antigravity`/`agy`, or `ollama`). Zero per-token credit card fees.
+   - **Local CLI Mode (no per-token billing from Dialex)**: Shells out to authenticated developer tools already installed on your workstation (`claude`, `codex`, `antigravity`/`agy`, or `ollama`). Zero per-token credit card fees.
 
 ### 2.3 Dedicated 1-on-1 Socratic Interview Mode
 When you need to deeply cross-examine an architectural assumption, extract implicit design requirements, or test personal cognitive blind spots without convening a full 4-to-6 model council:
@@ -205,7 +205,7 @@ One of Dialex AI's most significant cost-saving advantages is its native support
 ### 6.1 The Cost Crisis of Traditional Multi-Agent Setups
 Traditional multi-agent frameworks make dozens of cloud API calls per debate. For a 5-round, 4-agent debate with long context windows, a single deliberation can consume $2.00–$8.00 in cloud API credits. Running 10 debates a day quickly results in **$600–$2,400/month** in runaway API bills.
 
-### 6.2 The $0 Marginal Cost Solution
+### 6.2 Cost Options
 Many developers already subscribe to flat-rate developer plans (such as Anthropic Claude Pro/Team, GitHub Copilot/Codex, Google Gemini Advanced/Antigravity) or run local open-weight models via Ollama. 
 
 Dialex AI's Go engine can execute agent turns by spawning local authenticated CLI subprocesses:
@@ -213,8 +213,8 @@ Dialex AI's Go engine can execute agent turns by spawning local authenticated CL
 | Runner Mode | Pricing Model | Per-Debate Cost | Setup Requirement |
 |---|---|---|---|
 | **Cloud REST APIs** | Per-Token Metered Billing | $0.50 – $5.00+ | API Keys (Anthropic, OpenAI, etc.) |
-| **Local Developer CLIs** (`claude`, `codex`, `antigravity`/`agy`) | Existing Flat-Rate Subscription | **$0.00 (Zero Marginal Cost)** | Authenticated CLI installed in `$PATH` |
-| **Local Ollama Models** (`llama3.3`, `deepseek-r1`) | 100% Free / Open Source | **$0.00 (Zero Marginal Cost)** | Ollama daemon running locally |
+| **Local Developer CLIs** (`claude`, `codex`, `antigravity`/`agy`) | Existing Flat-Rate Subscription | **No per-token charge from Dialex** (vendor plan limits and terms apply) | Authenticated CLI installed in `$PATH` |
+| **Local Ollama Models** (`llama3.3`, `deepseek-r1`) | 100% Free / Open Source | **No per-token charge from Dialex** (vendor plan limits and terms apply) | Ollama daemon running locally |
 
 <div align="center">
   <img src="screenshots/06_ai_agents_and_cli_runners_settings.png" alt="AI Agents and CLI Runners Settings" width="85%" />

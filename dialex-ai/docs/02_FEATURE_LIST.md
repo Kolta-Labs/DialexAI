@@ -10,7 +10,7 @@ This document details all user-facing capabilities, unique selling propositions 
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │                             DIALEX AI KEY ADVANTAGES                            │
 ├───────────────────────┬──────────────────────────┬───────────────────────────────┤
-│ Adversarial Council   │ $0 Marginal CLI Cost     │ 1-Click Native Desktop Apps   │
+│ Adversarial Council   │ No Extra Per-Token Billing     │ 1-Click Native Desktop Apps   │
 │ Up to 6 Frontier LLMs │ Run on local subshells   │ macOS (.dmg), Win (.msi),     │
 │ eliminate blind spots │ with existing subscriptions│ Linux (.AppImage), Android    │
 ├───────────────────────┼──────────────────────────┼───────────────────────────────┤

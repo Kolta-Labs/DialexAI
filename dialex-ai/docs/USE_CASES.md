@@ -9,7 +9,7 @@
 Each playbook provides:
 1. **The Strategic Dilemma**: The core problem statement to paste into **Discussion Setup**.
 2. **Recommended Council Configuration**: Primary Moderator, peer seats, model providers, and persona archetypes.
-3. **Execution Mode**: Cloud API vs Local CLI ($0 Marginal Token Billing).
+3. **Execution Mode**: Cloud API vs Local CLI (no per-token billing from Dialex).
 4. **Key Epistemic Tensions to Surface**: Critical trade-offs the council must resolve.
 5. **Human Steering Injections**: High-impact prompts to queue during live rounds.
 6. **Expected Deliverables**: The exact synthesized outputs to extract upon reaching consensus.

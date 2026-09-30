@@ -89,7 +89,7 @@ Your organization's most sensitive debates—unannounced acquisitions, proprieta
 - **Hardware-Backed Encryption:** API keys are encrypted at rest using **Argon2id** key derivation and **AES-256-GCM**, augmented by Android Keystore (TEE/StrongBox) on mobile.
 - **Air-Gapped & Offline Ready:** Deploy fully air-gapped using local **Ollama** or custom local LLMs with zero outbound internet access.
 
-### 3.4 $0 Marginal Token Cost via Developer CLIs
+### 3.4 No Extra Per-Token Billing via Local CLIs or Ollama
 Enterprise AI initiatives frequently stall due to runaway per-token API credit card billing.
 - Dialex AI introduces first-class integration with already-authenticated local developer CLI binaries:
   - `claude` (Anthropic Claude Code)

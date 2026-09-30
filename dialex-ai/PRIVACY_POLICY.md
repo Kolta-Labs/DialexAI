@@ -55,6 +55,14 @@ When configured with local model providers (such as Ollama, llama.cpp, or local 
 1. **No Outbound Model Traffic:** Deliberations execute entirely on your local machine using loopback IPC (`localhost` or Unix domain sockets).
 2. **Offline Operation:** The application requires zero internet connectivity, keeping your content on your machine. Verify your own model and runner configuration before using it with sensitive material.
 
+### C. Optional Features That Contact Third Parties
+
+These are user-initiated or passive downloads, not telemetry. Kolta Labs operates none of the Telegram or GitHub endpoints.
+
+1. **Bug report / feedback (opt-in):** Sending feedback posts your description and up to 2,500 characters of the current session transcript to the Telegram Bot API, using a bot token and chat ID that you supply. Nothing is sent unless you press Send.
+2. **Persona gallery:** Opening the gallery downloads a public JSON file from `raw.githubusercontent.com` (GitHub) and links to `dialex.dev/gallery`. The host can see your IP address and request time.
+3. **Kritix integrations:** Kritix AI calls GitHub/GitLab and MCP connector APIs (for example Figma) only when you configure and invoke them.
+
 ---
 
 ## 5. Security & Cryptographic Protection of Secrets

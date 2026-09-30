@@ -129,6 +129,8 @@ Your questions, debate transcripts, and API keys are stored locally on your comp
 ### 💰 Direct Pricing, Zero Markup
 Dialex AI is not a middleman selling expensive tokens. You can connect your existing free development CLIs (like `claude`, `codex`, or `antigravity`) or bring your own API keys. You only pay provider rates directly, with no hidden subscription markup.
 
+> **Recommended path:** direct API keys or local Ollama. Driving a vendor CLI (`claude`, `codex`, ...) depends on that vendor's terms of service, which may restrict automated use of a consumer subscription, and the CLIs can change and break. Check your plan's terms before relying on it.
+
 ### 📑 1-Click Executive Deliverables
 Once a deliberation concludes, you don't have to scroll through walls of text. Click one button to export:
 * **Executive Memorandum**: A formal, publication-ready summary ready to share with stakeholders.

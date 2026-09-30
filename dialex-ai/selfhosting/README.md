@@ -166,3 +166,23 @@ Creates an encrypted tarball of your discussion history, accounts, and AES keys 
 
 Dialex AI is licensed under the [PolyForm Noncommercial License 1.0.0](file:///LICENSE).  
 Copyright (c) 2026 Kolta Labs. Free for personal, academic, and noncommercial research. Commercial deployments require an enterprise license from Kolta Labs.
+
+---
+
+## Security Model & Data Retention
+
+**What the code does today**
+- The engine binds to `127.0.0.1:7890` by default. Exposing it (`--host 0.0.0.0:...`, Docker, Tailscale) is your decision and your exposure.
+- Data routes require authentication (`requireAuth`); passwords are hashed with bcrypt; tokens are signed JWTs.
+- Provider API keys are encrypted at rest with AES-256-GCM. The key lives in a separate file in the same data directory, so anyone with read access to the whole directory can decrypt them. There is no OS keychain integration yet.
+- Transcripts, projects, personas and the knowledge graph are stored unencrypted in the data directory (SQLite/JSON). Use disk encryption if that matters to you.
+
+**What it does not do**
+- No SSO/OIDC, role-based access control, or audit-log export.
+- No rate limiting or brute-force lockout beyond what your reverse proxy provides.
+- No independent security audit or penetration test.
+- No verified multi-tenant isolation: treat one deployment as one trust domain and assume every user on an instance can reach the same data.
+
+**Recommended deployment**: Tailscale or another private network, or a reverse proxy (Caddy/nginx) with TLS. Never expose the raw port to the internet.
+
+**Data retention**: Kolta Labs holds none of your data. On your instance, data stays until you delete it in the app or remove the data directory; deleting a discussion removes it from the local store. Content sent to a model provider is retained under that provider's policy (see the privacy policy).

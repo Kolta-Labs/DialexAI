@@ -73,7 +73,7 @@ Dialex AI implements classical **Hegelian Dialectic Deliberation** across autono
 
 ## 4. Key Architectural & Security Differentiators
 
-- **$0 Marginal Token Cost with Local CLIs:** Connect directly to existing developer CLI subscriptions (`claude`, `codex`, `antigravity`/`agy`, `ollama`) with zero extra API keys or runaway token bills.
+- **No Extra Per-Token Billing with Local CLIs or Ollama:** Connect directly to existing developer CLI subscriptions (`claude`, `codex`, `antigravity`/`agy`, `ollama`) with zero extra API keys or runaway token bills.
 - **1-Click Native Desktop Downloadables:** Standalone double-click installers for **macOS (.dmg)**, **Windows (.msi)**, **Linux (.AppImage / .deb)**, and **Android (.apk)**. No terminal required.
 - **Zero Single-Vendor Lock-In:** Mix and match frontier cloud APIs (Anthropic, OpenAI, Google, xAI, DeepSeek) with sovereign, air-gapped local models (Ollama, local LLM CLI tools).
 - **Sovereign Local-First & Zero Cloud Storage:** Deliberation transcripts and configuration remain on your local disk or private server. No third-party SaaS stores your sensitive corporate strategic debates.
