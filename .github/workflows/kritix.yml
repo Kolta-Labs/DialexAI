@@ -4,12 +4,12 @@ on:
   push:
     branches: [ main, develop ]
     paths:
-      - 'kritix/**'
+      - 'kritix-ai/**'
       - '.github/workflows/kritix.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
-      - 'kritix/**'
+      - 'kritix-ai/**'
       - '.github/workflows/kritix.yml'
 
 concurrency:
@@ -28,24 +28,23 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.22.x"
-          cache-dependency-path: kritix/go.sum
 
       - name: Verify Go Modules
-        working-directory: kritix
+        working-directory: kritix-ai
         run: |
           go mod download
           go mod verify
 
       - name: Static Analysis (go vet)
-        working-directory: kritix
+        working-directory: kritix-ai
         run: go vet ./pkg/... ./cli/... ./cmd/...
 
       - name: Run Unit Tests with Race Detector & Coverage
-        working-directory: kritix
+        working-directory: kritix-ai
         run: go test -v -race -cover ./pkg/...
 
       - name: Build Native CLI Binaries
-        working-directory: kritix
+        working-directory: kritix-ai
         run: |
           mkdir -p bin
           CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/kritix ./cli/main.go
@@ -57,7 +56,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kritix-binaries-linux
-          path: kritix/bin/
+          path: kritix-ai/bin/
           retention-days: 7
 
   cockpit-kmp-build:
@@ -88,8 +87,8 @@ jobs:
           cache-read-only: false
 
       - name: Compile Kritix Cockpit Desktop App
-        working-directory: DialexAI
-        run: ./gradlew :kritix:app:compileKotlinJvm --no-daemon --stacktrace
+        working-directory: DialexAI/kritix-ai
+        run: ./gradlew :app:compileKotlinJvm --no-daemon --stacktrace
 
   adversarial-pr-check:
     name: Adversarial Reviewer PR Check
@@ -108,11 +107,11 @@ jobs:
           go-version: "1.22.x"
 
       - name: Build Kritix CLI
-        working-directory: kritix
+        working-directory: kritix-ai
         run: go build -o bin/kritix ./cli/main.go
 
       - name: Run Adversarial Reviewer on PR Diff
-        working-directory: kritix
+        working-directory: kritix-ai
         run: |
           echo "Running Kritix Adversarial Reviewer against base branch ${{ github.base_ref }}..."
           git diff origin/${{ github.base_ref }}...HEAD > pr.diff

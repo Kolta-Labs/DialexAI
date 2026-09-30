@@ -39,7 +39,7 @@ jobs:
           cache-read-only: false
 
       - name: Run KMP Common & Desktop Tests
-        working-directory: DialexAI
+        working-directory: DialexAI/dialex-ai
         run: ./gradlew :shared:allTests :desktopApp:compileKotlinJvm --no-daemon --stacktrace
 
   android-build:
@@ -71,7 +71,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Compile Android Client
-        working-directory: DialexAI
+        working-directory: DialexAI/dialex-ai
         run: ./gradlew :androidApp:compileDebugKotlin :androidApp:assembleDebug --no-daemon
 
   go-engine:
@@ -85,14 +85,15 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.22.x"
-          cache-dependency-path: engine/go.sum
+          cache-dependency-path: dialex-engine/go.sum
 
       - name: Verify Go Modules
-        working-directory: engine
+        working-directory: dialex-engine
         run: |
           go mod download
           go mod verify
 
       - name: Run Engine Tests with Race Detector
-        working-directory: engine
+        working-directory: dialex-engine
         run: go test -v -race -timeout 5m ./pkg/...
+

@@ -1,4 +1,4 @@
-rootProject.name = "Dialex"
+rootProject.name = "Kritix"
 
 pluginManagement {
     repositories {
@@ -17,6 +17,7 @@ dependencyResolutionManagement {
         mavenLocal()
     }
 }
+
 val koltPath = when {
     File(rootDir.parentFile?.parentFile, "KoltLibs").exists() -> "../../KoltLibs"
     File(rootDir.parentFile?.parentFile, "Kolt").exists() -> "../../Kolt"
@@ -24,6 +25,7 @@ val koltPath = when {
     File(rootDir.parentFile, "Kolt").exists() -> "../Kolt"
     else -> "../../KoltLibs"
 }
+
 includeBuild(koltPath) {
     dependencySubstitution {
         substitute(module("io.github.koltalabs.kolt:utils")).using(project(":libs:utils"))
@@ -33,7 +35,4 @@ includeBuild(koltPath) {
     }
 }
 
-include(":shared")
-include(":desktopApp")
-include(":androidApp")
-
+include(":app")

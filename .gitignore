@@ -94,10 +94,13 @@ output-metadata.json
 # 6. Compose Desktop & Go Engine Binaries
 # ------------------------------------------------------------------------------
 # Compiled Go engine binaries
-engine/dialex
-engine/dialex.exe
-engine/bin/
-engine/dist/
+dialex-engine/dialex
+dialex-engine/dialex.exe
+dialex-engine/bin/
+dialex-engine/dist/
+kritix-ai/bin/
+kritix-ai/dist/
+
 
 # Release staging & output packages (anchored to root)
 /dist/

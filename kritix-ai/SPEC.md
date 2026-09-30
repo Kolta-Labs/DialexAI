@@ -80,7 +80,7 @@ Dialex/ (Monorepo root)
 │
 ├── .standards/ -> ../KoltLibs/Standards/steering/kmp   # Symlinked KMP & Engineering Standards
 ├── AGENTS.md, CLAUDE.md, GEMINI.md                    # Root Agent Steering Files
-├── go.work                                           # Unified Go Workspace (./engine + ./kritix)
+├── go.work                                           # Unified Go Workspace (./dialex-engine + ./kritix-ai)
 │
 ├── engine/                                           # SHARED CORE [100% SEALED]
 │   ├── cmd/dialexd/                                  # Daemon binary (REST + SSE API)

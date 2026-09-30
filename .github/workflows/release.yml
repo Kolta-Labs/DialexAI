@@ -89,13 +89,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Package macOS DMG
-        working-directory: DialexAI
+        working-directory: DialexAI/dialex-ai
         run: ./gradlew :desktopApp:packageDmg "-Papp.version=${{ needs.prepare-release.outputs.version }}" --no-daemon
 
       - name: Stage macOS Artifacts
         run: |
           mkdir -p staging-macos
-          find DialexAI/desktopApp/build/compose/binaries/main/dmg -name "*.dmg" -exec cp {} staging-macos/DialexAI-${{ needs.prepare-release.outputs.version }}-macOS-arm64.dmg \;
+          find DialexAI/dialex-ai/desktopApp/build/compose/binaries/main/dmg -name "*.dmg" -exec cp {} staging-macos/DialexAI-${{ needs.prepare-release.outputs.version }}-macOS-arm64.dmg \;
 
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4
@@ -144,7 +144,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Package Windows MSI Installer
-        working-directory: DialexAI
+        working-directory: DialexAI/dialex-ai
         shell: bash
         run: ./gradlew :desktopApp:packageMsi "-Papp.version=${{ needs.prepare-release.outputs.version }}" --no-daemon
 
@@ -152,7 +152,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p staging-windows
-          find DialexAI/desktopApp/build/compose/binaries/main/msi -name "*.msi" -exec cp {} staging-windows/DialexAI-${{ needs.prepare-release.outputs.version }}-Windows-x64.msi \;
+          find DialexAI/dialex-ai/desktopApp/build/compose/binaries/main/msi -name "*.msi" -exec cp {} staging-windows/DialexAI-${{ needs.prepare-release.outputs.version }}-Windows-x64.msi \;
 
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
@@ -190,14 +190,14 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Package Linux DEB and RPM
-        working-directory: DialexAI
+        working-directory: DialexAI/dialex-ai
         run: ./gradlew :desktopApp:packageDeb :desktopApp:packageRpm "-Papp.version=${{ needs.prepare-release.outputs.version }}" --no-daemon
 
       - name: Stage Linux Artifacts
         run: |
           mkdir -p staging-linux
-          find DialexAI/desktopApp/build/compose/binaries/main/deb -name "*.deb" -exec cp {} staging-linux/DialexAI-${{ needs.prepare-release.outputs.version }}-Linux-amd64.deb \;
-          find DialexAI/desktopApp/build/compose/binaries/main/rpm -name "*.rpm" -exec cp {} staging-linux/DialexAI-${{ needs.prepare-release.outputs.version }}-Linux-amd64.rpm \; || true
+          find DialexAI/dialex-ai/desktopApp/build/compose/binaries/main/deb -name "*.deb" -exec cp {} staging-linux/DialexAI-${{ needs.prepare-release.outputs.version }}-Linux-amd64.deb \;
+          find DialexAI/dialex-ai/desktopApp/build/compose/binaries/main/rpm -name "*.rpm" -exec cp {} staging-linux/DialexAI-${{ needs.prepare-release.outputs.version }}-Linux-amd64.rpm \; || true
 
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
@@ -235,21 +235,21 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build Android APKs
-        working-directory: DialexAI
+        working-directory: DialexAI/dialex-ai
         run: ./gradlew :androidApp:assembleRelease :androidApp:assembleDebug "-Papp.version=${{ needs.prepare-release.outputs.version }}" --no-daemon
 
       - name: Stage Android Artifacts
         run: |
           mkdir -p staging-android
           # Copy universal installable APK (signed with debug keystore, ready to sideload)
-          if [ -f DialexAI/androidApp/build/outputs/apk/debug/androidApp-debug.apk ]; then
-            cp DialexAI/androidApp/build/outputs/apk/debug/androidApp-debug.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}.apk
+          if [ -f DialexAI/dialex-ai/androidApp/build/outputs/apk/debug/androidApp-debug.apk ]; then
+            cp DialexAI/dialex-ai/androidApp/build/outputs/apk/debug/androidApp-debug.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}.apk
           fi
           # Also copy release APK if generated
-          if [ -f DialexAI/androidApp/build/outputs/apk/release/androidApp-release.apk ]; then
-            cp DialexAI/androidApp/build/outputs/apk/release/androidApp-release.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}-release.apk
-          elif [ -f DialexAI/androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk ]; then
-            cp DialexAI/androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}-unsigned.apk
+          if [ -f DialexAI/dialex-ai/androidApp/build/outputs/apk/release/androidApp-release.apk ]; then
+            cp DialexAI/dialex-ai/androidApp/build/outputs/apk/release/androidApp-release.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}-release.apk
+          elif [ -f DialexAI/dialex-ai/androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk ]; then
+            cp DialexAI/dialex-ai/androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk staging-android/DialexAI-Mobile-${{ needs.prepare-release.outputs.version }}-unsigned.apk
           fi
 
       - name: Upload Android Artifacts
@@ -295,7 +295,7 @@ jobs:
           go-version: "1.22.x"
 
       - name: Compile Engine Binary
-        working-directory: engine
+        working-directory: dialex-engine
         env:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
@@ -306,7 +306,7 @@ jobs:
             -o dist/dialex-engine${{ matrix.ext }} ./cmd/dialex
 
       - name: Package Archive
-        working-directory: engine
+        working-directory: dialex-engine
         run: |
           mkdir -p ../staging-engine
           TARGET_NAME="dialex-engine-v${{ needs.prepare-release.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"
