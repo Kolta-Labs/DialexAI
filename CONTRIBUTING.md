@@ -28,8 +28,7 @@ The Kotlin client needs the public [Kolt](https://github.com/Kolta-Labs/Kolt) li
 | Benchmark | Run `Dialex-Bench-10` council vs single model and publish method, cost, latency, results in `dialex-ai/docs/` | M |
 | Engine | OpenAI-compatible runner (covers OpenRouter, vLLM, LM Studio) in `dialex-engine/pkg/runner` with a contract test | M |
 | Engine | Runner health check: probe CLI version/flags at startup and disable a broken runner cleanly | M |
-| Security | OS keychain storage for API keys in `dialex-engine/pkg/store/crypto.go` (macOS/Windows/Linux, file fallback) | M |
-| Kritix | Container-based execution for `kritix-ai/pkg/sandbox` with a test proving filesystem/network restriction | L |
+| Kritix | Container or VM execution for `kritix-ai/pkg/sandbox` (today: `sandbox-exec`/`bwrap`; reads are unrestricted) | L |
 | Kritix | Make `kritix plan` a real model-backed council (use `coder.NewAPIRunnerFromEnv`; keep the template as offline fallback) | L |
 | Kritix | Model-backed reviewer that evaluates acceptance criteria, alongside the rule-based checks | L |
 | Kritix | Give the TUI REPL and `forge` worker a model via `coder.PatchGenerator` | M |
@@ -38,5 +37,6 @@ The Kotlin client needs the public [Kolt](https://github.com/Kolta-Labs/Kolt) li
 | Docs | Verify one end-to-end demo per Kritix feature (shadow worktrees, time travel, LSP, knowledge items) or mark it "planned" in the docs | M |
 | Platform | Linux and Windows desktop smoke test in CI | M |
 | Design partner | Try Dialex on a real decision at your company and write up what broke | S |
+| Security | Native OIDC login (today: trusted-proxy headers only); tamper-evident audit log | L |
 
 Open an issue before starting anything L-sized.

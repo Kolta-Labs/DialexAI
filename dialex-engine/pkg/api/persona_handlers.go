@@ -251,14 +251,6 @@ When you output or refine a persona, ALWAYS provide a conversational response fo
 }
 
 
-func (s *Server) handleUploadFile(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "not implemented")
-}
-
-func (s *Server) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "not implemented")
-}
-
 func (s *Server) handleGetDebateUsage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	state, err := s.Store.Load()

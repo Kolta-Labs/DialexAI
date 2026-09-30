@@ -7,7 +7,7 @@
 > - The "Adversarial Reviewer" is **rule-based**: test exit codes, a non-empty diff, and two built-in taboo patterns. It does not evaluate acceptance criteria, and it warns about steering taboos it cannot enforce.
 > - `kritix code` writes patches through a model **only when you pass `--provider` and `--model`** (API key from your environment, e.g. `ANTHROPIC_API_KEY`). The TUI REPL and the remote `forge` worker do not yet supply a model, so they stop with "no patch generator configured".
 > - The Desktop Cockpit (Compose) has no automated tests yet; the CLI, LSP, and Go packages do.
-> - Test execution is process isolation, **not** a security sandbox. Do not run it on untrusted repositories.
+> - Test execution is confined with `sandbox-exec` (macOS) or `bwrap` (Linux, untested in CI): writes limited to the workspace, temp and tool caches, network denied unless `KRITIX_SANDBOX_NETWORK=1`; `KRITIX_SANDBOX=off` disables it. Without those tools (for example Windows) it is process-group only. Reads are unrestricted, so **do not run it on untrusted repositories**.
 
 ---
 

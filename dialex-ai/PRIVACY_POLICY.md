@@ -36,7 +36,7 @@ All operational data created or used within Dialex AI resides strictly on your l
 | **Workspace Context & Project Files** | Local Filesystem | Never uploaded to Kolta Labs cloud servers. |
 | **Custom Persona Definitions** | Local SQLite / JSON files | Managed locally; exportable by user. |
 | **Diagnostic & Network Logs** | In-Memory Ring Buffer (`AppLogStore`) | Cleared on application termination; never transmitted externally. |
-| **API Keys & Credentials** | Local state file, encrypted; the AES key sits in a separate key file on the same device (`0600` permissions) | Protects against a copied state file alone, not against an attacker with access to your user account. OS keychain storage is planned, not yet implemented. |
+| **API Keys & Credentials** | Local state file, encrypted with AES-256-GCM; the key is stored in the OS keychain (macOS Keychain, Linux `secret-tool`) or, where unavailable, in a `0600` key file beside the data | The keychain path protects a copied data directory; the file fallback protects only against a copied state file alone. |
 
 ---
 
@@ -67,7 +67,7 @@ These are user-initiated or passive downloads, not telemetry. Kolta Labs operate
 
 ## 5. Security & Cryptographic Protection of Secrets
 
-1. **At-Rest Encryption:** Sensitive API tokens and credentials are encrypted at rest using industry-standard algorithms (AES-256-GCM with a random per-install key stored in a separate local key file; there is no OS keychain or hardware-backed storage yet).
+1. **At-Rest Encryption:** Sensitive API tokens and credentials are encrypted at rest using industry-standard algorithms (AES-256-GCM with a random per-install key held in the OS keychain where available, else a separate local key file; no hardware-backed storage).
 2. **Subprocess Sanitization:** When invoking local CLI runners (such as `claude`, `codex`, or `antigravity`), Dialex AI sanitizes the child process environment to prevent credential leakage into ambient shell variables.
 3. **Memory Safety:** Authentication secrets are held in memory only for the duration of active requests and are cleared when sessions end.
 

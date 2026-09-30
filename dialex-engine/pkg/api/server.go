@@ -1,4 +1,4 @@
-// Package api is the Go port target for the engine's REST + SSE surface (Task 1.5). Plain
+// Package api is the engine's REST + SSE surface. Plain
 // net/http (Go 1.22+ ServeMux method+path patterns) — no router framework dependency for
 // a route table this size.
 package api
@@ -35,6 +35,9 @@ type Server struct {
 	Orchestrator   *orchestrator.Orchestrator
 	RunnerFor      func(model.Agent) runner.AgentRunner
 	jwtSecret      []byte
+	auditPath      string
+	auditMu        sync.Mutex
+	logins         loginLimiter
 	startTime      time.Time
 
 	mu   sync.Mutex
@@ -58,6 +61,7 @@ func NewServer(st *store.Store) *Server {
 		runs:      make(map[string]*runController),
 	}
 	if st != nil && st.Dir() != "" {
+		s.auditPath = filepath.Join(st.Dir(), "audit.log")
 		if gs, err := graph.OpenSQLite(filepath.Join(st.Dir(), "graph.db")); err == nil {
 			s.GraphStore = gs
 		}
@@ -275,7 +279,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeleteProject also removes every discussion inside the project — nothing is left
-// orphaned, same as the Kotlin app's AppViewModel.deleteProject.
+// orphaned.
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	state, err := s.Store.Load()

@@ -38,10 +38,11 @@ func (s *Server) Router() http.Handler {
 	// Admin & Telemetry APIs
 	mux.HandleFunc("GET /api/v1/admin/stats", s.handleAdminStats)
 	mux.HandleFunc("POST /api/v1/admin/password", s.requireAuth(s.handleAdminPassword))
-	mux.HandleFunc("GET /api/v1/admin/pairing", s.requireAuth(s.handleAdminPairing))
-	mux.HandleFunc("GET /api/v1/admin/logs", s.requireAuth(s.handleAdminLogs))
-	mux.HandleFunc("GET /api/v1/admin/users", s.requireAuth(s.handleListUsers))
-	mux.HandleFunc("POST /api/v1/admin/users", s.requireAuth(s.handleCreateUser))
+	mux.HandleFunc("GET /api/v1/admin/pairing", s.requireAdmin(s.handleAdminPairing))
+	mux.HandleFunc("GET /api/v1/admin/logs", s.requireAdmin(s.handleAdminLogs))
+	mux.HandleFunc("GET /api/v1/admin/users", s.requireAdmin(s.handleListUsers))
+	mux.HandleFunc("POST /api/v1/admin/users", s.requireAdmin(s.handleCreateUser))
+	mux.HandleFunc("GET /api/v1/admin/audit", s.requireAdmin(s.handleAdminAudit))
 
 	mux.HandleFunc("GET /projects", s.requireAuth(s.handleListProjects))
 	mux.HandleFunc("POST /projects", s.requireAuth(s.handleCreateProject))
@@ -104,8 +105,6 @@ func (s *Server) Router() http.Handler {
 
 
 	// File attachments
-	mux.HandleFunc("POST /api/v1/debates/{id}/files", s.requireAuth(s.handleUploadFile))
-	mux.HandleFunc("DELETE /api/v1/files/{fileId}", s.requireAuth(s.handleDeleteFile))
 
 	// Usage
 	mux.HandleFunc("GET /api/v1/debates/{id}/usage", s.requireAuth(s.handleGetDebateUsage))
@@ -138,12 +137,12 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/benchmarks/summary", s.requireAuth(s.handleGetBenchmarkSummary))
 	mux.HandleFunc("GET /api/v1/benchmarks/export", s.requireAuth(s.handleExportBenchmarks))
 
-	return mux
+	return s.auditMutations(mux)
 }
 
 // ServeOptions controls how ListenAndServe binds and whether it encrypts the connection.
 type ServeOptions struct {
-	// AllowInsecureLAN must be true to bind to anything other than loopback (Task 3.1.1) —
+	// AllowInsecureLAN must be true to bind to anything other than loopback —
 	// binding to 0.0.0.0 or a public IP over plain HTTP + Bearer tokens exposes API keys
 	// and debate data to whoever else is on that network. Loopback (127.0.0.1/::1/
 	// localhost) never needs this.
@@ -170,7 +169,7 @@ func (s *Server) ListenAndServe(addr string, opts ServeOptions) error {
 	}
 	if !isLoopbackAddr(addr) {
 		log.Printf("WARNING: binding to %s — reachable from your LAN/VPN, not just this machine. "+
-			"Make sure that network is actually trusted (see ENGINE_SPEC_REVIEW.md, auth model).", addr)
+			"Make sure that network is actually trusted (see dialex-ai/docs/SERVER_SETUP.md).", addr)
 	}
 
 	handler := s.Router()

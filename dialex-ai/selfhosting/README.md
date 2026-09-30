@@ -173,15 +173,21 @@ Copyright (c) 2026 Kolta Labs. Free for personal, academic, and noncommercial re
 
 **What the code does today**
 - The engine binds to `127.0.0.1:7890` by default. Exposing it (`--host 0.0.0.0:...`, Docker, Tailscale) is your decision and your exposure.
-- Data routes require authentication (`requireAuth`); passwords are hashed with bcrypt; tokens are signed JWTs.
-- Provider API keys are encrypted at rest with AES-256-GCM. The key lives in a separate file in the same data directory, so anyone with read access to the whole directory can decrypt them. There is no OS keychain integration yet.
+- Data routes require authentication; passwords are hashed with bcrypt; tokens are signed, short-lived JWTs.
+- **Roles:** `admin` and `user`. Only admins can list or create users, read logs, get the pairing code, or export the audit log. The first user and any account created before roles existed are admins; users created through the API default to `user`.
+- **Audit log:** `audit.log` (JSON lines, `0600`) in the data directory records logins (ok, failed, blocked) and every state-changing request with user, path, status and IP. Admins export it with `GET /api/v1/admin/audit?limit=N`.
+- **Login lockout:** 5 failures per username or 20 per IP in 15 minutes returns `429`.
+- **SSO through a trusted proxy** (oauth2-proxy, Tailscale serve, Cloudflare Access, Authelia): set `DIALEX_SSO_USER_HEADER` (e.g. `X-Forwarded-Email`) and `DIALEX_SSO_TRUSTED_CIDR` (the proxy's address); optionally `DIALEX_SSO_ADMINS` (comma-separated identities). The header is believed only from that CIDR, and the proxy must be the only route to the engine. New identities are created as passwordless users. This is not native OIDC.
+- Provider API keys are encrypted at rest with AES-256-GCM. The key is held in the OS keychain (macOS, Linux with `secret-tool`). On a headless server without one (typical Docker/VPS), it falls back to a `0600` file in the same data directory, so anyone who can read the whole directory can decrypt the keys.
 - Transcripts, projects, personas and the knowledge graph are stored unencrypted in the data directory (SQLite/JSON). Use disk encryption if that matters to you.
 
 **What it does not do**
-- No SSO/OIDC, role-based access control, or audit-log export.
-- No rate limiting or brute-force lockout beyond what your reverse proxy provides.
-- No independent security audit or penetration test.
+- No native OIDC/SAML, no fine-grained permissions beyond admin/user, no SOC 2 or other certification.
+- The audit log has no rotation and no tamper evidence; ship it to a log collector if you need that.
+- `/api/v1/admin/stats`, `/api/v1/cli/status` and `/api/v1/cli/logins` are unauthenticated (counts and local CLI status, no content).
+- Login lockout is in memory and per process; it resets on restart.
 - No verified multi-tenant isolation: treat one deployment as one trust domain and assume every user on an instance can reach the same data.
+- No independent security audit or penetration test.
 
 **Recommended deployment**: Tailscale or another private network, or a reverse proxy (Caddy/nginx) with TLS. Never expose the raw port to the internet.
 

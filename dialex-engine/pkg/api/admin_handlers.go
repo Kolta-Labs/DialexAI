@@ -181,8 +181,13 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 
 	users := make([]map[string]string, 0, len(state.Users))
 	for _, u := range state.Users {
+		role := u.Role
+		if role == "" {
+			role = "admin"
+		}
 		users = append(users, map[string]string{
 			"username": u.Username,
+			"role":     role,
 		})
 	}
 
@@ -192,6 +197,7 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 type createUserRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+	Role     string `json:"role"` // "admin" or "user" (default)
 }
 
 func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
@@ -214,6 +220,13 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.Role == "" {
+		req.Role = "user"
+	}
+	if req.Role != "user" && req.Role != "admin" {
+		writeError(w, http.StatusBadRequest, `role must be "admin" or "user"`)
+		return
+	}
 	hash, err := store.HashPassword(req.Password)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to hash password")
@@ -223,6 +236,7 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	state.Users = append(state.Users, model.User{
 		Username:     req.Username,
 		PasswordHash: hash,
+		Role:         req.Role,
 	})
 
 	if err := s.Store.Save(state); err != nil {

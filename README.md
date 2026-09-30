@@ -98,8 +98,8 @@ Run the tests yourself:
 |---|---|
 | Debate vs single model | A benchmark harness and a 10-case set (`Dialex-Bench-10`) exist in `dialex-engine/pkg/benchmark`. **No results are published yet.** |
 | Kritix `plan` and review | `plan` is template-based and the reviewer is rule-based; neither calls a model. See [kritix-ai/README.md](kritix-ai/README.md). `kritix code` writes patches with a model only when you pass `--provider` and `--model`. |
-| Kritix execution isolation | Process isolation only, **not** a security sandbox. Do not run it on untrusted repositories. |
-| API key storage | AES-256-GCM with a key file on disk; no OS keychain yet. |
+| Kritix execution isolation | macOS: commands run under `sandbox-exec` with writes limited to the workspace, temp and tool caches, and network denied by default (tested). Linux: same via `bwrap` if installed (not yet tested in CI). Windows or no tool: process-group only. Reads are not restricted, so it is **not** a defence against a hostile repository. Each result reports its `isolation` level. |
+| API key storage | AES-256-GCM; the key is kept in the OS keychain (macOS Keychain, Linux `secret-tool`) with a `0600` key-file fallback (Windows, or `DIALEX_KEY_STORAGE=file`). |
 | Third-party CLI runners | Driving vendor CLIs (`claude`, `codex`, ...) depends on each vendor's terms and may break. Direct API keys or Ollama are the stable path. |
 
 ## Contributing

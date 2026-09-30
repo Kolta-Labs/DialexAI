@@ -19,8 +19,8 @@ import (
 
 // Minimal HS256 JWT — issued by POST /auth/login, checked as a Bearer token on every other
 // route. Hand-rolled instead of a dependency: three base64url segments (header.payload.sig),
-// stdlib crypto/hmac + crypto/sha256 only (Task 3.1.2 — upgrading from raw Basic Auth per
-// request, which was replayable, to a short-lived signed token).
+// stdlib crypto/hmac + crypto/sha256 only. A short-lived signed token, instead of replayable
+// credentials on every request.
 
 type jwtClaims struct {
 	Sub string `json:"sub"` // username
@@ -98,6 +98,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	ip := clientIP(r)
+	if s.logins.blocked(req.Username, ip) {
+		s.audit(req.Username, "login.blocked", "", r, http.StatusTooManyRequests)
+		writeError(w, http.StatusTooManyRequests, "too many failed attempts; try again later")
+		return
+	}
 	state, err := s.Store.Load()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not load account store")
@@ -115,16 +121,24 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusInternalServerError, "could not issue token")
 				return
 			}
+			s.logins.reset(req.Username, ip)
+			s.audit(u.Username, "login.ok", "", r, http.StatusOK)
 			writeJSON(w, http.StatusOK, loginResponse{Token: token})
 			return
 		}
 	}
+	s.logins.fail(req.Username, ip)
+	s.audit(req.Username, "login.fail", "", r, http.StatusUnauthorized)
 	writeError(w, http.StatusUnauthorized, "invalid username or password")
 }
 
 // requireAuth wraps a handler so it 401s without a valid, non-expired Bearer token, cookie, or query param.
 func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if name, ok := s.proxyUser(r); ok {
+			next(w, r.WithContext(withUsername(r.Context(), name)))
+			return
+		}
 		token := extractToken(r)
 		if token == "" {
 			writeError(w, http.StatusUnauthorized, "missing bearer token")
@@ -158,14 +172,13 @@ func extractToken(r *http.Request) string {
 }
 
 // CreateFirstUser is what the CLI wizard's first run (or `roundtable users add`) calls to
-// seed the account store — every account is currently equal, no role tiers (round-2
-// decision).
+// seed the account store; the first user is an admin.
 func CreateFirstUser(s *store.Store, username, password string) (model.User, error) {
 	hash, err := store.HashPassword(password)
 	if err != nil {
 		return model.User{}, err
 	}
-	user := model.User{Username: username, PasswordHash: hash}
+	user := model.User{Username: username, PasswordHash: hash, Role: "admin"}
 	state, err := s.Load()
 	if err != nil {
 		return model.User{}, err

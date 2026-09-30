@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -28,19 +29,38 @@ type ExecOptions struct {
 
 // ExecResult contains the deterministic result of running a command.
 type ExecResult struct {
-	Command    string        `json:"command"`
-	Stdout     string        `json:"stdout"`
-	Stderr     string        `json:"stderr"`
-	ExitCode   int           `json:"exitCode"`
-	DurationMs int64         `json:"durationMs"`
-	TimedOut   bool          `json:"timedOut"`
-	Truncated  bool          `json:"truncated"`
-	Error      string        `json:"error,omitempty"`
+	Command    string `json:"command"`
+	Isolation  string `json:"isolation"`
+	Stdout     string `json:"stdout"`
+	Stderr     string `json:"stderr"`
+	ExitCode   int    `json:"exitCode"`
+	DurationMs int64  `json:"durationMs"`
+	TimedOut   bool   `json:"timedOut"`
+	Truncated  bool   `json:"truncated"`
+	Error      string `json:"error,omitempty"`
 }
 
 // Success returns true if the command exited with code 0 and did not time out.
 func (r *ExecResult) Success() bool {
 	return r.ExitCode == 0 && !r.TimedOut && r.Error == ""
+}
+
+// cappedBuffer keeps at most max bytes and discards the rest, so a runaway command cannot
+// exhaust memory while it runs.
+type cappedBuffer struct {
+	buf       bytes.Buffer
+	max       int
+	truncated bool
+}
+
+func (c *cappedBuffer) Write(p []byte) (int, error) {
+	n := len(p) // report everything consumed, or io.Copy treats it as a short write and stops draining
+	if room := c.max - c.buf.Len(); len(p) > room {
+		c.truncated = true
+		p = p[:max(room, 0)]
+	}
+	c.buf.Write(p)
+	return n, nil
 }
 
 // Sandbox provides safe, isolated command execution.
@@ -78,17 +98,25 @@ func (s *Sandbox) Run(ctx context.Context, cmdStr string, opts *ExecOptions) *Ex
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(execCtx, "sh", "-c", cmdStr)
+	cmd, isolation := confine(cwd, cmdStr)
+	cmd = exec.CommandContext(execCtx, cmd.Path, cmd.Args[1:]...)
 	cmd.Dir = cwd
 
 	// Use process group so children are killed on timeout
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	// On timeout/cancel kill the whole process group, not just sh, and don't wait forever on
+	// pipes that surviving grandchildren might still hold open.
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = time.Second
+
+	stdoutBuf := &cappedBuffer{max: maxBytes}
+	stderrBuf := &cappedBuffer{max: maxBytes}
+	cmd.Stdout = stdoutBuf
+	cmd.Stderr = stderrBuf
 
 	if opts != nil && len(opts.Env) > 0 {
+		cmd.Env = os.Environ() // extend, never replace, the inherited environment
 		for k, v := range opts.Env {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 		}
@@ -99,6 +127,7 @@ func (s *Sandbox) Run(ctx context.Context, cmdStr string, opts *ExecOptions) *Ex
 
 	result := &ExecResult{
 		Command:    cmdStr,
+		Isolation:  isolation,
 		DurationMs: duration.Milliseconds(),
 		ExitCode:   0,
 	}
@@ -108,11 +137,6 @@ func (s *Sandbox) Run(ctx context.Context, cmdStr string, opts *ExecOptions) *Ex
 		result.TimedOut = true
 		result.ExitCode = -1
 		result.Error = fmt.Sprintf("command timed out after %v", timeout)
-
-		// Terminate child process group
-		if cmd.Process != nil {
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		}
 	} else if runErr != nil {
 		var exitErr *exec.ExitError
 		if errors.As(runErr, &exitErr) {
@@ -124,20 +148,9 @@ func (s *Sandbox) Run(ctx context.Context, cmdStr string, opts *ExecOptions) *Ex
 	}
 
 	// Capture and truncate output
-	stdoutBytes := stdoutBuf.Bytes()
-	stderrBytes := stderrBuf.Bytes()
-
-	if len(stdoutBytes) > maxBytes {
-		stdoutBytes = stdoutBytes[:maxBytes]
-		result.Truncated = true
-	}
-	if len(stderrBytes) > maxBytes {
-		stderrBytes = stderrBytes[:maxBytes]
-		result.Truncated = true
-	}
-
-	result.Stdout = strings.TrimSpace(string(stdoutBytes))
-	result.Stderr = strings.TrimSpace(string(stderrBytes))
+	result.Truncated = stdoutBuf.truncated || stderrBuf.truncated
+	result.Stdout = strings.TrimSpace(stdoutBuf.buf.String())
+	result.Stderr = strings.TrimSpace(stderrBuf.buf.String())
 
 	return result
 }
