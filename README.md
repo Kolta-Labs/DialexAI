@@ -1,12 +1,16 @@
-# Dialex Monorepo
+# Dialex Suite
 
-Welcome to the **Dialex & Kritix** ecosystem. This monorepo is structured into three dedicated sister folders:
+**By Kolta Labs.** Tools that make AI disagree with itself before you trust it.
 
-| Folder | Name | Technology | Description |
+Dialex Suite is three products on one deliberation engine:
+
+| Product | Folder | What it is | Stack |
 |---|---|---|---|
-| [`dialex-engine/`](./dialex-engine) | **Dialex Engine** | Go 1.27 | High-performance deliberation daemon, peer-to-peer mesh networking, consensus engine, and LLM runner. |
-| [`dialex-ai/`](./dialex-ai) | **Dialex AI** | Kotlin Multiplatform & Compose | Sovereign multi-AI deliberation client application for Desktop (macOS, Windows, Linux) and Android. |
-| [`kritix-ai/`](./kritix-ai) | **Kritix AI** | Go & Compose Desktop | Dialectic software engineering platform, autonomous coding cockpit, adversarial reviewer, and story spec generator. |
+| **Dialex AI** | [`dialex-ai/`](./dialex-ai) | Desktop and Android app where several AI models debate a decision and a moderator synthesizes the result. | Kotlin Multiplatform, Compose |
+| **Kritix AI** | [`kritix-ai/`](./kritix-ai) | Adversarial review and spec-to-patch workflow for AI-written code (CLI and desktop cockpit). | Go, Compose Desktop |
+| **Dialex Engine** | [`dialex-engine/`](./dialex-engine) | The shared deliberation daemon: consensus, orchestration, mesh networking, model runners. | Go 1.27 |
+
+Start with Dialex AI for decisions, or Kritix AI for code review. The engine is a dependency of both.
 
 ---
 
@@ -67,6 +71,40 @@ go build -o bin/kritix ./cli/main.go
 # Run Kritix Cockpit Desktop App
 ./gradlew :app:run
 ```
+
+---
+
+## Status & Limitations
+
+Run the tests yourself:
+
+```bash
+(cd dialex-engine && go test ./pkg/...)
+(cd kritix-ai     && go test ./pkg/...)
+(cd dialex-ai     && ./gradlew :shared:allTests)   # includes real-engine integration tests
+```
+
+**Feature maturity**
+
+| Tier | Features |
+|---|---|
+| **Core** | Council deliberation, moderator synthesis, live steering, deliverables (ADR, decision matrix, memo) |
+| **Experimental** | Knowledge graph, problem decomposition, contradiction detection, dynamic retrieval, Socratic mode, benchmarking harness, persona DNA, mobile parity, Bayesian credence |
+| **Planned** | Autonomous artifact sandbox |
+
+**Known limitations**
+
+| Area | Status |
+|---|---|
+| Debate vs single model | A benchmark harness and a 10-case set (`Dialex-Bench-10`) exist in `dialex-engine/pkg/benchmark`. **No results are published yet.** |
+| Kritix `plan` and review | `plan` is template-based and the reviewer is rule-based; neither calls a model. See [kritix-ai/README.md](kritix-ai/README.md). `kritix code` writes patches with a model only when you pass `--provider` and `--model`. |
+| Kritix execution isolation | Process isolation only, **not** a security sandbox. Do not run it on untrusted repositories. |
+| API key storage | AES-256-GCM with a key file on disk; no OS keychain yet. |
+| Third-party CLI runners | Driving vendor CLIs (`claude`, `codex`, ...) depends on each vendor's terms and may break. Direct API keys or Ollama are the stable path. |
+
+## Contributing
+
+We want real contributors on scoped pieces of work (docs, a runner, a platform port, benchmark cases). See [CONTRIBUTING.md](CONTRIBUTING.md). Contributors are credited for what they build.
 
 ---
 

@@ -291,7 +291,7 @@ fun CliAuthDialog(
                         }
                     } else {
                         Text(
-                            "Credentials are stored securely in your user keychain.",
+                            "Sign-in is handled by the CLI; Dialex does not store these credentials.",
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                             color = cc.textMuted
                         )

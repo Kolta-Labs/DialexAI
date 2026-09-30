@@ -24,7 +24,7 @@ This document details all user-facing capabilities, unique selling propositions 
 
 ## 2. Multi-Agent Deliberation & Frontier Models
 
-- **Up to 6 Simultaneous Frontier Models**: Convene Anthropic Claude (3.7 / 3.5 Sonnet), OpenAI (GPT-4o / Codex / o3), Google (Gemini 2.5 Pro / Flash / Antigravity), xAI Grok 3, DeepSeek (R1 / V3), Mistral Large, and local Ollama models in a single deliberation.
+- **Up to 6 Simultaneous Frontier Models**: Convene Anthropic Claude, OpenAI (GPT / Codex), Google (Gemini / Antigravity), xAI Grok, DeepSeek (R1 / V3), Mistral Large, and local Ollama models in a single deliberation.
 - **Designated Moderator Topology**: Seat 1 serves as the Primary Facilitator to frame topics, direct rounds, and synthesize consensus, accompanied by up to 5 competing peer models.
 - **12-Color Member Palette**: Deterministic, accessible color coding mapped dynamically to council seats using Kolt theme tokens, ensuring crystal-clear speaker differentiation.
 - **Dual Execution Modes (API vs CLI)**: Connect directly via encrypted cloud API keys or shell out to authenticated developer CLIs (`claude`, `codex`, `antigravity`/`agy`, `ollama`) with zero extra per-token billing.
@@ -169,60 +169,50 @@ This document details all user-facing capabilities, unique selling propositions 
 
 ## 10. Advanced Epistemic Features & Roadmap
 
-The following advanced capabilities have been implemented or are queued for implementation in [**docs/04_PENDING_FEATURES_SPEC.md**](04_PENDING_FEATURES_SPEC.md):
+The following advanced capabilities have been implemented or are planned:
 
 ### Completed Features (v1.1 – v1.6)
 1. **Self-Organizing Knowledge Graph & Drag-and-Drop Workspace Organization (COMPLETED)**:
    - Local-first pure-Go SQLite + FTS5 graph storage with activation energy mathematical decay ($W(t) = W_0 \cdot 2^{-\Delta t / t_{\text{half}}}$) and Hebbian edge reinforcement ($\Delta W = \eta (1 - W)$).
    - Interactive 2D force-directed canvas with pan/zoom and activation filters.
    - Smooth drag-and-drop workspace reorganization with auto-expanding drop targets.
-   - 📖 **Full Architectural Specification**: [**docs/features/01_KNOWLEDGE_GRAPH_AND_DRAG_DROP.md**](features/01_KNOWLEDGE_GRAPH_AND_DRAG_DROP.md)
 2. **Pre-Debate Multi-Perspective Problem Decomposition (COMPLETED)**:
    - Divergent dual-mind breakdown of user dilemmas into orthogonal sub-axes (Technical/Structural vs Product/Strategic) before the main council convenes.
    - Interactive `DecompositionModal` with one-click injection into discussion agenda contexts.
-   - 📖 **Full Architectural Specification**: [**docs/features/02_PROBLEM_DECOMPOSITION.md**](features/02_PROBLEM_DECOMPOSITION.md)
 3. **Explicit Contradiction & Tension Pair Detection Engine (COMPLETED)**:
    - Automated real-time extraction and tracking of dialectic tension pairs (thesis vs antithesis) grounded in paraconsistent logic ($C_n$ systems).
    - Real-time slide-out `TensionMatrixDrawer` tracking severity metrics, quote citations, and synthesis resolution.
-   - 📖 **Full Architectural Specification**: [**docs/features/03_CONTRADICTION_AND_TENSION_DETECTION.md**](features/03_CONTRADICTION_AND_TENSION_DETECTION.md)
 4. **Round-Aware Dynamic Graph Retrieval & Evidence Grounding (COMPLETED)**:
    - Dynamic per-round query expansion based on disputed claims from round $N$ to retrieve empirical evidence from knowledge graph nodes and attached project files.
    - Automated prompt injection of `[DYNAMIC GROUNDING EVIDENCE FOR ROUND N+1]` grounding blocks and slide-out `RoundEvidenceDrawer`.
-   - 📖 **Full Architectural Specification**: [**docs/features/04_ROUND_AWARE_DYNAMIC_RETRIEVAL.md**](features/04_ROUND_AWARE_DYNAMIC_RETRIEVAL.md)
 5. **Dedicated 1-on-1 Socratic Interview Mode & Live Epistemic Ledger (COMPLETED)**:
    - Targeted 1-on-1 forensic interrogation of individual expert personas without spinning up a full 6-agent council.
    - 5 deep Socratic stances (*Classic Elenchus*, *Maieutic Architecture*, *Radical First Principles*, *Adversarial Red-Team*, *Aporia Boundary-Pusher*).
    - *Brevis Interrogatio* rule ($\le 2$ sentences) forcing high-leverage tension and concise dialectic dialogue.
    - Live Epistemic Ledger tracking green **Hardened Invariants** vs red strike-through **Surrendered Concessions**, reactive Dialogue Assist Chips, structured **Socratic Digest**, and 1-click **Council Elevation**.
-   - 📖 **Full Architectural Specification**: [**docs/features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md**](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md)
 6. **Null Hypothesis Benchmarking & Quantitative Evaluation Suite (COMPLETED)**:
    - Automated testing framework validating multi-agent debate superiority against single-model baselines across hallucination, blind spot coverage, trade-off depth, and actionability metrics with paired two-tailed Student's $t$-test ($p < 0.05$).
    - Full-stack execution: Native Desktop KMP UI (Sidebar "⚔️ Arena & Benchmarks" with spider/radar chart and side-by-side deliverable comparison) + Web Admin (`:8080/admin/benchmarks`) + CLI runner (`dialexbench`).
    - Includes embedded **DialexBench-10** canonical dilemma dataset plus custom dilemma authoring and Markdown/CSV/JSON export.
-   - 📖 **Full Architectural Specification**: [**docs/features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md**](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md)
 
 7. **8-Layer DNA Mental & Structured Persona Ingestion (COMPLETED - v1.7)**:
    - Standardized 8-layer cognitive schema (*Core Identity*, *Epistemic Bias*, *Communication Vector*, *Heuristic Library*, *Taboo Space*, *Domain Ontology*, *Adversarial Posture*, *Synthesis Preference*) with MMOS v1.0 YAML/JSON export/import and interactive desktop/mobile Persona Studio.
-   - 📖 **Full Architectural Specification**: [**docs/features/07_8_LAYER_PERSONA_DNA_SPEC.md**](features/07_8_LAYER_PERSONA_DNA_SPEC.md)
 8. **Mobile Epistemic Parity & Gap Closure Suite (COMPLETED - v1.8)**:
    - Full mobile parity across Socratic Interview launcher, Benchmark Arena mobile viewport & 260dp canvas radar, Project workspace hierarchy with knowledge graph links, and touch-optimized bottom sheets for Dynamic RAG evidence citations and Tension Matrix drawers.
    - Zero-Wait Autonomous Autopilot: 1-tap presets immediately initiate autonomous deliberation without user input or setup pauses.
-   - 📖 **Full Architectural Specification**: [**docs/features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md**](features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md)
 
 9. **Bayesian Credence Tracking & Quantitative Epistemic Uncertainty Network (COMPLETED - v1.9)**:
    - Mathematical Bayesian decision engine tracking prior and posterior probability distributions ($P(H | E)$) across 2 to 4 competing hypotheses per debate.
    - Computes real-time Shannon Epistemic Entropy ($\mathcal{S}$) in bits and evidence Likelihood Ratios ($\Lambda$) to isolate decisive tipping points.
    - Interactive Credence Ribbon Canvas with fluid Bézier area flows and live certainty pills in desktop/mobile workspace headers.
    - Embeds Bayesian Epistemic Decision Matrices into generated ADRs and Executive Memos.
-   - 📖 **Full Architectural Specification**: [**docs/features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md**](features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md)
 
 ### Active Roadmap Capabilities (v2.0)
-10. **Autonomous Artifact Sandbox & Code Verification Engine (APPROVED SPEC - v2.0)**:
+10. **Autonomous Artifact Sandbox & Code Verification Engine (Planned - v2.0)**:
     - Multi-language isolated micro-sandbox (Go, Python, TypeScript, Rust, SQLite, Bash) with process group cancellation and ephemeral scrubbed runtimes.
     - Automated closed-loop verification: Compiler errors and test panics feed directly back into council rounds as empirical challenges.
     - Interactive Sandbox Terminal Drawer (`Cmd+Shift+X` / `Ctrl+Shift+X`) in Desktop and Mobile with live stdout/stderr streams and runtime selector.
     - Proof-of-execution verification badges embedded into exported ADRs and Executive Memorandums.
-    - 📖 **Full Architectural Specification**: [**docs/features/10_AUTONOMOUS_ARTIFACT_SANDBOX_SPEC.md**](features/10_AUTONOMOUS_ARTIFACT_SANDBOX_SPEC.md)
 
 ---
 

@@ -95,7 +95,7 @@ Enterprise AI initiatives frequently stall due to runaway per-token API credit c
   - `claude` (Anthropic Claude Code)
   - `codex` / `openai` (OpenAI Developer CLI)
   - `antigravity` / `agy` (Google Gemini CLI)
-  - `ollama` (Local open-weight models: DeepSeek R1, Llama 3, Mistral)
+  - `ollama` (Local open-weight models: DeepSeek, Llama 3, Mistral)
 - By executing turns as local subprocesses through existing developer seat subscriptions, organizations achieve **$0 marginal token billing** for multi-agent deliberations.
 
 ### 3.5 Human-in-the-Loop Supremacy

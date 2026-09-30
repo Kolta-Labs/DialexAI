@@ -1,25 +1,25 @@
 # Privacy Policy & Data Sovereignty Charter
 
-**Effective Date:** January 1, 2026  
+**Effective Date:** September 21, 2026  
 **Version:** 1.0.0  
 **Maintained by:** Kolta Labs (<https://github.com/Kolta-Labs/DialexAI>)  
 **Data Protection Contact:** `privacy@koltalabs.com`
 
 ---
 
-## 1. Core Commitment: Sovereign, Zero-Telemetry Architecture
+## 1. Core Commitment: Local-First, No Telemetry
 
-At **Kolta Labs**, we believe developer tools should operate with defense-grade privacy, local data custody, and complete operational transparency. **Dialex AI is architected from the ground up as a zero-telemetry, local-first platform.**
+At **Kolta Labs**, we believe developer tools should keep your data on your machine and be transparent about what leaves it. **Dialex AI is local-first and ships without telemetry.**
 
-Unlike conventional cloud-hosted SaaS tools, Dialex AI does not force user accounts, does not route your private code through centralized vendor proxies, and does not harvest usage analytics.
+Unlike conventional cloud-hosted SaaS tools, Dialex AI does not require an account, does not route your data through Kolta Labs servers, and does not collect usage analytics. This is a statement about our software, not an independent audit; the source is available for you to verify.
 
 ---
 
-## 2. Absolute Zero-Telemetry Warranty
+## 2. No Telemetry
 
-We provide an affirmative warranty regarding telemetry and tracking:
+To the best of our knowledge, and as far as the published source shows:
 
-1. **No Tracking Pixels or Analytics Beacons:** Dialex AI contains zero tracking pixels, behavioral telemetry hooks, user engagement monitors, heatmaps, or third-party analytics SDKs (such as Google Analytics, PostHog, Mixpanel, Segment, or Amplitude).
+1. **No Tracking Pixels or Analytics Beacons:** Dialex AI contains no tracking pixels, behavioral telemetry hooks, or third-party analytics SDKs (such as Google Analytics, PostHog, Mixpanel, Segment, or Amplitude).
 2. **No Crash Reporting Data Leaks:** Dialex AI does not automatically transmit stack traces, system logs, memory dumps, or error reports to remote cloud servers. Diagnostic logs remain in-memory and on your local device only.
 3. **No Centralized User Profiles:** Kolta Labs maintains no central database of Dialex AI users, session frequencies, active discussion topics, or device identifiers.
 4. **No Model Training on User Prompts:** Kolta Labs does not intercept, harvest, retain, or use your prompts, attachments, debate transcripts, or synthesized deliverables to train or fine-tune artificial intelligence models.
@@ -36,7 +36,7 @@ All operational data created or used within Dialex AI resides strictly on your l
 | **Workspace Context & Project Files** | Local Filesystem | Never uploaded to Kolta Labs cloud servers. |
 | **Custom Persona Definitions** | Local SQLite / JSON files | Managed locally; exportable by user. |
 | **Diagnostic & Network Logs** | In-Memory Ring Buffer (`AppLogStore`) | Cleared on application termination; never transmitted externally. |
-| **API Keys & Credentials** | OS Keyring / Hardware-Anchored Keystore & Local Encrypted Database | Encrypted using native OS cryptographic primitives (macOS Keychain, Linux Secret Service, Android TEE/StrongBox). |
+| **API Keys & Credentials** | Local state file, encrypted; the AES key sits in a separate key file on the same device (`0600` permissions) | Protects against a copied state file alone, not against an attacker with access to your user account. OS keychain storage is planned, not yet implemented. |
 
 ---
 
@@ -52,14 +52,14 @@ When configured with cloud AI endpoints (including Anthropic Claude, OpenAI GPT,
 
 ### B. Local Foundation Models (100% Offline Air-Gapped Operation)
 When configured with local model providers (such as Ollama, llama.cpp, or local developer CLI scripts):
-1. **Zero Outbound Packets:** Deliberations execute entirely on your local machine using loopback IPC (`localhost` or Unix domain sockets).
-2. **Air-Gapped Compliance:** The application requires zero internet connectivity, providing airtight confidentiality for proprietary codebases, classified research, and trade secrets.
+1. **No Outbound Model Traffic:** Deliberations execute entirely on your local machine using loopback IPC (`localhost` or Unix domain sockets).
+2. **Offline Operation:** The application requires zero internet connectivity, keeping your content on your machine. Verify your own model and runner configuration before using it with sensitive material.
 
 ---
 
 ## 5. Security & Cryptographic Protection of Secrets
 
-1. **At-Rest Encryption:** Sensitive API tokens and credentials are encrypted at rest using industry-standard algorithms (AES-256-GCM with keys derived via Argon2id or backed by hardware keystores).
+1. **At-Rest Encryption:** Sensitive API tokens and credentials are encrypted at rest using industry-standard algorithms (AES-256-GCM with a random per-install key stored in a separate local key file; there is no OS keychain or hardware-backed storage yet).
 2. **Subprocess Sanitization:** When invoking local CLI runners (such as `claude`, `codex`, or `antigravity`), Dialex AI sanitizes the child process environment to prevent credential leakage into ambient shell variables.
 3. **Memory Safety:** Authentication secrets are held in memory only for the duration of active requests and are cleared when sessions end.
 
@@ -81,7 +81,7 @@ Dialex AI is not directed to children under the age of 18, and we do not knowing
 
 ---
 
-## 8. International Data Privacy Compliance (GDPR, CCPA, CPRA, HIPAA)
+## 8. International Data Privacy Compliance (GDPR, CCPA)
 
 1. **Data Controller Status:** As the operator of the local instance, You are the sole Data Controller of any data entered into Dialex AI.
 2. **No Data Processor Exposure:** Because Kolta Labs does not receive, host, or process your deliberation payloads, Kolta Labs does not act as a Data Processor for your deliberation data under the EU General Data Protection Regulation (GDPR).

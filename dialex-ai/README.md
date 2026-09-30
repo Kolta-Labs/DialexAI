@@ -115,16 +115,16 @@ Dialex AI is built for anyone who needs to make sound, defensible decisions in h
 
 ### 🤝 Multi-Model Intelligence Under One Roof
 Connect multiple frontier models in the same room:
-* **Anthropic** (Claude 3.7 / 3.5 Sonnet & Haiku)
-* **OpenAI** (GPT-4o, o1, o3-mini)
-* **Google** (Gemini 2.5 Pro & Flash)
-* **DeepSeek** (R1 Reasoning & V3)
+* **Anthropic** (Claude models)
+* **OpenAI** (GPT models)
+* **Google** (Gemini models)
+* **DeepSeek** (reasoning and chat models)
 * **xAI** (Grok)
 * **Mistral** (Large & Codestral)
 * **Local Offline Models** (via Ollama for 100% offline work)
 
 ### 🔒 Privacy-First & Data Sovereignty
-Your questions, debate transcripts, and API keys are stored in an **encrypted local vault** on your computer. There is no central Dialex cloud server reading your deliberations, ensuring complete confidentiality for sensitive research, proprietary code, and private strategy.
+Your questions, debate transcripts, and API keys are stored locally on your computer; API keys are encrypted at rest (the key file sits on the same machine; OS keychain support is planned). There is no Dialex cloud server in the path. Content you send to a cloud model provider is governed by that provider's terms.
 
 ### 💰 Direct Pricing, Zero Markup
 Dialex AI is not a middleman selling expensive tokens. You can connect your existing free development CLIs (like `claude`, `codex`, or `antigravity`) or bring your own API keys. You only pay provider rates directly, with no hidden subscription markup.
@@ -191,133 +191,8 @@ Dialex includes ready-to-run **Playbooks**—pre-configured debate templates wit
 
 ## Quick Start & Installation
 
-Install Dialex AI via your platform's package manager, or download the pre-packaged binary directly for your operating system.
+> **Status:** no prebuilt installers are published yet (no `.dmg`, `.msi`, `.deb`, `.rpm`, APK, Homebrew or winget package). Build from source below.
 
-<table align="center" width="100%">
-  <thead>
-    <tr>
-      <th align="center">Platform</th>
-      <th align="center">Homebrew Available?</th>
-      <th align="center">Package / Binary</th>
-      <th align="center">Direct Download</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center">
-        <img src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS" /><br/>
-        <strong>macOS</strong>
-      </td>
-      <td align="center">
-        ✅ <strong>Yes</strong><br/>
-        <code>brew install --cask dialex</code> (GUI)<br/>
-        <code>brew install dialex</code> (CLI)
-      </td>
-      <td align="center">Native <code>.dmg</code> & Go binary</td>
-      <td align="center">
-        <a href="https://github.com/Kolta-Labs/DialexAI/releases/latest"><strong>⬇️ Download .dmg</strong></a><br/>
-        <small>Apple Silicon & Intel</small>
-      </td>
-    </tr>
-    <tr>
-      <td align="center">
-        <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows" /><br/>
-        <strong>Windows</strong>
-      </td>
-      <td align="center">
-        ❌ <em>Use <code>winget</code> or MSI</em><br/>
-        <code>winget install KoltaLabs.DialexAI</code>
-      </td>
-      <td align="center">Windows <code>.msi</code> installer</td>
-      <td align="center">
-        <a href="https://github.com/Kolta-Labs/DialexAI/releases/latest"><strong>⬇️ Download .msi</strong></a><br/>
-        <small>Windows 10 / 11 (64-bit)</small>
-      </td>
-    </tr>
-    <tr>
-      <td align="center">
-        <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux" /><br/>
-        <strong>Linux</strong>
-      </td>
-      <td align="center">
-        ✅ <strong>Yes (Engine & CLI)</strong><br/>
-        <code>brew install dialex</code>
-      </td>
-      <td align="center"><code>.deb</code> (Debian/Ubuntu)<br/><code>.rpm</code> (Fedora/RHEL)</td>
-      <td align="center">
-        <a href="https://github.com/Kolta-Labs/DialexAI/releases/latest"><strong>⬇️ Download .deb</strong></a> · 
-        <a href="https://github.com/Kolta-Labs/DialexAI/releases/latest"><strong>.rpm</strong></a><br/>
-        <small>x86_64 & ARM64</small>
-      </td>
-    </tr>
-    <tr>
-      <td align="center">
-        <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android" /><br/>
-        <strong>Android</strong>
-      </td>
-      <td align="center">❌ <em>Mobile APK</em></td>
-      <td align="center">Android <code>.apk</code></td>
-      <td align="center">
-        <a href="https://github.com/Kolta-Labs/DialexAI/releases/latest"><strong>⬇️ Download .apk</strong></a><br/>
-        <small>Phone & Tablet</small>
-      </td>
-    </tr>
-  </tbody>
-</table>
-
-<br/>
-
-### Platform-Specific Setup
-
-#### 🍏 macOS
-Tap the repository once, then install with standard Homebrew commands:
-```bash
-# 1. Tap this repository (one-time setup)
-brew tap kolta-labs/dialex https://github.com/Kolta-Labs/DialexAI.git
-
-# Option A: Full Desktop App + Engine (GUI)
-brew install --cask dialex
-
-# Option B: Engine + CLI only (Headless / Server)
-brew install dialex
-brew services start dialex
-```
-*Or manually download the [macOS .dmg installer](https://github.com/Kolta-Labs/DialexAI/releases/latest).*
-
----
-
-#### 🪟 Windows
-Install via the native Windows Package Manager (`winget`) or standard installer:
-```powershell
-# Install via winget
-winget install --id KoltaLabs.DialexAI -e
-```
-*Or manually download and run the [DialexAI-Windows-x64.msi installer](https://github.com/Kolta-Labs/DialexAI/releases/latest).*
-
----
-
-#### 🐧 Linux
-Install the deliberation engine and CLI via Homebrew on Linux, or download native desktop packages:
-```bash
-# Engine + CLI via Homebrew on Linux:
-brew tap kolta-labs/dialex https://github.com/Kolta-Labs/DialexAI.git
-brew install dialex
-
-# Desktop GUI via native package manager:
-# Ubuntu / Debian (.deb):
-sudo apt install ./DialexAI-*-Linux-amd64.deb
-
-# Fedora / RHEL (.rpm):
-sudo dnf install ./DialexAI-*-Linux-amd64.rpm
-```
-*Direct download: [Debian/Ubuntu (.deb)](https://github.com/Kolta-Labs/DialexAI/releases/latest) · [Fedora/RHEL (.rpm)](https://github.com/Kolta-Labs/DialexAI/releases/latest).*
-
----
-
-#### 📱 Android Companion App
-Download the [Dialex Mobile APK](https://github.com/Kolta-Labs/DialexAI/releases/latest), open it on your Android device, and pair with your desktop instance in seconds using the in-app QR code.
-
----
 
 ### Docker & Developer Builds
 

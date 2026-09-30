@@ -48,7 +48,7 @@ Most AI coding tools operate under the **"Solo Sycophant Problem"**: a single LL
 
 ### 2.1 System Requirements
 - **macOS** (Apple Silicon or Intel), **Linux** (x86_64 or aarch64), or **Windows** (WSL2).
-- **Go 1.22+** (for native CLI and LSP server).
+- **Go 1.27+** (for native CLI and LSP server).
 - **Java JDK 21+** (for Compose Multiplatform Desktop Cockpit App).
 - **Git 2.30+** (with support for `git worktree`).
 
@@ -56,7 +56,7 @@ Most AI coding tools operate under the **"Solo Sycophant Problem"**: a single LL
 
 To build and install the native binary locally:
 ```bash
-cd kritix
+cd kritix-ai
 go build -ldflags="-s -w" -o /usr/local/bin/kritix ./cli/main.go
 go build -ldflags="-s -w" -o /usr/local/bin/kritixd ./cmd/kritixd/main.go
 

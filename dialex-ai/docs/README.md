@@ -8,7 +8,7 @@ Welcome to the official technical and user documentation suite for **Dialex AI**
 
 | Key Unique Selling Point | Technical Reality & Business Impact |
 |---|---|
-| 🏛️ **Hegelian Multi-Agent Deliberation** | Pits competing frontier models (**Claude 3.7 Sonnet, GPT-4o, Gemini 2.5 Pro, DeepSeek R1, Grok 3, Ollama**) against each other to eliminate single-model hallucinations, sycophancy, and cognitive blind spots. |
+| 🏛️ **Hegelian Multi-Agent Deliberation** | Pits competing frontier models (**Claude, GPT, Gemini, DeepSeek, Grok, Ollama**) against each other to eliminate single-model hallucinations, sycophancy, and cognitive blind spots. |
 | 💰 **$0 Marginal Token Cost via Local CLIs** | Connect directly to existing, already-authenticated developer CLI subscriptions (`claude`, `codex`, `antigravity`/`agy`, `ollama`). Eliminates runaway enterprise API credit card bills and expensive per-token fees. |
 | 📦 **1-Click Native Desktop Downloadables** | Standalone native installers for **macOS (.dmg / .app)**, **Windows (.msi / .exe)**, **Linux (.AppImage / .deb / .rpm)**, and **Android (.apk)**. Zero terminal commands required for end-users. |
 | 🔒 **100% Sovereign Zero-Cloud Vault** | Credentials encrypted at rest via Argon2id + AES-256-GCM and Android Hardware Keystore (TEE/StrongBox). Run 100% offline with local models or in isolated private on-prem networks. |
@@ -26,8 +26,6 @@ Explore our comprehensive guides organized by domain and objective:
   *The epistemological case for dialectic multi-agent councils, why single-prompt LLMs fail, Bayesian credence updating, 3-tier anti-fluff guardrails, and data sovereignty.*
 - [**Executive Overview & Strategic Value**](EXECUTIVE_OVERVIEW.md)  
   *Business justification, executive summary, ROI models, enterprise risk mitigation, and synthetic advisory board economics.*
-- [**Comprehensive Project Scope**](01_PROJECT_SCOPE.md)  
-  *Exhaustive functional and non-functional requirements, target environments, multiplatform guarantees, and security constraints.*
 - [**Complete Feature Catalog**](02_FEATURE_LIST.md)  
   *Full inventory of capabilities, debate archetypes, domain personas, status badges, style modifiers, and target personas.*
 
@@ -38,8 +36,6 @@ Explore our comprehensive guides organized by domain and objective:
   *Battle-tested, ready-to-run playbooks for Systems Architecture (Kafka vs Pulsar, Monolith vs Microservices), Cybersecurity Threat Modeling, Capital Allocation, and AI Infrastructure.*
 
 ### 3. Architecture & Technical Design
-- [**System Topology & Clean System Design**](03_ARCHITECTURE_AND_SYSTEM_DESIGN.md)  
-  *High-level data flow diagrams, decoupled dual-engine topology, and client-to-engine contract specifications.*
 - [**Deep Architecture & Clean Call Chains**](ARCHITECTURE.md)  
   *Strict Clean Architecture layering in KMP (`domain` $\rightarrow$ `data` $\rightarrow$ `presentation`), unidirectional MVI (`Contract.kt`), Go Turn State Machine, and AES-256 Vault.*
 - [**REST & SSE API Reference**](API_REFERENCE.md)  
@@ -52,19 +48,6 @@ Explore our comprehensive guides organized by domain and objective:
   *Packaging native 1-click installers (DMG, MSI, AppImage, APK), Android biometric gate, in-memory diagnostics (`AppLogStore`), and JNI.*
 - [**Developer Guide & Kolt Framework**](DEVELOPER_GUIDE.md)  
   *Developer workspace setup, **Kolt / KoltLibs** composite build (`compose-kmp`, `AsyncState`), writing unit tests, adding new AI providers, and synthesizer extensions.*
-
-### 5. Advanced Feature Specifications (`docs/features/`)
-Formal technical specifications for the ten breakthrough epistemic modules:
-1. [**Knowledge Graph & Drag-and-Drop**](features/01_KNOWLEDGE_GRAPH_AND_DRAG_DROP.md) — Visual canvas connecting claims, tensions, and evidence with physics-based nodes.
-2. [**Problem Decomposition & Sub-Topic Tree**](features/02_PROBLEM_DECOMPOSITION.md) — Recursive multi-tier dilemma breakdown into parallelizable sub-debates.
-3. [**Contradiction & Tension Detection Matrix**](features/03_CONTRADICTION_AND_TENSION_DETECTION.md) — Automated heuristic and embedding-based extraction of conflicting claims.
-4. [**Round-Aware Dynamic Retrieval**](features/04_ROUND_AWARE_DYNAMIC_RETRIEVAL.md) — Per-turn live web and vector search injected dynamically between debate rounds.
-5. [**Dedicated 1-on-1 Socratic Interview Mode**](features/05_SOCRATIC_INTERVIEW_MODE_SPEC.md) — *Brevis Interrogatio*, Epistemic Ledger (Invariants vs Concessions), and Council Elevation.
-6. [**Null-Hypothesis Benchmarking Suite (DialexBench)**](features/06_NULL_HYPOTHESIS_BENCHMARKING_SPEC.md) — Quantitative radar evaluation measuring hallucination reduction vs single models.
-7. [**8-Layer Cognitive Persona DNA & MMOS Studio**](features/07_8_LAYER_PERSONA_DNA_SPEC.md) — Deep persona customization with ontological anchors, cognitive biases, and MMOS ingestion.
-8. [**Mobile Epistemic Parity Suite**](features/08_MOBILE_EPISTEMIC_PARITY_SPEC.md) — Full feature parity on Android with Navigation 3, biometrics, offline engine, and LAN pairing.
-9. [**Bayesian Credence Tracking Network**](features/09_BAYESIAN_CREDENCE_TRACKING_SPEC.md) — Real-time probability updating and epistemic uncertainty network.
-10. [**Autonomous Artifact Sandbox & Code Verification**](features/10_AUTONOMOUS_ARTIFACT_SANDBOX_SPEC.md) — Sandboxed execution environment verifying generated scripts and code diffs.
 
 ---
 

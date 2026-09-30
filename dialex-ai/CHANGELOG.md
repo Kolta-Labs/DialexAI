@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🚀 Major Features & Capabilities
 - **Hegelian Multi-Agent Adversarial Deliberation**:
-  - Pits up to 6 competing frontier AI models (Anthropic Claude 3.7/3.5, OpenAI GPT-4o/o3, Google Gemini 2.5/2.0, xAI Grok 3, DeepSeek R1/V3, Mistral Large, and local Ollama) in multi-round structured dialectic debates.
+  - Pits up to 6 competing frontier AI models (Anthropic Claude, OpenAI GPT, Google Gemini, xAI Grok, DeepSeek, Mistral Large, and local Ollama) in multi-round structured dialectic debates.
   - Designated Moderator (Seat 1) who frames topic agendas, leads round-by-round syntheses, and generates the final consensus outcome.
 - **$0 Marginal Token Cost via Local Developer CLIs**:
   - Direct execution through local authenticated developer subshells (`claude`, `codex`, `antigravity`/`agy`, `ollama`) to eliminate metered enterprise API bills.
@@ -48,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **High-Throughput Go Orchestration Engine**:
   - Mutex-locked turn state machine with Server-Sent Events (SSE) streaming hub.
   - Dual deployment support: **In-Device Engine** (auto-spawned local child process at `127.0.0.1:8080`) and **Remote Host Engine** (Docker Compose, systemd, Tailscale `tsnet` WireGuard mesh).
-  - Argon2id + AES-256-GCM encrypted keystore vault and Android Hardware Keystore (TEE/StrongBox) integration.
+  - AES-256-GCM encrypted API-key storage (key file on disk; OS keychain planned).
   - In-memory diagnostics ring buffer (`AppLogStore`) capturing the last 1,000 transport events.
 
 ---

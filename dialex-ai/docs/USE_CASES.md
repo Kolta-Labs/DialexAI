@@ -32,10 +32,10 @@ Each playbook provides:
 #### 2. Council Composition (4 Models)
 | Seat | Model Provider | Persona | Role & Mandate |
 |---|---|---|---|
-| **Seat 1 (Moderator)** | Anthropic Claude 3.7 Sonnet | **🏛️ The Facilitator** | Frames trade-offs, prevents dogmatic flame wars, synthesizes consensus ADR. |
-| **Seat 2 (Peer)** | OpenAI GPT-4o | **⚖️ The Pragmatist** | Focuses on day-2 operational overhead, BookKeeper cluster management, and team retraining costs. |
-| **Seat 3 (Peer)** | Google Gemini 2.5 Pro | **🚀 The Optimist** | Champions Pulsar's tiered storage (S3/GCS offloading), stateless brokers, and native multi-tenancy. |
-| **Seat 4 (Peer)** | DeepSeek R1 / Ollama | **😈 Devil's Advocate** | Attacks Pulsar's smaller community ecosystem, client library maturity, and disaster recovery edge cases. |
+| **Seat 1 (Moderator)** | Anthropic Claude | **🏛️ The Facilitator** | Frames trade-offs, prevents dogmatic flame wars, synthesizes consensus ADR. |
+| **Seat 2 (Peer)** | OpenAI GPT | **⚖️ The Pragmatist** | Focuses on day-2 operational overhead, BookKeeper cluster management, and team retraining costs. |
+| **Seat 3 (Peer)** | Google Gemini | **🚀 The Optimist** | Champions Pulsar's tiered storage (S3/GCS offloading), stateless brokers, and native multi-tenancy. |
+| **Seat 4 (Peer)** | DeepSeek / Ollama | **😈 Devil's Advocate** | Attacks Pulsar's smaller community ecosystem, client library maturity, and disaster recovery edge cases. |
 
 #### 3. Key Tensions to Surface
 - Broker-storage separation (Pulsar + BookKeeper) vs single-tier architecture (Kafka + KRaft).
@@ -63,9 +63,9 @@ Each playbook provides:
   > Database: Single PostgreSQL 15 instance experiencing connection saturation (88% CPU during peak).
 
 #### 2. Council Composition (3 Models)
-- **Primary Agent**: Anthropic Claude 3.7 (`[The Facilitator]`, CLI mode: `claude`)
-- **Seat 2**: OpenAI GPT-4o (`[The Contrarian]`, API mode) — Challenges microservice resume-driven development.
-- **Seat 3**: Google Gemini 2.5 Pro (`[The Risk Analyst]`, API mode) — Details distributed transaction failures, network latencies, and observability overhead.
+- **Primary Agent**: Anthropic Claude (`[The Facilitator]`, CLI mode: `claude`)
+- **Seat 2**: OpenAI GPT (`[The Contrarian]`, API mode) — Challenges microservice resume-driven development.
+- **Seat 3**: Google Gemini (`[The Risk Analyst]`, API mode) — Details distributed transaction failures, network latencies, and observability overhead.
 
 #### 3. Deliverables
 - **Executive Board Briefing** detailing the 18-month projected engineering velocity impact.
@@ -88,10 +88,10 @@ Each playbook provides:
 #### 2. Council Composition (4 Models)
 | Seat | Model Provider | Persona | Role & Mandate |
 |---|---|---|---|
-| **Seat 1 (Moderator)** | Anthropic Claude 3.7 Sonnet | **🔬 The Expert** | Enforces zero-trust cryptographic precision, SPIFFE verifiable identity documents (SVIDs), and cryptographic root rotation. |
-| **Seat 2 (Peer)** | DeepSeek R1 | **🛡️ Cybersecurity Red-Team** | Actively attempts to bypass gateway policy evaluation via JWT header confusion, replay attacks, and sidecar race conditions. |
-| **Seat 3 (Peer)** | OpenAI GPT-4o | **🛡️ The Risk Analyst** | Quantifies regulatory blast radius, data exfiltration vectors, and non-compliance fines. |
-| **Seat 4 (Peer)** | Google Gemini 2.5 Pro | **🧭 The Ethicist** | Evaluates patient privacy leakage through telemetry headers and audit log sanitation. |
+| **Seat 1 (Moderator)** | Anthropic Claude | **🔬 The Expert** | Enforces zero-trust cryptographic precision, SPIFFE verifiable identity documents (SVIDs), and cryptographic root rotation. |
+| **Seat 2 (Peer)** | DeepSeek | **🛡️ Cybersecurity Red-Team** | Actively attempts to bypass gateway policy evaluation via JWT header confusion, replay attacks, and sidecar race conditions. |
+| **Seat 3 (Peer)** | OpenAI GPT | **🛡️ The Risk Analyst** | Quantifies regulatory blast radius, data exfiltration vectors, and non-compliance fines. |
+| **Seat 4 (Peer)** | Google Gemini | **🧭 The Ethicist** | Evaluates patient privacy leakage through telemetry headers and audit log sanitation. |
 
 #### 3. Instant Interrupt Scenario
 If debaters spend too much time discussing basic TLS ciphers:
@@ -118,9 +118,9 @@ If debaters spend too much time discussing basic TLS ciphers:
   > Operations team: 3 DevOps engineers, no current hardware procurement or data center cabling experience.
 
 #### 2. Council Composition (4 Models)
-- **Primary Agent**: Anthropic Claude 3.7 (`[The Facilitator]`)
-- **Seat 2**: OpenAI GPT-4o (`[The Optimist]`) — Models raw colocation hardware economics, Dell/Supermicro amortized CAPEX, and 3-year margin expansion.
-- **Seat 3**: Google Gemini 2.5 Pro (`[The Pragmatist]`) — Quantifies hidden OPEX: spares inventory, remote hands SLA, transit peering commits, and specialized headcount recruitment.
+- **Primary Agent**: Anthropic Claude (`[The Facilitator]`)
+- **Seat 2**: OpenAI GPT (`[The Optimist]`) — Models raw colocation hardware economics, Dell/Supermicro amortized CAPEX, and 3-year margin expansion.
+- **Seat 3**: Google Gemini (`[The Pragmatist]`) — Quantifies hidden OPEX: spares inventory, remote hands SLA, transit peering commits, and specialized headcount recruitment.
 - **Seat 4**: xAI Grok / Mistral Large (`[Devil's Advocate]`) — Stress-tests catastrophic single-colocation power failure and disaster recovery restoration times.
 
 #### 3. Expected Synthesized Deliverables
@@ -131,21 +131,21 @@ If debaters spend too much time discussing basic TLS ciphers:
 
 ## 4. 🤖 AI / Machine Learning Infrastructure
 
-### Playbook 4.1: Frontier Cloud API vs. Self-Hosted Quantized DeepSeek R1
+### Playbook 4.1: Frontier Cloud API vs. Self-Hosted Quantized DeepSeek
 
 *Ideal for: AI Platform Engineers, Head of Data Science, Security Leads.*
 
 #### 1. Setup Configuration
-- **Topic**: *"Should our enterprise legal contract audit product switch from cloud APIs (Claude 3.7 / GPT-4o) to self-hosted, fine-tuned DeepSeek R1 671B (FP8 / AWQ) on private 8x H100 GPU clusters?"*
+- **Topic**: *"Should our enterprise legal contract audit product switch from cloud APIs (Claude / GPT) to self-hosted, fine-tuned DeepSeek 671B (FP8 / AWQ) on private 8x H100 GPU clusters?"*
 - **Context**:
   > Monthly contract processing volume: 450,000 legal pages.  
   > Security requirements: Client non-disclosure agreements strictly forbid customer contract text from leaving sovereign enterprise VPCs.  
   > Budget: $40,000/month GPU lease commitment.
 
 #### 2. Council Composition (3 Models)
-- **Primary Agent**: Anthropic Claude 3.7 (`[The Facilitator]`)
-- **Seat 2**: DeepSeek R1 (API or Local CLI) (`[The Expert]`) — Analyzes reasoning trace efficacy, KV cache memory footprint (vLLM/SGLang), and FP8 accuracy retention on legal syntax.
-- **Seat 3**: OpenAI GPT-4o (`[The Risk Analyst]`) — Audits throughput bottlenecks during sudden spike volume and GPU hardware failure failover latency.
+- **Primary Agent**: Anthropic Claude (`[The Facilitator]`)
+- **Seat 2**: DeepSeek (API or Local CLI) (`[The Expert]`) — Analyzes reasoning trace efficacy, KV cache memory footprint (vLLM/SGLang), and FP8 accuracy retention on legal syntax.
+- **Seat 3**: OpenAI GPT (`[The Risk Analyst]`) — Audits throughput bottlenecks during sudden spike volume and GPU hardware failure failover latency.
 
 #### 3. Deliverables
 - **Architecture Decision Record (ADR)** on Inference Serving Infrastructure.

@@ -10,8 +10,8 @@ Dialex AI shares over 90% of its UI, state management, and business logic in the
 
 | Platform | Target Name | Binary / Installer Format | UI Engine | Key Capabilities |
 |---|---|---|---|---|
-| **macOS** | Dialex AI Desktop | `.dmg` installer, `.app` bundle, Homebrew Cask | Compose Multiplatform (Skia / Metal) | Master-detail IDE, window double-click maximize, traffic light insets, sliding artifacts drawer |
-| **Windows** | Dialex AI Desktop | `.msi` native installer, `.exe` standalone | Compose Multiplatform (Skia / DirectX) | Windows Start Menu integration, hotkeys, drag-and-drop codebase attachments |
+| **macOS** | Dialex AI Desktop | `.app` bundle built from source (installer not yet published) | Compose Multiplatform (Skia / Metal) | Master-detail IDE, window double-click maximize, traffic light insets, sliding artifacts drawer |
+| **Windows** | Dialex AI Desktop | built from source (installer not yet published) | Compose Multiplatform (Skia / DirectX) | Windows Start Menu integration, hotkeys, drag-and-drop codebase attachments |
 | **Linux** | Dialex AI Desktop | `.AppImage` (portable), `.deb` (Debian/Ubuntu), `.rpm` | Compose Multiplatform (Skia / OpenGL) | Portable double-click AppImage, system tray minimization, Wayland/X11 |
 | **Android** | Dialex AI Mobile | `.apk` package, Google Play Store / F-Droid | Compose Multiplatform (Android Target) | Radial Stadium Arena, hold-to-speak voice intake, native TTS audio briefings, 1-tap QR pairing |
 
@@ -78,7 +78,7 @@ git clone https://github.com/Kolta-Labs/DialexAI.git
     ```properties
     sdk.dir=/Users/<username>/Library/Android/sdk
     ```
-- **Go 1.22+** (only if compiling or modifying the Go engine from source).
+- **Go 1.27+** (only if compiling or modifying the Go engine from source).
 
 ### 3.2 Running Desktop in Development Mode
 ```bash

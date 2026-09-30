@@ -1,6 +1,13 @@
 # Kritix AI — Professional Platform Guide
 ### Sovereign Multi-Agent Software Engineering & Autonomous Coding
 
+> **Implementation status (read first).** Kritix is an early, partly-scaffolded platform. What is real and tested today: repository/steering ingestion, persona registry, git shadow worktrees and patch apply/rollback, the process-isolated test runner, the LSP server, MCP client, and the convergence loop itself.
+> **Not model-backed yet:**
+> - `kritix plan` (the "Stakeholder Council") is **template-based**: it calls no model and runs no deliberation; output is a structured draft to edit.
+> - The "Adversarial Reviewer" is **rule-based**: test exit codes, a non-empty diff, and two built-in taboo patterns. It does not evaluate acceptance criteria, and it warns about steering taboos it cannot enforce.
+> - `kritix code` writes patches through a model **only when you pass `--provider` and `--model`** (API key from your environment, e.g. `ANTHROPIC_API_KEY`). The TUI REPL and the remote `forge` worker do not yet supply a model, so they stop with "no patch generator configured".
+> - Test execution is process isolation, **not** a security sandbox. Do not run it on untrusted repositories.
+
 ---
 
 ## 1. Architectural Philosophy: The Dialectic Engine
@@ -36,7 +43,7 @@ Most AI coding tools operate under the **"Solo Sycophant Problem"**: a single LL
 │  • Shadow Git Worktree:   Isolated execution branch (.kritix/worktrees/); zero workspace disruption.  │
 │  • Domain Coder:          Selected specialist (Android, Backend, iOS) produces atomic unified diffs.   │
 │  • Local Test Sandbox:    Deterministic process-group execution (./gradlew test, go test, cargo test). │
-│  • Adversarial Reviewer:  Scrutinizes AST diffs against test results and Taboo Space constraints.       │
+│  • Rule-Based Reviewer:   Checks diffs against test results and built-in Taboo patterns.          │
 │                                                                                                        │
 │  Loop (Rounds 1..N) ────► 100% Green Tests & Reviewer Sign-Off ────► Clean Merge / PR Creation         │
 └────────────────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -48,7 +55,7 @@ Most AI coding tools operate under the **"Solo Sycophant Problem"**: a single LL
 
 ### 2.1 System Requirements
 - **macOS** (Apple Silicon or Intel), **Linux** (x86_64 or aarch64), or **Windows** (WSL2).
-- **Go 1.22+** (for native CLI and LSP server).
+- **Go 1.27+** (for native CLI and LSP server).
 - **Java JDK 21+** (for Compose Multiplatform Desktop Cockpit App).
 - **Git 2.30+** (with support for `git worktree`).
 
@@ -56,7 +63,7 @@ Most AI coding tools operate under the **"Solo Sycophant Problem"**: a single LL
 
 To build and install the native binary locally:
 ```bash
-cd kritix
+cd kritix-ai
 go build -ldflags="-s -w" -o /usr/local/bin/kritix ./cli/main.go
 go build -ldflags="-s -w" -o /usr/local/bin/kritixd ./cmd/kritixd/main.go
 
@@ -456,7 +463,7 @@ Designed for Product Owners and Engineers to co-create bulletproof specification
 #### 2. 🔬 Chamber 2: Engineering Lab (Isolated Execution & Scrubber)
 The visual control center for autonomous code generation:
 - **🛡️ Shadow Worktree Indicator:** Displays active background worktree path (`.kritix/worktrees/<task-id>`) ensuring zero risk to your current branch or uncommitted files.
-- **⏪ Interactive Time-Travel Checkpoint Scrubber:** Scrub back and forth across execution rounds (`[Round 1]`, `[Round 2]`, `[Round 3]`) to inspect the AST diff evolution and test outcomes at each step.
+- **⏪ Interactive Time-Travel Checkpoint Scrubber:** Scrub back and forth across execution rounds (`[Round 1]`, `[Round 2]`, `[Round 3]`) to inspect the diff evolution and test outcomes at each step.
 - **Side-by-Side Diff Inspector:** Unified and split-screen diff view with chunk-by-chunk Accept/Reject buttons.
 - **Live Sandbox Terminal:** Displays streaming test execution output (`./gradlew test`, `go test`, `cargo test`) with process exit codes.
 - **One-Click Squash & Merge:** When tests pass 100% and the Reviewer signs off, click **Squash & Merge** to incorporate the verified changes into your active branch.

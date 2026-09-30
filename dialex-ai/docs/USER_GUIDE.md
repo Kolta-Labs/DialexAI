@@ -28,7 +28,7 @@ Dialex AI supports up to 6 distinct agent seats in a single deliberation:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ PRIMARY AGENT (Seat 1 - Lead & Moderator)                   │
-│ Provider: Anthropic (Claude 3.7 Sonnet)                     │
+│ Provider: Anthropic (Claude)                     │
 │ Persona: [The Facilitator]                                  │
 │ Mode: Local CLI (claude) or Cloud API                       │
 └─────────────────────────────────────────────────────────────┘
@@ -38,7 +38,7 @@ Dialex AI supports up to 6 distinct agent seats in a single deliberation:
 ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
 │ SEAT 2       │      │ SEAT 3       │      │ SEAT 4       │
 │ OpenAI       │      │ Google       │      │ DeepSeek     │
-│ (GPT-4o)     │      │ (Gemini 2.5) │      │ (R1)         │
+│ (GPT)     │      │ (Gemini) │      │ (DeepSeek)        │
 │ [Devil's Adv]│      │ [Pragmatist] │      │ [Security]   │
 └──────────────┘      └──────────────┘      └──────────────┘
 ```
@@ -262,17 +262,17 @@ Directly below the Consensus Outcome Bubble, click any button to instantly gener
 ## 8. Target Beneficiary Playbooks & Scenarios
 
 ### 👨‍💻 Staff & Principal Architects: The RFC Review Council
-- **Setup**: Claude 3.7 Sonnet (Seat 1 - Facilitator), GPT-4o (Seat 2 - Devil's Advocate), DeepSeek R1 (Seat 3 - Risk Analyst), Gemini 2.5 (Seat 4 - Pragmatist).
+- **Setup**: Claude (Seat 1 - Facilitator), GPT (Seat 2 - Devil's Advocate), DeepSeek (Seat 3 - Risk Analyst), Gemini (Seat 4 - Pragmatist).
 - **Workflow**: Paste your draft Architecture RFC into Context. Set rounds to 3. Enable Anti-Fluff mode.
 - **Output**: Generates a battle-tested **ADR-042** with all hidden latency and lock-in pitfalls identified.
 
 ### 👔 CTOs & Tech Executives: Strategic Investment Audit
-- **Setup**: Claude 3.7 (Facilitator), GPT-4o (Optimist), Gemini 2.5 (Contrarian), Grok 3 (Risk Analyst).
+- **Setup**: Claude (Facilitator), GPT (Optimist), Gemini (Contrarian), Grok (Risk Analyst).
 - **Workflow**: Enter dilemma: *"Should we invest $2M to build our own in-house vector search or license an enterprise managed solution?"*
 - **Output**: Instant **Weighted Decision Matrix** and **Executive Memorandum** for the next board meeting.
 
 ### 🛡️ Cybersecurity Red-Teams: Threat Modeling
-- **Setup**: DeepSeek R1 (Contrarian / Red-Team Hacker), Claude 3.7 (Blue-Team Defensive Architect), GPT-4o (Ethicist / Compliance).
+- **Setup**: DeepSeek (Contrarian / Red-Team Hacker), Claude (Blue-Team Defensive Architect), GPT (Ethicist / Compliance).
 - **Workflow**: Paste API authentication schema into Context.
 - **Output**: Generates a **STRIDE Threat Model** and zero-day exposure analysis.
 

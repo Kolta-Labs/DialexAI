@@ -25,7 +25,7 @@ Modern enterprise leaders, CTOs, and engineering architects increasingly rely on
                      ▼                                                 ▼
         ┌─────────────────────────┐                       ┌─────────────────────────┐
         │     PRIMARY MODERATOR   │                       │       PEER AGENT        │
-        │ Claude 3.7 (Facilitator)│                       │   GPT-4o (Pragmatist)   │
+        │ Claude (Facilitator)│                       │   GPT (Pragmatist)   │
         └────────────┬────────────┘                       └────────────┬────────────┘
                      │           ▲                             ▲       │
                      │           │     DIALECTIC DELIBERATION  │       │
@@ -33,7 +33,7 @@ Modern enterprise leaders, CTOs, and engineering architects increasingly rely on
                      ▼                         │                       ▼
         ┌─────────────────────────┐            │          ┌─────────────────────────┐
         │       PEER AGENT        │            │          │       PEER AGENT        │
-        │  Gemini 2.5 (Contrarian)│◄───────────┴─────────►│   Grok (Risk Analyst)   │
+        │  Gemini (Contrarian)│◄───────────┴─────────►│   Grok (Risk Analyst)   │
         └─────────────────────────┘                       └─────────────────────────┘
                                               │
                                               ▼

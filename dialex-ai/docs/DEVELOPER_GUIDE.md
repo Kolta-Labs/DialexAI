@@ -27,7 +27,7 @@ DialexAI/
 │   └── src/jvmMain/kotlin/com/dialex/desktop/Main.kt
 ├── androidApp/                     # Thin Android Shell (Dialex AI Mobile)
 │   └── src/androidMain/kotlin/com/dialex/android/MainActivity.kt
-├── engine/                         # Go Orchestration Engine
+├── dialex-engine/                         # Go Orchestration Engine
 │   ├── cmd/dialex/                 # CLI entry point (main.go)
 │   └── pkg/
 │       ├── api/                    # HTTP REST handlers & SSE streaming hub
@@ -136,7 +136,7 @@ Presentation (ViewModel) ──► UseCase (Domain) ──► Repository Interfa
 
 ### 4.3 Building & Running the Go Backend
 ```bash
-cd engine
+cd dialex-engine
 
 # Run all unit and race tests
 go test -v -race ./pkg/...
@@ -159,14 +159,14 @@ cd engine && go test -race ./...
 ## 5. Adding New AI Providers or Deliverable Formats
 
 ### 5.1 Adding an AI Provider to the Go Engine
-1. Implement the `runner.Runner` interface in `engine/pkg/runner/`:
+1. Implement the `runner.Runner` interface in `dialex-engine/pkg/runner/`:
    ```go
    type Runner interface {
        Generate(ctx context.Context, req *GenerationRequest) (*GenerationResponse, error)
        Stream(ctx context.Context, req *GenerationRequest, deltaCh chan<- string) (*GenerationResponse, error)
    }
    ```
-2. Register the provider in `engine/pkg/runner/factory.go`.
+2. Register the provider in `dialex-engine/pkg/runner/factory.go`.
 3. Add the provider enum and icon mapping to `shared/src/commonMain/kotlin/com/dialex/model/Agent.kt`.
 
 ### 5.2 Adding a New Deliverable Format
