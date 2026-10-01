@@ -43,6 +43,12 @@ kotlin {
             implementation(kotlin("test"))
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
         }
+        val desktopTest by getting {
+            dependencies {
+                // Architecture rules from CLAUDE.md, checked as ordinary tests (JVM-only tool).
+                implementation("com.lemonappdev:konsist:0.17.3")
+            }
+        }
         val desktopMain by getting {
             dependencies {
                 implementation(libs.ktor.client.cio)
