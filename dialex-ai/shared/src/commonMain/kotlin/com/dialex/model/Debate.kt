@@ -527,6 +527,17 @@ data class OutputConfig(
  * Up to 5 additional seats are optional extras — 6 participants total per spec. Each seat's
  * provider is independently pickable, and seats may share a provider.
  */
+/** Guards against conformity, which studies find drives accuracy down in multi-agent debate,
+ * especially with several personas on one model. Mirrors the Go engine's IndependenceConfig. */
+@Serializable
+data class IndependenceConfig(
+    /** Round 1: each seat answers without seeing the other seats' round-1 answers. */
+    val blindFirstRound: Boolean = false,
+    /** Other seats appear as "Participant A/B/C" instead of by name. A persona that names itself
+     * in its text still leaks its identity; this removes the labels, not the content. */
+    val anonymizeTranscript: Boolean = false,
+)
+
 @Serializable
 data class DebateConfig(
     val topic: String,
@@ -564,6 +575,8 @@ data class DebateConfig(
     val depth: DepthConfig = DepthConfig(),
     /** Moderator agent config — dynamic dialectic steerage & checkpoints. */
     val moderation: ModerationConfig = ModerationConfig(),
+    /** How much agents see of each other: blind first round, anonymized peers. */
+    val independence: IndependenceConfig = IndependenceConfig(),
     /** Deliverable artifact config — format and generator. */
     val deliverable: DeliverableConfig = DeliverableConfig(),
     /** Output & auto-save config — folder and file-save flags. */

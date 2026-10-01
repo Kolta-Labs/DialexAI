@@ -1955,6 +1955,50 @@ fun SetupScreen(
                             onCheckedChange = { updateConfig(config.copy(validateObjections = it)) }
                         )
                     }
+
+                    HorizontalDivider(color = cc.border.copy(alpha = 0.25f), thickness = 0.75.dp)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Blind First Round", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp, fontWeight = FontWeight.Medium), color = cc.textPrimary)
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                "Each participant answers round 1 without seeing the others, so first positions are independent.",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                                color = cc.textMuted
+                            )
+                        }
+                        AestheticSwitch(
+                            checked = config.independence.blindFirstRound,
+                            onCheckedChange = { updateConfig(config.copy(independence = config.independence.copy(blindFirstRound = it))) }
+                        )
+                    }
+
+                    HorizontalDivider(color = cc.border.copy(alpha = 0.25f), thickness = 0.75.dp)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Anonymize Participants", style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp, fontWeight = FontWeight.Medium), color = cc.textPrimary)
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                "Other participants appear as Participant A, B, C so arguments are weighed, not names.",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                                color = cc.textMuted
+                            )
+                        }
+                        AestheticSwitch(
+                            checked = config.independence.anonymizeTranscript,
+                            onCheckedChange = { updateConfig(config.copy(independence = config.independence.copy(anonymizeTranscript = it))) }
+                        )
+                    }
                 }
 
                 // ── LEVEL 3: Power-User Drawer (Advanced Engine & Tuning) ──

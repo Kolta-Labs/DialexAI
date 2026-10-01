@@ -464,7 +464,7 @@ class DebateOrchestrator(
                         topic = effectiveTopic,
                         commonContext = effectiveContext,
                         commonInstructions = instructions,
-                        transcript = contextView(effectiveAgent),
+                        transcript = applyIndependence(contextView(effectiveAgent), effectiveAgent, round, config.independence, config.agents),
                     )
                 } catch (c: CancellationException) {
                     throw c
