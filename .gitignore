@@ -132,7 +132,8 @@ render.experimental.xml
 
 # AI Agent Local Metadata
 .gemini/
-.claude/
+.claude/*
+!.claude/CLAUDE.md
 .copilot/
 .agents/
 
@@ -156,3 +157,6 @@ node_modules/
 npm-debug.log*
 yarn-error.log*
 .turbo/
+
+# Internal developer notes: specs, task lists, design docs, reviews. Never published.
+.dev/
