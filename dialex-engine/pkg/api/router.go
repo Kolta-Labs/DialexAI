@@ -117,8 +117,8 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("POST /api/v1/debates/{id}/duplicate", s.requireAuth(s.handleDuplicateDebate))
 
 	// CLI status on system running engine (environmental capability status like /health)
-	mux.HandleFunc("GET /api/v1/cli/status", s.handleCliStatus)
-	mux.HandleFunc("GET /api/v1/cli/logins", s.handleCliLogins)
+	mux.HandleFunc("GET /api/v1/cli/status", s.requireAuth(s.handleCliStatus))
+	mux.HandleFunc("GET /api/v1/cli/logins", s.requireAuth(s.handleCliLogins))
 
 	// Knowledge Graph APIs
 	mux.HandleFunc("GET /api/v1/projects/{id}/graph", s.requireAuth(s.handleGetGraph))

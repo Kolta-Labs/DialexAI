@@ -154,6 +154,19 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// isAuthenticated reports whether the request carries a valid session, without rejecting it.
+func (s *Server) isAuthenticated(r *http.Request) bool {
+	if _, ok := s.proxyUser(r); ok {
+		return true
+	}
+	token := extractToken(r)
+	if token == "" {
+		return false
+	}
+	_, err := s.verifyToken(token)
+	return err == nil
+}
+
 func extractToken(r *http.Request) string {
 	// 1. Authorization: Bearer <token>
 	authHeader := r.Header.Get("Authorization")
@@ -164,9 +177,12 @@ func extractToken(r *http.Request) string {
 	if cookie, err := r.Cookie("dialex_token"); err == nil && cookie.Value != "" {
 		return strings.TrimSpace(cookie.Value)
 	}
-	// 3. Query: ?token=
-	if qToken := r.URL.Query().Get("token"); qToken != "" {
-		return strings.TrimSpace(qToken)
+	// 3. Query: ?token= — only for SSE streams, where EventSource cannot set headers. Anywhere
+	// else a token in the URL ends up in logs, proxies and browser history.
+	if strings.HasSuffix(r.URL.Path, "/stream") {
+		if qToken := r.URL.Query().Get("token"); qToken != "" {
+			return strings.TrimSpace(qToken)
+		}
 	}
 	return ""
 }

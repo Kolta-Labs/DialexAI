@@ -45,6 +45,13 @@ func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
 
 	allocMB := float64(mem.Alloc) / (1024 * 1024)
 
+	// Unauthenticated callers (the web UI's pre-login probe, health checks) get liveness only;
+	// counts, memory and runtime details are for signed-in users.
+	if !s.isAuthenticated(r) {
+		writeJSON(w, http.StatusOK, adminStatsResponse{Status: "healthy", Version: "1.0.0", UptimeSeconds: uptime})
+		return
+	}
+
 	stats := adminStatsResponse{
 		Status:           "healthy",
 		Version:          "1.0.0",

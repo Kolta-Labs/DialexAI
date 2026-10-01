@@ -211,3 +211,58 @@ func TestAdminLogsAndUserManagement(t *testing.T) {
 		t.Fatalf("expected teammate in user list, got %+v", users)
 	}
 }
+
+func TestUnauthenticatedStatsAreLivenessOnly(t *testing.T) {
+	s, st := newTestServer(t)
+	srv := httptest.NewServer(s.Router())
+	defer srv.Close()
+	token := loginAndGetToken(t, srv, s, st)
+
+	var anon, authed adminStatsResponse
+	resp, _ := http.Get(srv.URL + "/api/v1/admin/stats")
+	json.NewDecoder(resp.Body).Decode(&anon)
+	resp.Body.Close()
+	if anon.Status != "healthy" || anon.GoVersion != "" || anon.OS != "" || anon.Goroutines != 0 || anon.MemoryAllocMB != 0 {
+		t.Fatalf("anonymous stats leak runtime details: %+v", anon)
+	}
+
+	resp2, _ := http.DefaultClient.Do(authedRequest(t, "GET", srv.URL+"/api/v1/admin/stats", token, nil))
+	json.NewDecoder(resp2.Body).Decode(&authed)
+	resp2.Body.Close()
+	if authed.GoVersion == "" || authed.Goroutines == 0 {
+		t.Fatalf("signed-in stats should be complete: %+v", authed)
+	}
+}
+
+func TestCliProbesRequireAuth(t *testing.T) {
+	s, _ := newTestServer(t)
+	srv := httptest.NewServer(s.Router())
+	defer srv.Close()
+	for _, path := range []string{"/api/v1/cli/status", "/api/v1/cli/logins"} {
+		resp, _ := http.Get(srv.URL + path)
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("%s without a token = %d, want 401", path, resp.StatusCode)
+		}
+		resp.Body.Close()
+	}
+}
+
+func TestTokenInQueryOnlyAllowedOnStreams(t *testing.T) {
+	s, st := newTestServer(t)
+	srv := httptest.NewServer(s.Router())
+	defer srv.Close()
+	token := loginAndGetToken(t, srv, s, st)
+
+	resp, _ := http.Get(srv.URL + "/debates?token=" + token)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("?token= on a normal route = %d, want 401", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// a stream route accepts it (404 because the debate does not exist, but it got past auth)
+	resp2, _ := http.Get(srv.URL + "/debates/nope/stream?token=" + token)
+	if resp2.StatusCode == http.StatusUnauthorized {
+		t.Errorf("?token= on /stream must authenticate, got 401")
+	}
+	resp2.Body.Close()
+}
