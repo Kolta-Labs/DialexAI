@@ -147,6 +147,11 @@ func handleCode(cwd string, reg *persona.Registry, args []string) {
 	domainFlag := fs.String("domain", "backend_engineer", "Target SWE domain persona (e.g. backend_engineer, android_engineer)")
 	autonomyFlag := fs.String("autonomy", "supervised", "Autonomy gate: supervised, interactive, or autonomous")
 	maxRoundsFlag := fs.Int("rounds", 3, "Maximum convergence rounds")
+	providerFlag := fs.String("provider", "", "Model provider that writes the patches: anthropic, openai, gemini, grok, deepseek, mistral, ollama (API key from ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, XAI_API_KEY, DEEPSEEK_API_KEY, MISTRAL_API_KEY)")
+	modelFlag := fs.String("model", "", "Model name for --provider")
+	reviewProvider := fs.String("review-provider", "", "Provider for the model reviewer (default: same as --provider; use a different one for a truly adversarial review)")
+	reviewModel := fs.String("review-model", "", "Model for --review-provider (default: same as --model)")
+	noModelReview := fs.Bool("no-model-review", false, "Skip the model review of acceptance criteria (rule-based checks only)")
 	fs.Parse(args)
 
 	repoCtx, err := repo.DetectContext(cwd)
@@ -203,6 +208,33 @@ func handleCode(cwd string, reg *persona.Registry, args []string) {
 		MaxRounds: *maxRoundsFlag,
 		Autonomy:  coder.AutonomyLevel(*autonomyFlag),
 	}
+	if *providerFlag == "" {
+		fmt.Fprintf(os.Stderr, "Error: kritix code needs a model to write the patches. Pass --provider and --model (e.g. --provider anthropic --model <model-name>) and set the provider's API key in your environment.\n")
+		os.Exit(1)
+	}
+	modelRunner, agent, err := coder.NewAPIRunnerFromEnv(*providerFlag, *modelFlag, os.Getenv)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	if !*noModelReview {
+		rp, rm, rRunner, rAgent := *providerFlag, *modelFlag, modelRunner, agent
+		if *reviewProvider != "" {
+			rp, rm = *reviewProvider, *reviewModel
+			if rm == "" {
+				rm = *modelFlag
+			}
+			var rerr error
+			if rRunner, rAgent, rerr = coder.NewAPIRunnerFromEnv(rp, rm, os.Getenv); rerr != nil {
+				fmt.Fprintf(os.Stderr, "Error: reviewer: %v\n", rerr)
+				os.Exit(1)
+			}
+		}
+		advReviewer.SetCritic(reviewer.RunnerCritic(rRunner, rAgent))
+	}
+	opts.PatchGenerator = coder.NewRunnerPatchGenerator(modelRunner, agent, domainCoder, coder.PromptContext{
+		Spec: storySpec, RepoContext: repoCtx, SteeringContext: coderSteering,
+	})
 
 	fmt.Printf("Starting convergence loop for Spec: %s (%s)...\n", storySpec.ID, storySpec.Title)
 	res := coord.Run(context.Background(), storySpec, repoCtx, coderSteering, revSteering, opts)

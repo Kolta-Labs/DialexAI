@@ -24,22 +24,25 @@ const (
 
 // LoopOptions specifies execution limits and autonomy behavior.
 type LoopOptions struct {
-	MaxRounds     int                               `json:"maxRounds"`
-	Autonomy      AutonomyLevel                     `json:"autonomy"`
-	Domain        string                            `json:"domain"`
-	TestTimeout   time.Duration                     `json:"testTimeout"`
-	OnIteration   func(round int, diff string, v *reviewer.ReviewVerdict) bool
-	MockPatchGen  func(round int, feedback string) string // for tests and offline runs
+	MaxRounds    int           `json:"maxRounds"`
+	Autonomy     AutonomyLevel `json:"autonomy"`
+	Domain       string        `json:"domain"`
+	TestTimeout  time.Duration `json:"testTimeout"`
+	OnIteration  func(round int, diff string, v *reviewer.ReviewVerdict) bool
+	MockPatchGen func(round int, feedback string) string // for tests and offline runs
+	// PatchGenerator produces each round's patch, typically NewRunnerPatchGenerator. Without
+	// it (or MockPatchGen) the loop cannot generate code and stops immediately.
+	PatchGenerator PatchGenerator
 }
 
 // LoopResult represents the final convergence outcome.
 type LoopResult struct {
-	Success       bool                     `json:"success"`
-	RoundsRun     int                      `json:"roundsRun"`
-	FinalVerdict  *reviewer.ReviewVerdict  `json:"finalVerdict"`
-	AppliedPatch  string                   `json:"appliedPatch,omitempty"`
-	CommitHash    string                   `json:"commitHash,omitempty"`
-	Error         string                   `json:"error,omitempty"`
+	Success      bool                    `json:"success"`
+	RoundsRun    int                     `json:"roundsRun"`
+	FinalVerdict *reviewer.ReviewVerdict `json:"finalVerdict"`
+	AppliedPatch string                  `json:"appliedPatch,omitempty"`
+	CommitHash   string                  `json:"commitHash,omitempty"`
+	Error        string                  `json:"error,omitempty"`
 }
 
 // ConvergenceCoordinator manages the iterative Coder <--> Reviewer <--> Sandbox loop.
@@ -102,9 +105,16 @@ func (c *ConvergenceCoordinator) Run(
 		var patch string
 		if opts != nil && opts.MockPatchGen != nil {
 			patch = opts.MockPatchGen(round, lastFeedback)
+		} else if opts != nil && opts.PatchGenerator != nil {
+			var genErr error
+			patch, genErr = opts.PatchGenerator(ctx, PatchRequest{Round: round, Feedback: lastFeedback, PriorFailures: priorFailures})
+			if genErr != nil {
+				res.Error = fmt.Sprintf("patch generation failed in round %d: %v", round, genErr)
+				break
+			}
 		} else {
-			// In live mode, caller provides generator or connects to model runner
-			patch = ""
+			res.Error = "no patch generator configured: pass LoopOptions.PatchGenerator (a model-backed generator) to generate code"
+			break
 		}
 
 		if patch == "" {
@@ -127,6 +137,7 @@ func (c *ConvergenceCoordinator) Run(
 
 		// 4. Sandbox executes project test commands
 		var testResults []*sandbox.ExecResult
+		priorFailures = nil // only the latest round's failures are relevant to the next attempt
 		for _, cmdStr := range s.TestCommands {
 			tOpts := &sandbox.ExecOptions{
 				Cwd:     repoCtx.RootDir,
@@ -147,6 +158,8 @@ func (c *ConvergenceCoordinator) Run(
 			Diff:            diff,
 			TestResults:     testResults,
 			SteeringContext: revSteering,
+			Ctx:             ctx,
+			Criteria:        criteriaOf(s),
 		}
 		verdict := c.reviewer.Evaluate(rCtx)
 		res.FinalVerdict = verdict
@@ -166,10 +179,17 @@ func (c *ConvergenceCoordinator) Run(
 			res.Success = true
 			res.AppliedPatch = patch
 
-			// Handle Autonomy Gate
+			// Handle Autonomy Gate: never auto-commit on diff checks alone.
 			if autonomy == AutonomyAutonomous {
+				if len(testResults) == 0 {
+					res.Error = "autonomous commit refused: the spec defines no test commands, so nothing verified the change"
+					return res
+				}
 				commitMsg := fmt.Sprintf("feat: %s (Spec: %s)", s.Title, s.ID)
-				if hash, err := c.driver.CommitAll(commitMsg); err == nil {
+				hash, err := c.driver.CommitAll(commitMsg)
+				if err != nil {
+					res.Error = fmt.Sprintf("changes approved but commit failed: %v", err)
+				} else {
 					res.CommitHash = hash
 				}
 			}
@@ -186,4 +206,13 @@ func (c *ConvergenceCoordinator) Run(
 	}
 
 	return res
+}
+
+// criteriaOf flattens a spec's Gherkin scenarios into one line each for the model reviewer.
+func criteriaOf(s *spec.StorySpec) []string {
+	var out []string
+	for _, sc := range s.AcceptanceCriteria {
+		out = append(out, fmt.Sprintf("%s: Given %s, When %s, Then %s", sc.Name, sc.Given, sc.When, sc.Then))
+	}
+	return out
 }

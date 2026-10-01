@@ -1,6 +1,7 @@
 package reviewer
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -23,6 +24,7 @@ type ReviewVerdict struct {
 type AdversarialReviewer struct {
 	persona  model.Persona
 	registry *persona.Registry
+	critic   Critic
 }
 
 // NewAdversarialReviewer creates a Reviewer persona engine.
@@ -47,9 +49,14 @@ type ReviewContext struct {
 	Diff            string
 	TestResults     []*sandbox.ExecResult
 	SteeringContext *steering.PersonaSteeringContext
+	// Ctx and Criteria feed the optional model review (see SetCritic); both may be empty.
+	Ctx      context.Context
+	Criteria []string
 }
 
-// Evaluate performs deterministic and heuristic code review.
+// Evaluate performs a deterministic, rule-based review: test exit codes, a non-empty diff, and
+// a small set of built-in taboo patterns. It is not a model-based review and does not evaluate
+// acceptance criteria; Summary and Warnings say exactly what was and was not checked.
 func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 	verdict := &ReviewVerdict{
 		Approved:       true,
@@ -78,24 +85,49 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 		verdict.BlockingIssues = append(verdict.BlockingIssues, "Workspace diff is empty; no code changes were produced.")
 	}
 
-	// 3. Taboo Space Violations in Diff
+	if len(ctx.TestResults) == 0 {
+		verdict.Warnings = append(verdict.Warnings, "No test commands were run; approval reflects diff checks only.")
+	}
+
+	// 3. Taboo Space Violations in Diff (only taboos with a built-in pattern can be enforced)
+	var unchecked []string
 	if ctx.SteeringContext != nil {
 		for _, taboo := range ctx.SteeringContext.Taboos.ForbiddenArguments {
 			lowerTaboo := strings.ToLower(taboo)
-			if strings.Contains(lowerTaboo, "raw sqlite") && strings.Contains(strings.ToLower(ctx.Diff), "android.database.sqlite") {
-				verdict.Approved = false
-				verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("Violates Taboo: %s", taboo))
+			checked := false
+			if strings.Contains(lowerTaboo, "raw sqlite") {
+				checked = true
+				if strings.Contains(strings.ToLower(ctx.Diff), "android.database.sqlite") {
+					verdict.Approved = false
+					verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("Violates Taboo: %s", taboo))
+				}
 			}
-			if strings.Contains(lowerTaboo, "blocking main thread") && strings.Contains(ctx.Diff, "Thread.sleep") {
-				verdict.Approved = false
-				verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("Violates Taboo: %s", taboo))
+			if strings.Contains(lowerTaboo, "blocking main thread") {
+				checked = true
+				if strings.Contains(ctx.Diff, "Thread.sleep") {
+					verdict.Approved = false
+					verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("Violates Taboo: %s", taboo))
+				}
+			}
+			if !checked {
+				unchecked = append(unchecked, taboo)
 			}
 		}
 	}
+	if len(unchecked) > 0 {
+		verdict.Warnings = append(verdict.Warnings, fmt.Sprintf("%d steering taboo(s) have no automated check and were not enforced: %s", len(unchecked), strings.Join(unchecked, "; ")))
+	}
 
-	// 4. Synthesize Summary & Actionable Feedback
-	if verdict.Approved {
-		verdict.Summary = "Code satisfies all acceptance criteria, meets active steering invariants, and passes all tests."
+	// 4. Model review (only when a critic is configured)
+	if r.critic != nil {
+		r.applyCritic(ctx.Ctx, ctx, verdict)
+	}
+
+	// 5. Synthesize Summary & Actionable Feedback
+	if verdict.Approved && r.critic != nil {
+		verdict.Summary = fmt.Sprintf("Approved by rule-based checks (%d test command(s) passed, diff non-empty, no built-in taboo matched) and a model review against %d acceptance criteria.", len(ctx.TestResults), len(ctx.Criteria))
+	} else if verdict.Approved {
+		verdict.Summary = fmt.Sprintf("Approved by rule-based checks: %d test command(s) passed, diff is non-empty, no built-in taboo pattern matched. Acceptance criteria are not evaluated.", len(ctx.TestResults))
 	} else {
 		var sb strings.Builder
 		sb.WriteString("REVIEW REJECTED. The following issues must be resolved:\n")
