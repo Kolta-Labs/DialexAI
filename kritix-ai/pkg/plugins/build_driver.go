@@ -78,11 +78,7 @@ func (r *Registry) DetectDriver(rootDir string) (BuildDriver, bool) {
 	}
 	return nil, false
 }
-
-// -------------------------------------------------------------
 // Go Driver
-// -------------------------------------------------------------
-
 // GoDriver supports standard Go projects.
 type GoDriver struct{}
 
@@ -138,11 +134,7 @@ func (g *GoDriver) ParseErrorTrace(output string) []BuildDiagnostic {
 	}
 	return diags
 }
-
-// -------------------------------------------------------------
 // Gradle / KMP Driver
-// -------------------------------------------------------------
-
 // GradleDriver supports Android and Kotlin Multiplatform Gradle projects.
 type GradleDriver struct{}
 
@@ -211,11 +203,7 @@ func (gr *GradleDriver) ParseErrorTrace(output string) []BuildDiagnostic {
 	}
 	return diags
 }
-
-// -------------------------------------------------------------
 // Cargo / Rust Driver
-// -------------------------------------------------------------
-
 // CargoDriver supports Rust Cargo projects.
 type CargoDriver struct{}
 
@@ -273,11 +261,7 @@ func (c *CargoDriver) ParseErrorTrace(output string) []BuildDiagnostic {
 	}
 	return diags
 }
-
-// -------------------------------------------------------------
 // npm / Node Driver
-// -------------------------------------------------------------
-
 // NpmDriver supports Node.js / TypeScript projects.
 type NpmDriver struct{}
 

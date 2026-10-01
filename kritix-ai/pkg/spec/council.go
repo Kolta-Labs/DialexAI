@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"dialex/pkg/model"
@@ -17,7 +18,10 @@ type CouncilMember struct {
 	Persona model.Persona `json:"persona"`
 }
 
-// Council orchestrates stakeholder deliberation on software requirements.
+// Council drafts a story spec for the stakeholder roles. NOTE: it is template-based today. It
+// calls no model and runs no deliberation rounds; the assembled members are not consulted.
+// Output is a structured draft (generic acceptance criteria, one ADR, ecosystem-derived test
+// commands) meant to be edited, not a substitute for real requirements analysis.
 type Council struct {
 	members  []CouncilMember
 	registry *persona.Registry
@@ -52,13 +56,13 @@ func NewCouncil(registry *persona.Registry) *Council {
 	return c
 }
 
-// Plan executes the deliberation rounds and generates a verified StorySpec.
+// Plan generates a draft StorySpec from the prompt using fixed templates (no model call).
 func (c *Council) Plan(ctx context.Context, pCtx *PlanningContext) (*StorySpec, error) {
 	if pCtx == nil || strings.TrimSpace(pCtx.StoryPrompt) == "" {
 		return nil, fmt.Errorf("story prompt cannot be empty")
 	}
 
-	specID := fmt.Sprintf("STORY-%d", time.Now().Unix())
+	specID := fmt.Sprintf("STORY-%d", nextSpecNumber())
 	title := deriveTitle(pCtx.StoryPrompt)
 
 	spec := &StorySpec{
@@ -144,4 +148,21 @@ func deriveTitle(prompt string) string {
 		return strings.Join(words[:6], " ") + "..."
 	}
 	return prompt
+}
+
+var lastSpecNumber atomic.Int64
+
+// nextSpecNumber returns a millisecond timestamp that is strictly increasing within the
+// process, so two specs planned in the same instant never share an ID (and file name).
+func nextSpecNumber() int64 {
+	for {
+		prev := lastSpecNumber.Load()
+		n := time.Now().UnixMilli()
+		if n <= prev {
+			n = prev + 1
+		}
+		if lastSpecNumber.CompareAndSwap(prev, n) {
+			return n
+		}
+	}
 }

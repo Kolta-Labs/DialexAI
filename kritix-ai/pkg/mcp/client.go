@@ -23,11 +23,7 @@ type Client interface {
 	ReadResource(ctx context.Context, uri string) (*ResourceContent, error)
 	Close() error
 }
-
-// -------------------------------------------------------------
 // Stdio MCP Client
-// -------------------------------------------------------------
-
 // StdioClient launches a local process and communicates via JSON-RPC 2.0 lines over stdio.
 type StdioClient struct {
 	cmd       *exec.Cmd
@@ -258,11 +254,7 @@ func (c *StdioClient) Close() error {
 	})
 	return err
 }
-
-// -------------------------------------------------------------
 // HTTP JSON-RPC MCP Client
-// -------------------------------------------------------------
-
 // HTTPClient connects to remote or HTTP-based MCP endpoints.
 type HTTPClient struct {
 	endpoint   string

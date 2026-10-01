@@ -1,13 +1,13 @@
 package skills
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 
 	"kritix/pkg/sandbox"
@@ -77,6 +77,7 @@ func (l *Loader) LoadAll() ([]Skill, error) {
 	for _, s := range skillMap {
 		res = append(res, s)
 	}
+	sort.Slice(res, func(i, j int) bool { return res[i].Name < res[j].Name }) // map order is random
 	return res, nil
 }
 
@@ -144,38 +145,39 @@ func parseSkillFile(path string, isProject bool) (*Skill, error) {
 		Parameters:     make(map[string]SkillParameter),
 	}
 
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	inFrontmatter := false
+	// Frontmatter exists only if the file opens with "---"; a later "---" in the body is a
+	// markdown horizontal rule, not a delimiter. Split instead of bufio.Scanner so very long
+	// lines are not silently dropped.
+	lines := strings.Split(string(data), "\n")
 	var body strings.Builder
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		trimmed := strings.TrimSpace(line)
-
-		if trimmed == "---" {
-			inFrontmatter = !inFrontmatter
-			continue
-		}
-
-		if inFrontmatter {
-			parts := strings.SplitN(trimmed, ":", 2)
-			if len(parts) == 2 {
-				key := strings.TrimSpace(parts[0])
-				val := strings.TrimSpace(parts[1])
-				val = trimOuterQuotes(val)
-				switch strings.ToLower(key) {
-				case "name":
-					s.Name = val
-				case "description":
-					s.Description = val
-				case "command":
-					s.Command = val
-				}
+	i := 0
+	for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+		i++
+	}
+	if i < len(lines) && strings.TrimSpace(lines[i]) == "---" {
+		i++
+		for ; i < len(lines) && strings.TrimSpace(lines[i]) != "---"; i++ {
+			parts := strings.SplitN(strings.TrimSpace(lines[i]), ":", 2)
+			if len(parts) != 2 {
+				continue
 			}
-		} else {
-			body.WriteString(line)
-			body.WriteByte('\n')
+			val := trimOuterQuotes(strings.TrimSpace(parts[1]))
+			switch strings.ToLower(strings.TrimSpace(parts[0])) {
+			case "name":
+				s.Name = val
+			case "description":
+				s.Description = val
+			case "command":
+				s.Command = val
+			}
 		}
+		i++ // skip the closing delimiter
+	} else {
+		i = 0
+	}
+	for ; i < len(lines); i++ {
+		body.WriteString(strings.TrimSuffix(lines[i], "\r"))
+		body.WriteByte('\n')
 	}
 
 	s.PromptTemplate = strings.TrimSpace(body.String())
@@ -196,21 +198,28 @@ func trimOuterQuotes(s string) string {
 	return s
 }
 
+var unsafeEnvChars = regexp.MustCompile(`[^A-Za-z0-9_]`)
+
 // Execute runs the skill's command inside the sandbox, replacing placeholders like {{param}}.
 func (l *Loader) Execute(ctx context.Context, skill *Skill, args map[string]string) (*sandbox.ExecResult, error) {
 	if skill.Command == "" {
 		return nil, fmt.Errorf("skill %s has no executable command defined", skill.Name)
 	}
 
+	// Arguments may come from an LLM or a user, so they must never be parsed as shell code:
+	// pass each value through the environment and reference it as ${KRITIX_ARG_<name>}.
 	cmdStr := skill.Command
+	env := make(map[string]string, len(args))
 	for k, v := range args {
-		placeholder := fmt.Sprintf("{{%s}}", k)
-		cmdStr = strings.ReplaceAll(cmdStr, placeholder, v)
+		name := "KRITIX_ARG_" + unsafeEnvChars.ReplaceAllString(k, "_")
+		env[name] = v
+		cmdStr = strings.ReplaceAll(cmdStr, fmt.Sprintf("{{%s}}", k), "${"+name+"}")
 	}
 
 	box := sandbox.NewSandbox(l.projectDir)
 	res := box.Run(ctx, cmdStr, &sandbox.ExecOptions{
 		Cwd: l.projectDir,
+		Env: env,
 	})
 	return res, nil
 }

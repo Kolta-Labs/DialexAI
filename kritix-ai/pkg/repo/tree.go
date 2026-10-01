@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -38,12 +39,30 @@ type TreeIndex struct {
 	Files   []FileEntry `json:"files"`
 }
 
+// gitVisibleFiles returns the set of files git considers part of the project (tracked plus
+// untracked-but-not-ignored), as slash-separated paths. It returns nil outside a git repo or
+// when git is unavailable, in which case only the built-in ignore rules apply.
+func gitVisibleFiles(rootDir string) map[string]bool {
+	out, err := exec.Command("git", "-C", rootDir, "ls-files", "-co", "--exclude-standard", "-z").Output()
+	if err != nil {
+		return nil
+	}
+	set := make(map[string]bool)
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p != "" {
+			set[p] = true
+		}
+	}
+	return set
+}
+
 // ScanTree walks the repository root and collects unignored files.
 func ScanTree(rootDir string, maxFiles int) (*TreeIndex, error) {
 	if maxFiles <= 0 {
 		maxFiles = 5000
 	}
 
+	visible := gitVisibleFiles(rootDir)
 	index := &TreeIndex{
 		RootDir: rootDir,
 		Files:   make([]FileEntry, 0),
@@ -61,7 +80,7 @@ func ScanTree(rootDir string, maxFiles int) (*TreeIndex, error) {
 
 		name := d.Name()
 		if d.IsDir() {
-			if defaultIgnoredDirs[name] || strings.HasPrefix(name, ".git") {
+			if defaultIgnoredDirs[name] || name == ".git" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -70,6 +89,10 @@ func ScanTree(rootDir string, maxFiles int) (*TreeIndex, error) {
 		// Skip hidden dotfiles
 		if strings.HasPrefix(name, ".") && name != ".gitignore" {
 			return nil
+		}
+
+		if visible != nil && !visible[filepath.ToSlash(rel)] {
+			return nil // gitignored
 		}
 
 		if len(index.Files) >= maxFiles {
@@ -109,6 +132,7 @@ func ReadFileSnippet(filePath string, startLine, endLine int) (string, error) {
 
 	var sb strings.Builder
 	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024) // minified files have very long lines
 	currentLine := 1
 
 	for scanner.Scan() {

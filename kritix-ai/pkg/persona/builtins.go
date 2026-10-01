@@ -52,9 +52,7 @@ func GetAllBuiltinPersonas() []model.Persona {
 // GetBuiltinPersonaDNA returns the 8-Layer Persona DNA for a specific built-in SWE persona ID.
 func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 	switch id {
-	// ==========================================
 	// STAKEHOLDER COUNCIL
-	// ==========================================
 	case "product_owner_lead", "po":
 		return &model.PersonaDNA{
 			SchemaVersion: "kritix.dna/v1.0",
@@ -251,10 +249,7 @@ func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 				Style: model.SynthesisSeekSynthesis,
 			},
 		}
-
-	// ==========================================
 	// DOMAIN ENGINEERS
-	// ==========================================
 	case "backend_engineer", "backend":
 		return &model.PersonaDNA{
 			SchemaVersion: "kritix.dna/v1.0",
@@ -367,10 +362,7 @@ func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 				AllowMinorityReport: true,
 			},
 		}
-
-	// ==========================================
 	// ADVERSARIAL REVIEWERS
-	// ==========================================
 	case "adversarial_code_reviewer", "reviewer":
 		return &model.PersonaDNA{
 			SchemaVersion: "kritix.dna/v1.0",
