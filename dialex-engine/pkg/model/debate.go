@@ -103,8 +103,8 @@ const (
 )
 
 // Agent is one participant. Provider is freely chosen per seat in DebateConfig — any seat
-// can be any Provider, the only rule is no two seats share one (each provider gets at most
-// one seat, since DebateMessage.AgentID identifies a turn by provider alone).
+// can be any Provider, and several seats may share one (one API key, several personas).
+// A turn is identified by its seat (DebateMessage.SeatID); AgentID is only the provider.
 type Agent struct {
 	ID       string   `json:"id,omitempty"`
 	Provider Provider `json:"provider"`
@@ -160,8 +160,8 @@ func NewAgent(provider Provider, model string) Agent {
 // DebateConfig is shared by every agent. Primary always takes part, always speaks first
 // each round, and gives the final decision — configurable to any provider, defaults to
 // Claude. The other four seats are optional extras, filled/edited/removed independently —
-// up to 5 participants total. Each seat's provider is independently pickable, the only
-// constraint being no two seats share a provider.
+// up to 5 participants total. Each seat's provider is independently pickable, and seats
+// may share a provider.
 //
 // JSON tags on Primary/Secondary/Tertiary intentionally keep the legacy field names
 // (claude/gemini/chatgpt) — the wire format existing state.json files were written with —

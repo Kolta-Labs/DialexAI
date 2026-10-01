@@ -68,8 +68,8 @@ enum class RoundMode { FIXED, UNLIMITED }
 
 /**
  * One participant. `provider` is freely chosen per seat in [DebateConfig] — any seat can be
- * any [Provider], the only rule is no two seats share one (each provider gets at most one
- * seat, since [DebateMessage.agentId] identifies a turn by provider alone).
+ * any [Provider], and several seats may share one (one API key, several personas). A turn is
+ * identified by its seat ([DebateMessage.seatId]); [DebateMessage.agentId] is only the provider.
  */
 @Serializable
 data class Agent(
@@ -525,7 +525,7 @@ data class OutputConfig(
  * Config shared by every agent. [primary] always takes part, always speaks first each
  * round, and gives the final decision — configurable to any provider, defaults to Claude.
  * Up to 5 additional seats are optional extras — 6 participants total per spec. Each seat's
- * provider is independently pickable, the only constraint being no two seats share a provider.
+ * provider is independently pickable, and seats may share a provider.
  */
 @Serializable
 data class DebateConfig(
@@ -603,7 +603,7 @@ data class CommandRequest(
 
 @Serializable
 data class DebateMessage(
-    /** The provider that spoke — unique per debate since each provider has one seat. Kept for backwards compatibility. */
+    /** The provider that spoke. Not unique per debate (seats can share a provider): use [seatId] for identity. */
     val agentId: Provider = Provider.CUSTOM,
     val round: Int = 0,
     val content: String = "",
