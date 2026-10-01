@@ -11,6 +11,9 @@ import (
 	"dialex/pkg/runner"
 )
 
+// Whole-word match: bare substrings like "go" hit "algorithm", "good", "google", "rust" hits "trust".
+var languageTopicRegex = regexp.MustCompile(`\b(rust|go|golang|rewrite)\b`)
+
 var jsonExtractRegex = regexp.MustCompile(`(?s)\{.*"perspectiveA".*"perspectiveB".*\}`)
 
 // DecomposeProblem coordinates divergent LLM generation or deterministic fallback.
@@ -252,7 +255,7 @@ func GenerateHeuristicDecomposition(topic, userContext string) DecompositionResu
 	if strings.Contains(lower, "database") || strings.Contains(lower, "sql") || strings.Contains(lower, "postgres") || strings.Contains(lower, "mongo") {
 		pA.Axes[0].Title = "ACID Guarantees vs. Read/Write Throughput"
 		pB.Axes[1].Title = "Data Migration Complexity & Zero-Downtime Cutover"
-	} else if strings.Contains(lower, "rust") || strings.Contains(lower, "go") || strings.Contains(lower, "rewrite") {
+	} else if languageTopicRegex.MatchString(lower) {
 		pA.Axes[0].Title = "Memory Safety & Concurrency Primitives"
 		pB.Axes[0].Title = "Ecosystem Maturity & Ramp-Up Curve"
 	}

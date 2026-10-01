@@ -1,7 +1,6 @@
-// Package model is the Go port of the Kotlin shared/model package. JSON field names and
-// enum string values match the Kotlin kotlinx.serialization output exactly (including the
-// legacy @SerialName aliases on DebateConfig) so an existing state.json — written by the
-// JVM app — decodes here without a migration step.
+// Package model holds the engine's shared types. JSON field names and enum string values
+// match the Kotlin client's kotlinx.serialization output exactly (including the legacy
+// @SerialName aliases on DebateConfig) so an existing state.json decodes without a migration.
 package model
 
 import (
@@ -148,8 +147,7 @@ func (a Agent) Label() string {
 	return a.Provider.BrandName()
 }
 
-// NewAgent builds an Agent with the field defaults the Kotlin data class constructor has
-// (RunMode defaults to CLI, matching the Kotlin side).
+// NewAgent builds an Agent with its default RunMode (CLI).
 func NewAgent(provider Provider, model string) Agent {
 	return Agent{
 		ID:       fmt.Sprintf("seat_%d", rand.Intn(90000)+10000),
@@ -165,10 +163,9 @@ func NewAgent(provider Provider, model string) Agent {
 // up to 5 participants total. Each seat's provider is independently pickable, the only
 // constraint being no two seats share a provider.
 //
-// JSON tags on Primary/Secondary/Tertiary intentionally keep the old Kotlin field names
-// (claude/gemini/chatgpt) — that's the wire format an existing state.json was written with,
-// from before the primary/secondary/tertiary rename on the Kotlin side. Keeping the same
-// tags here means a legacy file decodes with no migration step.
+// JSON tags on Primary/Secondary/Tertiary intentionally keep the legacy field names
+// (claude/gemini/chatgpt) — the wire format existing state.json files were written with —
+// so a legacy file decodes with no migration step.
 type DebateConfig struct {
 	Topic string `json:"topic"`
 	// Shared background every agent sees.
@@ -215,12 +212,12 @@ type DebateConfig struct {
 }
 
 // ModeratorConfig controls moderator agent loop-detection and summary behaviour.
-	// ModeratorSeatID picks the moderator by seat, so one persona among several on the same
-	// provider can moderate. It wins over ModeratorProvider, which stays for old discussions.
-	ModeratorSeatID     string   `json:"moderatorSeatId,omitempty"`
 type ModeratorConfig struct {
 	Enabled             bool     `json:"enabled"`
 	ModeratorProvider   Provider `json:"moderatorProvider,omitempty"`
+	// ModeratorSeatID picks the moderator by seat, so one persona among several on the same
+	// provider can moderate. It wins over ModeratorProvider, which stays for old discussions.
+	ModeratorSeatID     string   `json:"moderatorSeatId,omitempty"`
 	Strictness          int      `json:"strictness,omitempty"`
 	DetectTopicDrift    bool     `json:"detectTopicDrift,omitempty"`
 	TopicDriftDirective string   `json:"topicDriftDirective,omitempty"`
@@ -288,6 +285,9 @@ func (c DebateConfig) Agents() []Agent {
 			agents = append(agents, *seat)
 		}
 	}
+	return agents
+}
+
 // ModeratorAgent is the seat that moderates and writes the wrap-up: the configured seat, else the
 // first seat of the configured provider (old discussions), else the primary agent.
 func (c DebateConfig) ModeratorAgent() Agent {
@@ -309,9 +309,6 @@ func (c DebateConfig) ModeratorAgent() Agent {
 		}
 	}
 	return c.Primary
-}
-
-	return agents
 }
 
 // DebateMessage is one turn's persisted result.

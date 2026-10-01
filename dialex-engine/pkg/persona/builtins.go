@@ -140,7 +140,7 @@ func GetBuiltinPersonaDNA(personaID string) *model.PersonaDNA {
 			},
 			DomainOntology: model.DomainOntology{
 				MandatoryStandards:     []string{"ACID Linearizability", "NIST SP 800-207", "ISO/IEC 27001"},
-				AuthoritativeRFCs:       []string{"RFC 8446 (TLS 1.3)", "RFC 7519 (JWT Security Best Practices)"},
+				AuthoritativeRFCs:      []string{"RFC 8446 (TLS 1.3)", "RFC 7519 (JWT Security Best Practices)"},
 				SpecializedLexicon:     []string{"byzantine failure", "head-of-line blocking", "split-brain", "cascading collapse", "p99.9 latency SLA"},
 				EnforceFormalCitations: true,
 			},
@@ -215,7 +215,7 @@ func GetBuiltinPersonaDNA(personaID string) *model.PersonaDNA {
 			},
 			DomainOntology: model.DomainOntology{
 				MandatoryStandards:     []string{"SemVer 2.0.0", "OpenTelemetry 1.0", "POSIX"},
-				AuthoritativeRFCs:       []string{"RFC 9110 (HTTP Semantics)"},
+				AuthoritativeRFCs:      []string{"RFC 9110 (HTTP Semantics)"},
 				SpecializedLexicon:     []string{"TCO", "mean-time-to-detect (MTTD)", "operational toil", "onboarding ramp", "vendor lock-in"},
 				EnforceFormalCitations: false,
 			},

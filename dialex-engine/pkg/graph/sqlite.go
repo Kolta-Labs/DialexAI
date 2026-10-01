@@ -255,7 +255,7 @@ func (s *SQLiteGraphStore) ReinforceEdge(ctx context.Context, projectID, sourceI
 	err := s.db.QueryRowContext(ctx, query, sourceID, targetID, string(rel)).Scan(&id, &currentStrength)
 	if err == sql.ErrNoRows {
 		// Create new edge with default strength
-		newID := fmt.Sprintf("%s-%s-%s", sourceID[:8], targetID[:8], rel)
+		newID := fmt.Sprintf("%s-%s-%s", sourceID, targetID, rel)
 		insertQ := `
 		INSERT INTO graph_edges (id, project_id, source_id, target_id, relation, strength, created_at, last_reinforced_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?);
@@ -394,17 +394,37 @@ func (s *SQLiteGraphStore) RunMaintenanceDecay(ctx context.Context, minThreshold
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// The stored weight is the base W0; decay is computed at query time, so the threshold
+	// must be applied to the decayed weight, not the column.
 	cutoff := now.Unix() - maxStaleSecs
-	query := `
-	DELETE FROM graph_nodes
-	WHERE last_accessed_at < ?
-	  AND weight < ?;
-	`
-	res, err := s.db.ExecContext(ctx, query, cutoff, minThreshold)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, weight, decay_half_life_secs, last_accessed_at FROM graph_nodes WHERE last_accessed_at < ?;`, cutoff)
 	if err != nil {
 		return 0, err
 	}
-	return res.RowsAffected()
+	var prune []string
+	for rows.Next() {
+		var id string
+		var w float64
+		var half, last int64
+		if err := rows.Scan(&id, &w, &half, &last); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		if ComputeDecay(w, last, half, now.Unix()) < minThreshold {
+			prune = append(prune, id)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	for _, id := range prune {
+		if _, err := s.db.ExecContext(ctx, `DELETE FROM graph_nodes WHERE id = ?;`, id); err != nil {
+			return 0, err
+		}
+	}
+	return int64(len(prune)), nil
 }
 
 func (s *SQLiteGraphStore) Close() error {

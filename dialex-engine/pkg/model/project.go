@@ -162,12 +162,9 @@ type AppState struct {
 	CompactionModel string       `json:"compactionModel"`
 	TokenBudget     int          `json:"tokenBudget"`
 	// AgentLimit caps how many additional (non-primary) seats a discussion may have.
-	// New in the Go engine — the Kotlin app had this as a compiled-in UI constant; making
-	// it a setting here is a deliberate improvement (see ROADMAP_AND_OPTIMIZATIONS.md,
-	// round-2 decision on agent limits).
+	// It is a setting rather than a compiled-in constant.
 	AgentLimit int `json:"agentLimit"`
-	// Users is the multi-user account store (see pkg/model/user.go). New in the Go engine —
-	// the Kotlin app had no server, so no concept of accounts existed.
+	// Users is the multi-user account store (see pkg/model/user.go).
 	Users []User `json:"users"`
 	CompactionSettings CompactionSettings `json:"compactionSettings"`
 	MasterInstructions string             `json:"masterInstructions"`

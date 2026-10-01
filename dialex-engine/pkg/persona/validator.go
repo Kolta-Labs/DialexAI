@@ -21,16 +21,16 @@ func ValidateDNA(dna *model.PersonaDNA) error {
 	}
 
 	// Validate bounds on Epistemic Bias
-	if dna.EpistemicBias.TheoryVsPractice < 0.0 || dna.EpistemicBias.TheoryVsPractice > 1.0 {
+	if !inUnit(dna.EpistemicBias.TheoryVsPractice) {
 		return fmt.Errorf("theoryVsPractice must be between 0.0 and 1.0, got %.2f", dna.EpistemicBias.TheoryVsPractice)
 	}
-	if dna.EpistemicBias.NoveltyVsProvenance < 0.0 || dna.EpistemicBias.NoveltyVsProvenance > 1.0 {
+	if !inUnit(dna.EpistemicBias.NoveltyVsProvenance) {
 		return fmt.Errorf("noveltyVsProvenance must be between 0.0 and 1.0, got %.2f", dna.EpistemicBias.NoveltyVsProvenance)
 	}
-	if dna.EpistemicBias.SafetyVsVelocity < 0.0 || dna.EpistemicBias.SafetyVsVelocity > 1.0 {
+	if !inUnit(dna.EpistemicBias.SafetyVsVelocity) {
 		return fmt.Errorf("safetyVsVelocity must be between 0.0 and 1.0, got %.2f", dna.EpistemicBias.SafetyVsVelocity)
 	}
-	if dna.EpistemicBias.RigorThreshold < 0.0 || dna.EpistemicBias.RigorThreshold > 1.0 {
+	if !inUnit(dna.EpistemicBias.RigorThreshold) {
 		return fmt.Errorf("rigorThreshold must be between 0.0 and 1.0, got %.2f", dna.EpistemicBias.RigorThreshold)
 	}
 
@@ -44,7 +44,7 @@ func ValidateDNA(dna *model.PersonaDNA) error {
 	}
 
 	// Validate Tenacity Score
-	if dna.AdversarialPosture.TenacityScore < 0.0 || dna.AdversarialPosture.TenacityScore > 1.0 {
+	if !inUnit(dna.AdversarialPosture.TenacityScore) {
 		return fmt.Errorf("tenacityScore must be between 0.0 and 1.0, got %.2f", dna.AdversarialPosture.TenacityScore)
 	}
 
@@ -55,3 +55,6 @@ func ValidateDNA(dna *model.PersonaDNA) error {
 
 	return nil
 }
+
+// inUnit reports whether v is within [0,1]. NaN is rejected (it fails every comparison).
+func inUnit(v float64) bool { return v >= 0.0 && v <= 1.0 }

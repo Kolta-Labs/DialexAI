@@ -1,7 +1,6 @@
 // Command roundtable is the engine binary — `roundtable serve` runs the HTTP daemon;
-// `roundtable users add` seeds the multi-user account store. The interactive setup wizard
-// (Phase 3 of the roadmap) isn't built yet — this is deliberately just enough to run Phase
-// 1's daemon end-to-end and let Phase 2 (desktop repoint) have something real to talk to.
+// `roundtable users add` seeds the multi-user account store. There is no interactive setup
+// wizard yet.
 package main
 
 import (

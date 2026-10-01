@@ -1,4 +1,4 @@
-// Package orchestrator is the Go port of Kotlin's DebateOrchestrator — the round-robin turn
+// Package orchestrator runs the debate: the round-robin turn
 // loop, transcript compaction, retry-on-failure, and token-budget enforcement.
 package orchestrator
 
@@ -64,7 +64,7 @@ type Orchestrator struct {
 }
 
 // RunOptions configures one Run call. Only Config is required — everything else has a
-// sensible default matching the Kotlin side's default parameter values.
+// sensible default.
 type RunOptions struct {
 	Config              model.DebateConfig
 	InitialTranscript   []model.DebateMessage
@@ -95,8 +95,7 @@ type RunOptions struct {
 //
 // The returned error is non-nil ONLY for a hard stop (ctx cancelled mid-turn) — everything
 // else (a turn failing, pausing, a token-budget stop) is reported inside the DebateResult,
-// never as a Go error. That mirrors the Kotlin side's CancellationException-vs-DebateResult
-// split: cancellation must propagate so the caller's own context machinery unwinds
+// never as a Go error. Cancellation must propagate so the caller's own context machinery unwinds
 // correctly; a turn failure is just data.
 func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateResult, error) {
 	config := opts.Config
@@ -937,6 +936,7 @@ func optimizeAttachmentContent(raw string, maxChars int) string {
 	return strings.TrimSpace(text)
 }
 
+
 // ownedBySeat reports whether a message came from this agent seat. Seat IDs distinguish
 // several personas on one provider; the provider only matches messages that carry no seat ID.
 func ownedBySeat(m model.DebateMessage, a model.Agent) bool {
@@ -945,4 +945,3 @@ func ownedBySeat(m model.DebateMessage, a model.Agent) bool {
 	}
 	return m.AgentID == a.Provider
 }
-

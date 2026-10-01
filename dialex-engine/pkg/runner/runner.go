@@ -1,4 +1,4 @@
-// Package runner is the Go port of Kotlin's runner package (ApiAgentRunner, CliAgentRunner).
+// Package runner runs an agent's turn through a direct provider API (ApiAgentRunner) or a local CLI (CliAgentRunner).
 package runner
 
 import (

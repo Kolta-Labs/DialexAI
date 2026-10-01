@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"dialex/pkg/graph"
 	"dialex/pkg/model"
@@ -247,9 +248,11 @@ func (dr *DynamicRetriever) RetrieveForRound(
 					if seenSources[n.ID] {
 						continue
 					}
+					// CurrentWeight is the decayed weight. A fully decayed node was explicitly recalled
+					// by the query, so keep it, but ranked below every live node.
 					score := n.CurrentWeight
 					if score <= 0 {
-						score = 0.5
+						score = 0.01
 					}
 					snippet := cleanSnippet(n.Content, 280)
 					candidates = append(candidates, model.EvidenceItem{
@@ -320,8 +323,12 @@ func (dr *DynamicRetriever) RetrieveForRound(
 	}
 
 	// Sort candidates by score descending
+	// Map iteration order is random, so break score ties by SourceID to keep selection stable.
 	sort.Slice(uniqueCandidates, func(i, j int) bool {
-		return uniqueCandidates[i].Score > uniqueCandidates[j].Score
+		if uniqueCandidates[i].Score != uniqueCandidates[j].Score {
+			return uniqueCandidates[i].Score > uniqueCandidates[j].Score
+		}
+		return uniqueCandidates[i].SourceID < uniqueCandidates[j].SourceID
 	})
 
 	// Select top-3 items
@@ -364,6 +371,9 @@ func cleanSnippet(text string, maxLen int) string {
 	cleaned := strings.Join(strings.Fields(text), " ")
 	if len(cleaned) <= maxLen {
 		return cleaned
+	}
+	for maxLen > 0 && !utf8.RuneStart(cleaned[maxLen]) { // never cut a multi-byte rune in half
+		maxLen--
 	}
 	return cleaned[:maxLen] + "..."
 }

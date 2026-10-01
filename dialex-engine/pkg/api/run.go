@@ -391,7 +391,7 @@ func (s *Server) finishRun(id string) {
 	s.mu.Unlock()
 }
 
-// handleHardStop kills the in-flight turn immediately (Task 3.2.1 — context cancellation
+// handleHardStop kills the in-flight turn immediately (context cancellation
 // propagates to the CLI subprocess as SIGKILL / aborts the in-flight HTTP call) instead of
 // waiting for it to finish like /pause does.
 func (s *Server) handleHardStop(w http.ResponseWriter, r *http.Request) {
@@ -510,9 +510,7 @@ type handoffResponse struct {
 // handleHandoff asks the primary agent to turn the discussion so far into a self-contained
 // prompt another AI (with zero prior context) could pick up cold — a one-off side call that
 // doesn't touch the discussion's transcript/status, so it's safe regardless of Paused/Done/
-// Error. Ported from the Kotlin app's AppViewModel.generateHandoffPrompt, word for word on
-// the instruction text so the two behave identically. Persists the result onto
-// Discussion.HandoffPrompt, same as the Kotlin side, so it survives navigating away/back.
+// Error. Persists the result onto Discussion.HandoffPrompt so it survives navigating away/back.
 func (s *Server) handleHandoff(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	discussion, state, err := s.findDiscussion(id)

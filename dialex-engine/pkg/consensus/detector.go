@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"dialex/pkg/model"
 	"dialex/pkg/runner"
@@ -190,6 +191,7 @@ func parseTensionResponse(content string) (*tensionJSONResponse, error) {
 
 func mergeTensionResults(resp *tensionJSONResponse, currentRound int, existing []model.TensionPair) []model.TensionPair {
 	tensionsMap := make(map[string]model.TensionPair)
+	var newIDs []string // insertion order, so output does not depend on map iteration
 	for _, t := range existing {
 		tensionsMap[t.ID] = t
 	}
@@ -202,7 +204,7 @@ func mergeTensionResults(resp *tensionJSONResponse, currentRound int, existing [
 			case model.TensionStatusResolved, model.TensionStatusAcceptedTradeOff, model.TensionStatusExplored:
 				cur.Status = status
 			default:
-				cur.Status = model.TensionStatusResolved
+				continue // unrecognized status from the LLM: leave the tension untouched
 			}
 			if u.Synthesis != nil && *u.Synthesis != "" {
 				cur.Synthesis = u.Synthesis
@@ -242,6 +244,7 @@ func mergeTensionResults(resp *tensionJSONResponse, currentRound int, existing [
 		}
 
 		id := generateTensionID()
+		newIDs = append(newIDs, id)
 		thesisProvider := model.Provider(strings.ToUpper(strings.TrimSpace(nt.Thesis.Provider)))
 		antiProvider := model.Provider(strings.ToUpper(strings.TrimSpace(nt.Antithesis.Provider)))
 
@@ -279,8 +282,10 @@ func mergeTensionResults(resp *tensionJSONResponse, currentRound int, existing [
 		}
 	}
 	// Append newly added ones
-	for _, newlyAdded := range tensionsMap {
-		result = append(result, newlyAdded)
+	for _, id := range newIDs {
+		if newlyAdded, ok := tensionsMap[id]; ok {
+			result = append(result, newlyAdded)
+		}
 	}
 
 	return result
@@ -460,22 +465,27 @@ func extractHeuristicConflict(topic, contentA, contentB string, index int) strin
 	return fmt.Sprintf("Dialectic Trade-off Axis #%d", index)
 }
 
+// clip shortens s to at most n bytes plus an ellipsis without splitting a UTF-8 rune.
+func clip(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n] + "..."
+}
+
 func truncateStatement(content string) string {
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		trimmed = strings.TrimLeft(trimmed, "#*- \t")
 		if len(trimmed) > 30 && !strings.HasPrefix(trimmed, ">") {
-			if len(trimmed) > 140 {
-				return trimmed[:137] + "..."
-			}
-			return trimmed
+			return clip(trimmed, 137)
 		}
 	}
-	if len(content) > 140 {
-		return content[:137] + "..."
-	}
-	return content
+	return clip(content, 137)
 }
 
 func generateTensionID() string {

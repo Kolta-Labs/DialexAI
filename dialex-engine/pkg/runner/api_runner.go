@@ -30,8 +30,7 @@ type ApiAgentRunner struct {
 }
 
 // NewApiAgentRunner builds a runner with a default 120s timeout, matching CliAgentRunner's
-// default — previously unset on the Kotlin side, so a hung provider call could block a turn
-// indefinitely with no feedback.
+// default, so a hung provider call cannot block a turn indefinitely.
 func NewApiAgentRunner(apiKeys map[model.Provider]string) *ApiAgentRunner {
 	return NewApiAgentRunnerWithPermissions(apiKeys, nil)
 }
@@ -134,8 +133,7 @@ func buildSystemPrompt(topic, commonContext, commonInstructions string, agent mo
 
 // postJSON posts body as JSON and decodes the response into out. A non-2xx response is
 // surfaced as a clear "HTTP <status>: <body>" error instead of letting the caller try to
-// parse an error body as a success shape (which used to fail as an opaque nil-pointer-style
-// error on the Kotlin side — see ApiAgentRunner.kt's requireSuccess fix).
+// parse an error body as a success shape.
 func postJSON(ctx context.Context, client *http.Client, url string, headers map[string]string, body any, out any) error {
 	payload, err := json.Marshal(body)
 	if err != nil {
