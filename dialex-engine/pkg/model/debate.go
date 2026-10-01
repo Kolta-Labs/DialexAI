@@ -197,6 +197,8 @@ type DebateConfig struct {
 	AttachedFiles []AttachedFile `json:"attachedFiles,omitempty"`
 	// SharedMemory controls compression of shared knowledge between turns.
 	SharedMemory *SharedMemoryConfig `json:"sharedMemory,omitempty"`
+	// Independence limits how much agents see of each other (blind first round, anonymized peers).
+	Independence *IndependenceConfig `json:"independence,omitempty"`
 	// Moderation controls loop detection, moderator agent selection, and interventions.
 	Moderation *ModeratorConfig `json:"moderation,omitempty"`
 	// UserInterventionPolicy controls autonomous vs interactive debate moderation.
@@ -209,6 +211,18 @@ type DebateConfig struct {
 	HumanDialogueMode bool `json:"humanDialogueMode,omitempty"`
 	// HumanDialogueDirective: custom prompt text for human dialogue mode. If empty, engine uses default.
 	HumanDialogueDirective string `json:"humanDialogueDirective,omitempty"`
+}
+
+// IndependenceConfig guards against conformity, which studies find drives accuracy down in
+// multi-agent debate (especially several personas on one model).
+type IndependenceConfig struct {
+	// BlindFirstRound: in round 1 each seat answers without seeing the other seats' round-1
+	// answers, so the first positions are independent instead of anchored on whoever spoke first.
+	BlindFirstRound bool `json:"blindFirstRound,omitempty"`
+	// AnonymizeTranscript: other seats appear as "Participant A/B/C" instead of their name, so
+	// agents weigh arguments rather than identities. A persona that names itself in its text
+	// still leaks its identity; this removes the labels, not the content.
+	AnonymizeTranscript bool `json:"anonymizeTranscript,omitempty"`
 }
 
 // ModeratorConfig controls moderator agent loop-detection and summary behaviour.

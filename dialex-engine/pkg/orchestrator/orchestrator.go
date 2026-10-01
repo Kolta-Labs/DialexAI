@@ -374,7 +374,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 				break
 			}
 		}
-		reply, err := respondWithRetry(ctx, o.RunnerFor(effective), effective, effectiveTopic, turnContext, instructions.String(), contextView(effective), "")
+		reply, err := respondWithRetry(ctx, o.RunnerFor(effective), effective, effectiveTopic, turnContext, instructions.String(), applyIndependence(contextView(effective), effective, round, config.Independence, config.Agents()), "")
 		if err != nil {
 			if isCancellation(err) {
 				return "", err
