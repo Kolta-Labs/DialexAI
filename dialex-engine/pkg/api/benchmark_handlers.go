@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -105,15 +106,22 @@ func (s *Server) handleRunBenchmark(w http.ResponseWriter, r *http.Request) {
 		councilAgents = req.CouncilAgents
 	}
 
-	judgeAgent := model.Agent{
-		DisplayName: "Frontier Judge (Double-Blind)",
-		Provider:    model.ProviderOpenAI,
-		Model:       "gpt-4o",
-		RunMode:     model.RunModeAPI,
-		Role:        "Chief Systems Architect & Evaluator",
-	}
+	var judgeAgent model.Agent
 	if req.JudgeAgent != nil {
 		judgeAgent = *req.JudgeAgent
+	} else {
+		state, err := s.Store.Load()
+		if err != nil {
+			state = model.NewAppState()
+		}
+		keys := state.ApiKeys.AsMap()
+		var ok bool
+		judgeAgent, ok = benchmark.PickIndependentJudge(append([]model.Agent{soloAgent}, councilAgents...),
+			func(p model.Provider) bool { return keys[p] != "" })
+		if !ok {
+			writeError(w, http.StatusBadRequest, "no provider is independent of the arms; set judgeAgent and allowJudgeOverlap")
+			return
+		}
 	}
 
 	rounds := req.Rounds
@@ -121,19 +129,30 @@ func (s *Server) handleRunBenchmark(w http.ResponseWriter, r *http.Request) {
 		rounds = 2
 	}
 
+	if b := req.Baseline; b != "" && b != benchmark.BaselineSolo && b != benchmark.BaselineSelfConsistency {
+		writeError(w, http.StatusBadRequest, "baseline must be \"solo\" or \"self_consistency\"")
+		return
+	}
+
 	benchRunner := benchmark.NewRunner(func(agent model.Agent) runner.AgentRunner {
 		return s.runnerForAgent(agent)
 	})
+	benchRunner.AllowJudgeOverlap = req.AllowJudgeOverlap
 
-	run, err := benchRunner.ExecuteRun(
+	run, err := benchRunner.ExecuteRunWithBaseline(
 		r.Context(),
 		*bCase,
+		req.Baseline,
 		soloAgent,
 		councilAgents,
 		judgeAgent,
 		rounds,
 		nil,
 	)
+	if errors.Is(err, benchmark.ErrJudgeNotIndependent) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "benchmark execution failed: "+err.Error())
 		return

@@ -227,6 +227,7 @@ func heuristicJudgePass(bCase BenchmarkCase, subA, subB string, passNumber int, 
 		CouncilScores:    councilScores,
 		OverallVerdict:   "Automated rubric evaluation based on ground truth coverage and trade-off depth.",
 		DetailedCritique: "Programmatic text analysis evaluating trap avoidance and boundary conditions.",
+		Fallback:         true,
 	}
 }
 

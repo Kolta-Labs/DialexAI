@@ -20,6 +20,15 @@ type ArmType string
 const (
 	ArmSoloBaseline ArmType = "SOLO_BASELINE"
 	ArmCouncil      ArmType = "COUNCIL"
+	// ArmSelfConsistency is the matched-compute baseline: k independent solo drafts plus one
+	// aggregation call, with k chosen so its model-call count equals the council's.
+	ArmSelfConsistency ArmType = "SELF_CONSISTENCY"
+)
+
+// Baseline names which non-council arm a run compares the council against.
+const (
+	BaselineSolo            = "solo"
+	BaselineSelfConsistency = "self_consistency"
 )
 
 // BenchmarkCase defines a standardized architectural dilemma test case.
@@ -60,6 +69,9 @@ type JudgeEvaluation struct {
 	CouncilScores    []MetricScore `json:"councilScores"`
 	OverallVerdict   string        `json:"overallVerdict"`
 	DetailedCritique string        `json:"detailedCritique"`
+	// Fallback is true when a keyword heuristic scored this pass instead of the LLM judge
+	// (judge error, unparsable reply, or no judge configured). Such passes are not judge data.
+	Fallback bool `json:"fallback,omitempty"`
 }
 
 // BenchmarkRun represents a completed dual-arm benchmark execution.
@@ -76,6 +88,13 @@ type BenchmarkRun struct {
 	CouncilTotalScore float64           `json:"councilTotalScore"`
 	DeltaQ            float64           `json:"deltaQ"` // CouncilTotalScore - SoloTotalScore
 	Winner            string            `json:"winner"` // "COUNCIL", "SOLO", "TIE"
+	// Baseline is what the "solo" side actually was: BaselineSolo or BaselineSelfConsistency.
+	Baseline string `json:"baseline,omitempty"`
+	// TokenRatio is council tokens / baseline tokens; near 1.0 means compute was matched.
+	TokenRatio          float64 `json:"tokenRatio,omitempty"`
+	JudgeFallbackPasses int     `json:"judgeFallbackPasses,omitempty"`
+	// JudgeOverlap is true when the judge shares a model family with an arm (overlap was allowed).
+	JudgeOverlap bool `json:"judgeOverlap,omitempty"`
 }
 
 // BenchmarkSummary holds aggregate metrics and scientific statistical hypothesis tests.
@@ -101,4 +120,7 @@ type RunBenchmarkRequest struct {
 	CouncilAgents []model.Agent `json:"councilAgents,omitempty"`
 	JudgeAgent    *model.Agent  `json:"judgeAgent,omitempty"`
 	Rounds        int           `json:"rounds,omitempty"`
+	Baseline      string        `json:"baseline,omitempty"` // "solo" (default) or "self_consistency"
+	// AllowJudgeOverlap lets the judge share a provider with an arm; the run is flagged JudgeOverlap.
+	AllowJudgeOverlap bool `json:"allowJudgeOverlap,omitempty"`
 }

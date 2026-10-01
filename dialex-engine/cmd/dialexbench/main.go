@@ -62,6 +62,8 @@ func runBenchmark(args []string) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	caseID := fs.String("case", "DB01", "Case ID to evaluate (e.g. DB01, DB02, or 'all')")
 	rounds := fs.Int("rounds", 2, "Council debate rounds")
+	baseline := fs.String("baseline", benchmark.BaselineSolo, "Baseline arm: solo, or self_consistency (same number of model calls as the council)")
+	allowOverlap := fs.Bool("allow-judge-overlap", false, "Allow a judge from the same provider as an arm (biased; the run is flagged)")
 	format := fs.String("format", "text", "Output format (text, markdown, json)")
 	dir := fs.String("dir", "", "Dialex config directory")
 	_ = fs.Parse(args)
@@ -127,21 +129,23 @@ func runBenchmark(args []string) {
 		{DisplayName: "Gemini (Pragmatist)", Role: "Pragmatist", Provider: model.ProviderGemini, Model: "gemini-2.5-pro", RunMode: model.RunModeCLI},
 	}
 
-	judgeAgent := model.Agent{
-		DisplayName: "Judge (Frontier)",
-		Provider:    model.ProviderAnthropic,
-		Model:       "claude-3-7-sonnet",
-		RunMode:     model.RunModeCLI,
-		Role:        "Chief Architect Evaluator",
+	judgeAgent, ok := benchmark.PickIndependentJudge(append([]model.Agent{soloAgent}, councilAgents...),
+		func(p model.Provider) bool { return state.ApiKeys.AsMap()[p] != "" })
+	if !ok {
+		fmt.Fprintln(os.Stderr, "no provider is independent of the arms; edit the arms or pass --allow-judge-overlap")
+		os.Exit(1)
 	}
+	judgeAgent.RunMode = model.RunModeAPI
+	benchRunner.AllowJudgeOverlap = *allowOverlap
 
 	var completedRuns []benchmark.BenchmarkRun
 
 	for _, bc := range casesToRun {
 		fmt.Fprintf(os.Stderr, "Evaluating Case %s: %s...\n", bc.ID, bc.Title)
-		run, err := benchRunner.ExecuteRun(
+		run, err := benchRunner.ExecuteRunWithBaseline(
 			context.Background(),
 			bc,
+			*baseline,
 			soloAgent,
 			councilAgents,
 			judgeAgent,

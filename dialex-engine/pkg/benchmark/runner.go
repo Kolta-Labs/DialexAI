@@ -15,6 +15,9 @@ import (
 // Runner orchestrates the execution of Arm A (Solo) and Arm B (Council).
 type Runner struct {
 	runnerFor func(agent model.Agent) runner.AgentRunner
+	// AllowJudgeOverlap permits a judge from the same family as an arm (e.g. you only have one
+	// API key). The run is then marked JudgeOverlap so its scores are not read as unbiased.
+	AllowJudgeOverlap bool
 }
 
 // NewRunner creates a new benchmark runner with the runner resolution factory.
@@ -32,8 +35,34 @@ func (r *Runner) ExecuteRun(
 	rounds int,
 	onProgress func(phase string, progress float64),
 ) (*BenchmarkRun, error) {
+	return r.ExecuteRunWithBaseline(ctx, bCase, BaselineSolo, soloAgent, councilAgents, judgeAgent, rounds, onProgress)
+}
+
+// ExecuteRunWithBaseline is ExecuteRun with a choice of baseline arm. BaselineSelfConsistency
+// spends the same number of model calls as the council, so a council win cannot be put down
+// to extra compute alone.
+func (r *Runner) ExecuteRunWithBaseline(
+	ctx context.Context,
+	bCase BenchmarkCase,
+	baseline string,
+	soloAgent model.Agent,
+	councilAgents []model.Agent,
+	judgeAgent model.Agent,
+	rounds int,
+	onProgress func(phase string, progress float64),
+) (*BenchmarkRun, error) {
 	if rounds <= 0 {
 		rounds = 2
+	}
+	if baseline == "" {
+		baseline = BaselineSolo
+	}
+	if baseline != BaselineSolo && baseline != BaselineSelfConsistency {
+		return nil, fmt.Errorf("unknown baseline %q", baseline)
+	}
+	conflict := JudgeConflict(judgeAgent, append([]model.Agent{soloAgent}, councilAgents...)...)
+	if conflict != nil && !r.AllowJudgeOverlap {
+		return nil, judgeConflictError(judgeAgent, conflict)
 	}
 
 	runID := fmt.Sprintf("run_%s_%d", bCase.ID, time.Now().UnixNano())
@@ -52,7 +81,11 @@ func (r *Runner) ExecuteRun(
 	// Run Arm A (Solo Baseline)
 	go func() {
 		defer wg.Done()
-		soloRes, soloErr = r.runSoloArm(ctx, bCase, soloAgent)
+		if baseline == BaselineSelfConsistency {
+			soloRes, soloErr = r.runSelfConsistencyArm(ctx, bCase, soloAgent, rounds*len(councilAgents))
+		} else {
+			soloRes, soloErr = r.runSoloArm(ctx, bCase, soloAgent)
+		}
 	}()
 
 	// Run Arm B (Council Deliberation)
@@ -100,19 +133,34 @@ func (r *Runner) ExecuteRun(
 		onProgress("Benchmark Completed", 1.0)
 	}
 
+	fallbacks := 0
+	for _, e := range evaluations {
+		if e.Fallback {
+			fallbacks++
+		}
+	}
+	tokenRatio := 0.0
+	if soloRes.TokensUsed > 0 {
+		tokenRatio = math.Round(float64(councilRes.TokensUsed)/float64(soloRes.TokensUsed)*100) / 100
+	}
+
 	return &BenchmarkRun{
-		ID:                runID,
-		CaseID:            bCase.ID,
-		CaseTitle:         bCase.Title,
-		Timestamp:         time.Now().UnixMilli(),
-		SoloResult:        soloRes,
-		CouncilResult:     councilRes,
-		JudgeModel:        judgeAgent.Model,
-		Evaluations:       evaluations,
-		SoloTotalScore:    soloScore,
-		CouncilTotalScore: councilScore,
-		DeltaQ:            deltaQ,
-		Winner:            winner,
+		Baseline:            baseline,
+		TokenRatio:          tokenRatio,
+		JudgeFallbackPasses: fallbacks,
+		JudgeOverlap:        conflict != nil,
+		ID:                  runID,
+		CaseID:              bCase.ID,
+		CaseTitle:           bCase.Title,
+		Timestamp:           time.Now().UnixMilli(),
+		SoloResult:          soloRes,
+		CouncilResult:       councilRes,
+		JudgeModel:          judgeAgent.Model,
+		Evaluations:         evaluations,
+		SoloTotalScore:      soloScore,
+		CouncilTotalScore:   councilScore,
+		DeltaQ:              deltaQ,
+		Winner:              winner,
 	}, nil
 }
 
@@ -236,5 +284,67 @@ Produce a definitive, production-grade Architecture Decision Record (ADR) resolv
 		TokensUsed:       totalTokens,
 		DurationMs:       time.Since(start).Milliseconds(),
 		EstimatedCostUSD: cost,
+	}, nil
+}
+
+// runSelfConsistencyArm draws `draws` independent solo drafts, then one aggregation call by the
+// same model that merges them. Model calls = draws+1, matching a council of `draws` turns plus
+// a synthesis turn.
+//
+// ponytail: drafts run sequentially; parallelise if latency of the baseline matters.
+func (r *Runner) runSelfConsistencyArm(ctx context.Context, bCase BenchmarkCase, agent model.Agent, draws int) (ArmResult, error) {
+	start := time.Now()
+	rnr := r.runnerFor(agent)
+	if rnr == nil {
+		return ArmResult{}, fmt.Errorf("no runner available for baseline agent %s", agent.Label())
+	}
+	if draws < 1 {
+		draws = 1
+	}
+
+	prompt := fmt.Sprintf(`You are a world-class Principal Systems Architect. Produce a definitive Architecture Decision Record (ADR) for:
+TITLE: %s
+DOMAIN: %s
+DILEMMA: %s
+CONSTRAINTS:
+- %s`, bCase.Title, bCase.Domain, bCase.Dilemma, strings.Join(bCase.Constraints, "\n- "))
+
+	tokens := 0
+	count := func(in, out string, reply runner.AgentReply) {
+		if reply.TokensIn != nil && reply.TokensOut != nil {
+			tokens += *reply.TokensIn + *reply.TokensOut
+		} else {
+			tokens += len(in)/4 + len(out)/4
+		}
+	}
+
+	var drafts []string
+	for i := 0; i < draws; i++ {
+		reply, err := rnr.Respond(ctx, agent, bCase.Title, prompt, "", nil, "")
+		if err != nil {
+			return ArmResult{}, err
+		}
+		count(prompt, reply.Content, reply)
+		drafts = append(drafts, reply.Content)
+	}
+
+	var agg strings.Builder
+	agg.WriteString("Below are independent drafts of the same ADR. Produce one final ADR: keep what the drafts agree on, resolve disagreements explicitly, and drop errors.\n\n")
+	for i, d := range drafts {
+		fmt.Fprintf(&agg, "--- DRAFT %d ---\n%s\n\n", i+1, d)
+	}
+	reply, err := rnr.Respond(ctx, agent, bCase.Title, agg.String(), "Aggregation Mode", nil, "")
+	if err != nil {
+		return ArmResult{}, err
+	}
+	count(agg.String(), reply.Content, reply)
+
+	return ArmResult{
+		ArmType:          ArmSelfConsistency,
+		ModelOrCouncil:   fmt.Sprintf("%s (%s) self-consistency x%d", agent.Label(), agent.Model, draws),
+		Deliverable:      reply.Content,
+		TokensUsed:       tokens,
+		DurationMs:       time.Since(start).Milliseconds(),
+		EstimatedCostUSD: float64(tokens) * 0.000015,
 	}, nil
 }
