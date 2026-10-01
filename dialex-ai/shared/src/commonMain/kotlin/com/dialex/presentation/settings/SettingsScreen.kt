@@ -3595,7 +3595,7 @@ private fun DebatePolicyTab(
         modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Section 1: Human-Like Conversational Dialogue (Anti-Fluff)
+        // Human-Like Conversational Dialogue (Anti-Fluff)
         SettingCard {
             SettingRow(
                 title = "Human-Like Conversational Dialogue",
@@ -3656,7 +3656,7 @@ private fun DebatePolicyTab(
             }
         }
 
-        // Section 2: Autopilot & Human Intervention Mode
+        // Autopilot & Human Intervention Mode
         SettingCard {
             SettingRow(
                 title = "Autonomous Autopilot & User Participation",
@@ -3717,7 +3717,7 @@ private fun DebatePolicyTab(
             }
         }
 
-        // Section 2: Shared Memory Strategy Defaults
+        // Shared Memory Strategy Defaults
         val mem = policy.sharedMemory
         SettingCard {
             SettingRow(
@@ -3792,7 +3792,7 @@ private fun DebatePolicyTab(
             }
         }
 
-        // Section 2.5: Deliberation Depth Defaults (TASK-04)
+        // Deliberation Depth Defaults
         val depth = policy.depth
         SettingCard {
             SettingRow(
@@ -3828,7 +3828,7 @@ private fun DebatePolicyTab(
             }
         }
 
-        // Section 3: Moderator Agent & Dialectic Steerage Defaults (TASK-06)
+        // Moderator Agent & Dialectic Steerage Defaults
         val mod = policy.moderation
         SettingCard {
             SettingRow(
@@ -3993,7 +3993,7 @@ private fun DebatePolicyTab(
             }
         }
 
-        // Section 4: Deliverable & Auto-Save Defaults
+        // Deliverable & Auto-Save Defaults
         val del = policy.deliverable
         val out = policy.output
         SettingCard {

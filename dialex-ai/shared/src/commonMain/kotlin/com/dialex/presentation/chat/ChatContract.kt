@@ -10,11 +10,7 @@ import io.github.koltalabs.kolt.utils.state.AsyncState
 import com.dialex.presentation.setup.TokenWarningLevel
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
-
-// ──────────────────────────────────────────────────────────────────────────────
 // Chat Screen Contract — State / Intent / Effect
-// ──────────────────────────────────────────────────────────────────────────────
-
 data class ChatState(
     val discussion: Discussion? = null,
     /** Progressive token warning level, resolved by ViewModel — composable never does math. */

@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 /**
  * Drives the *real* Go engine binary from EngineClient over real HTTP + SSE — not a mock.
  * This is the actual proof that the Kotlin wire format and the Go engine's wire format
- * agree (Task 2.1's core risk): if the JSON field names, enum string values, or SSE framing
+ * agree: if the JSON field names, enum string values, or SSE framing
  * ever drift between the two implementations, this is what catches it, not a hand-wave.
  *
  * Uses `runBlocking`, not `runTest` — this makes real network calls against a real

@@ -747,11 +747,7 @@ private fun PersonaBuilderFormContent(
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
 // JSON Import Modal Dialog
-// ──────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun PersonaImportJsonDialog(
     importInputText: String,
@@ -841,11 +837,7 @@ private fun PersonaImportJsonDialog(
         }
     )
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
 // AI Persona Assistant Chat Panel
-// ──────────────────────────────────────────────────────────────────────────────
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PersonaAiChatPanel(
@@ -1159,11 +1151,7 @@ private fun PersonaAiChatPanel(
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
 // Chat Bubble & Parsed Persona Preview Card
-// ──────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun ChatMessageBubble(
     message: PersonaChatMessage,

@@ -431,7 +431,7 @@ data class ModerationConfig(
     /** Injects the moderator's steerage directive directly into the agents' next-turn instructions. */
     val enforceSteerageDirectives: Boolean = true,
     val enabled: Boolean = false,
-    /** Which provider acts as moderator. null = primary agent. */
+    /** Which provider acts as moderator. null = primary agent. Kept for old discussions. */
     val moderatorProvider: Provider? = null,
     /** Which seat acts as moderator, so one persona among several on the same provider can.
      * Wins over [moderatorProvider]. null = fall back to it, then the primary agent. */
@@ -551,7 +551,7 @@ data class DebateConfig(
     /** How close to 100% unanimous agreement the discussion must reach before declaring
      * early consensus (1.0 = all agents, 0.8 = 80% etc.). Defaults to 1.0. */
     val consensusTolerance: Double = 1.0,
-    /** Dynamic consensus detection and early stopping configuration (TASK-01). */
+    /** Dynamic consensus detection and early stopping configuration. */
     val consensus: ConsensusConfig = ConsensusConfig(consensusThreshold = consensusTolerance),
     /** When true, an "AGREED:" prefix triggers a second round of objection checking before
      * early termination is accepted. */
@@ -560,9 +560,9 @@ data class DebateConfig(
     val attachedFiles: List<AttachedFile> = emptyList(),
     /** Shared-memory / token-compression strategy for long debates. */
     val sharedMemory: SharedMemoryConfig = SharedMemoryConfig(),
-    /** Deliberation depth & cognitive load configuration (TASK-04). */
+    /** Deliberation depth & cognitive load configuration. */
     val depth: DepthConfig = DepthConfig(),
-    /** Moderator agent config — dynamic dialectic steerage & checkpoints (TASK-06). */
+    /** Moderator agent config — dynamic dialectic steerage & checkpoints. */
     val moderation: ModerationConfig = ModerationConfig(),
     /** Deliverable artifact config — format and generator. */
     val deliverable: DeliverableConfig = DeliverableConfig(),
@@ -578,11 +578,11 @@ data class DebateConfig(
     val humanDialogueMode: Boolean = true,
     /** Custom directive text for human dialogue / anti-fluff. Configurable only in Global Settings. Blank = system default. */
     val humanDialogueDirective: String = "",
-    /** Cost efficiency & dynamic context compaction configuration (TASK-03). */
+    /** Cost efficiency & dynamic context compaction configuration. */
     val costEfficiency: CostEfficiencyConfig = CostEfficiencyConfig(),
-    /** Anti-looping and content deduplication guards configuration (TASK-02). */
+    /** Anti-looping and content deduplication guards configuration. */
     val antiLoop: AntiLoopConfig = AntiLoopConfig(),
-    /** Granular temperature and sampling controls configuration (TASK-05). */
+    /** Granular temperature and sampling controls configuration. */
     val sampling: SamplingConfig = SamplingConfig(),
 ) {
     /** Speaking order — primary first always, then whichever others are included, in the

@@ -7,11 +7,7 @@ import com.dialex.model.RunMode
 import io.github.koltalabs.kolt.utils.state.AsyncState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
-
-// ──────────────────────────────────────────────────────────────────────────────
 // Persona Builder Contract — State / Intent / Effect
-// ──────────────────────────────────────────────────────────────────────────────
-
 data class PersonaBuilderState(
     /** The persona being edited — starts with defaults for new personas, or the loaded persona
      * when editing an existing one ([personaId] was non-null on navigation). */

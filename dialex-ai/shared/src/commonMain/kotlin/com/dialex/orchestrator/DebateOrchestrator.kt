@@ -206,7 +206,7 @@ class DebateOrchestrator(
             if (config.masterInstructions.isNotBlank()) append("\n${config.masterInstructions}")
         }
 
-        // Shared Memory & Compaction state (TASK-03)
+        // Shared Memory & Compaction state
         val costEff = config.costEfficiency
         val useCostEff = costEff.enabled
         val sharedMem = config.sharedMemory
@@ -354,7 +354,7 @@ class DebateOrchestrator(
             "information given, then explicitly ask the other participant(s) what they think."
 
         /**
-         * Speaks with Anti-Loop Guard (TASK-02) and Granular Sampling Controls (TASK-05).
+         * Speaks with Anti-Loop Guard and Granular Sampling Controls.
          */
         suspend fun speak(agent: Agent, round: Int): Pair<DebateMessage?, String?> {
             val antiLoop = config.antiLoop
@@ -406,7 +406,7 @@ class DebateOrchestrator(
                 if (personaDirective.isNotBlank()) parts.add(personaDirective)
                 if (isOpeningTurn) parts.add(openingDirective)
 
-                // Deliberation Depth & Cognitive Load Directive (TASK-04)
+                // Deliberation Depth & Cognitive Load Directive
                 when (config.depth.mode) {
                     com.dialex.model.DepthMode.CASUAL -> parts.add(CASUAL_DIRECTIVE)
                     com.dialex.model.DepthMode.EXECUTIVE -> parts.add(EXECUTIVE_DIRECTIVE)
@@ -483,7 +483,7 @@ class DebateOrchestrator(
                     return Pair(null, message)
                 }
 
-                // Anti-Looping Inspection (TASK-02)
+                // Anti-Looping Inspection
                 if (antiLoop.enabled && candidateTurns.isNotEmpty()) {
                     val audit = LoopDetector.inspect(
                         newText = reply.content,
@@ -687,7 +687,7 @@ class DebateOrchestrator(
 
             var triggerReason: String? = null
 
-            // Check Semantic Drift (TASK-06)
+            // Check Semantic Drift
             if (modConfig.style == com.dialex.model.ModerationStyle.DYNAMIC_ACTIVE_STEERAGE ||
                 modConfig.style == com.dialex.model.ModerationStyle.STRICT_ARBITRATION
             ) {
@@ -816,7 +816,7 @@ class DebateOrchestrator(
                     }
                 }
 
-                // Budget Ceilings Handling (TASK-03 Section 4.5)
+                // Budget Ceilings Handling
                 val totalTokens = transcript.sumOf { (it.tokensIn ?: 0) + (it.tokensOut ?: 0) }
                 val totalSpend = PricingTable.calculateDiscussionSpend(transcript, config.agents)
 

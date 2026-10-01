@@ -16,11 +16,7 @@ import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
-
-// ──────────────────────────────────────────────────────────────────────────────
 // Setup Screen Contract — State / Intent / Effect
-// ──────────────────────────────────────────────────────────────────────────────
-
 enum class SetupStep {
     /** Front page displaying one-click deliberation archetypes & quick start options. */
     FrontPage,

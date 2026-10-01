@@ -198,7 +198,7 @@ private fun ServersFleetOverview(
         modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(22.dp)
     ) {
-        // ── Section 1: Running Engine Fleet ──
+        // ── Running Engine Fleet ──
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 "Running Engine Fleet",
@@ -360,7 +360,7 @@ private fun ServersFleetOverview(
 
         HorizontalDivider(color = cc.border.copy(alpha = 0.3f), thickness = 1.dp)
 
-        // ── Section 2: Diagnostics & Telemetry Hub ──
+        // ── Diagnostics & Telemetry Hub ──
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 "Diagnostics & Telemetry Hub",

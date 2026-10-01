@@ -2029,11 +2029,7 @@ fun SetupScreen(
     )
 }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // High-Accessibility Participant Card with Vertical Accent Division & Zoned Structure
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun ParticipantCard(
     seatIndex: Int,
@@ -3089,11 +3085,7 @@ internal fun PickDiscussionDialog(
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Deliberation Depth & Cognitive Load (TASK-04)
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Deliberation Depth & Cognitive Load
 @Composable
 private fun DeliberationDepthSection(
     config: DebateConfig,
@@ -3329,11 +3321,7 @@ private fun DeliberationDepthSection(
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Feature 1: Token Strategy & Shared Memory
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Token Strategy & Shared Memory
 @Composable
 private fun TokenStrategySection(
     config: DebateConfig,
@@ -3516,7 +3504,7 @@ private fun TokenStrategySection(
             }
         }
 
-        // Dynamic Token Compaction Trigger (TASK-03 & TASK-08)
+        // Dynamic Token Compaction Trigger
         val costEff = config.costEfficiency
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
@@ -3588,11 +3576,7 @@ private fun TokenStrategySection(
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Feature 2: Moderation & Dialectic Steerage (TASK-06)
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Moderation & Dialectic Steerage
 @Composable
 private fun ModerationSection(
     config: DebateConfig,
@@ -3845,11 +3829,7 @@ private fun ModerationSection(
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Feature 3: Conclusion & Deliverable
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Conclusion & Deliverable
 @Composable
 private fun DeliverableSection(
     config: DebateConfig,
@@ -4018,7 +3998,7 @@ private fun DeliverableSection(
 
         HorizontalDivider(color = cc.border.copy(alpha = 0.25f), thickness = 0.75.dp)
 
-        // Hard Spending Ceiling (TASK-07 & TASK-08)
+        // Hard Spending Ceiling
         val costEff = config.costEfficiency
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
@@ -4054,11 +4034,7 @@ private fun DeliverableSection(
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Feature 4: Auto-Save & Output Files
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Auto-Save & Output Files
 @Composable
 private fun AutoSaveSection(
     config: DebateConfig,
@@ -4312,11 +4288,7 @@ private fun SavePresetDialog(
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // LEVEL 3: Power-User Drawer (Advanced Engine & Tuning)
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun AdvancedEngineDrawer(
     config: DebateConfig,
@@ -4413,22 +4385,22 @@ private fun AdvancedEngineDrawer(
 
                     HorizontalDivider(color = cc.border.copy(alpha = 0.25f), thickness = 0.75.dp)
 
-                    // 3. Deliberation Depth & Jargon (TASK-04)
+                    // 3. Deliberation Depth & Jargon
                     DeliberationDepthSection(config, onConfigChange, cc)
 
                     HorizontalDivider(color = cc.border.copy(alpha = 0.25f), thickness = 0.75.dp)
 
-                    // 4. Token Strategy & Compaction Frequency (TASK-03)
+                    // 4. Token Strategy & Compaction Frequency
                     TokenStrategySection(config, onConfigChange, cc)
 
                     HorizontalDivider(color = cc.border.copy(alpha = 0.25f), thickness = 0.75.dp)
 
-                    // 5. Moderation & Topical Steerage (TASK-06)
+                    // 5. Moderation & Topical Steerage
                     ModerationSection(config, onConfigChange, cc)
 
                     HorizontalDivider(color = cc.border.copy(alpha = 0.25f), thickness = 0.75.dp)
 
-                    // 6. Conclusion, Deliverable & Spending Ceiling (TASK-07)
+                    // 6. Conclusion, Deliverable & Spending Ceiling
                     DeliverableSection(config, onConfigChange, cc)
 
                     HorizontalDivider(color = cc.border.copy(alpha = 0.25f), thickness = 0.75.dp)
@@ -4440,11 +4412,7 @@ private fun AdvancedEngineDrawer(
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Sampling & Creativity Section with Plain-English Labels & Tooltips
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun SamplingAndCreativitySection(
     config: DebateConfig,
@@ -4564,11 +4532,7 @@ private fun SamplingAndCreativitySection(
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Anti-Looping & Deduplication Section with Plain-English Labels & Tooltips
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun AntiLoopSection(
     config: DebateConfig,

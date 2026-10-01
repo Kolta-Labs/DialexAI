@@ -277,10 +277,7 @@ private fun SubTabItem(
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Sub-Tab 1: Product Overview (What is Dialex)
-// ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun OverviewSection(
     cc: com.dialex.theme.CcPalette,
@@ -512,10 +509,7 @@ private fun OverviewSection(
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Sub-Tab 2: Enterprise Scenarios (Deep Dive)
-// ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun ScenariosSection(cc: com.dialex.theme.CcPalette) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -599,10 +593,7 @@ private fun ScenariosSection(cc: com.dialex.theme.CcPalette) {
         )
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Sub-Tab 3: Privacy Policy & Data Governance Charter
-// ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun PrivacySection(
     cc: com.dialex.theme.CcPalette,
@@ -680,10 +671,7 @@ private fun PrivacySection(
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Sub-Tab 4: Software License Agreement
-// ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun LicenseSection(
     cc: com.dialex.theme.CcPalette,
@@ -789,10 +777,7 @@ private fun LicenseSection(
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Sub-Tab 5: Terms of Service & Advisory Disclaimer
-// ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun TermsSection(
     cc: com.dialex.theme.CcPalette,
@@ -864,10 +849,7 @@ private fun TermsSection(
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Reusable UI Components
-// ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun SectionHeader(title: String, subtitle: String) {
     val cc = LocalCcColors.current

@@ -11,11 +11,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
-
-// ──────────────────────────────────────────────────────────────────────────────
 // Settings Screen Contract — State / Intent / Effect
-// ──────────────────────────────────────────────────────────────────────────────
-
 /** Live status of one provider's CLI tool and API key — shown in the AI Agent Hub grid. */
 data class ProviderStatus(
     val provider: Provider,

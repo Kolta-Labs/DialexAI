@@ -270,11 +270,7 @@ fun PersonaDnaStudioScreen(
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
 // 1. Core Identity & Domain Tab
-// ──────────────────────────────────────────────────────────────────────────────
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CoreIdentityTab(
@@ -567,11 +563,7 @@ private fun CoreIdentityTab(
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
 // 2. Epistemic Bias & Vector Tab
-// ──────────────────────────────────────────────────────────────────────────────
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun EpistemicBiasTab(
@@ -754,11 +746,7 @@ private fun EpistemicBiasTab(
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
 // 3. Heuristics & Taboos Tab
-// ──────────────────────────────────────────────────────────────────────────────
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HeuristicsTaboosTab(
@@ -1034,11 +1022,7 @@ private fun HeuristicsTaboosTab(
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
 // 4. Adversarial Posture & Synthesis Preference Tab
-// ──────────────────────────────────────────────────────────────────────────────
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AdversarialSynthesisTab(
@@ -1201,11 +1185,7 @@ private fun AdversarialSynthesisTab(
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
 // 5. DNA Mandate Compiler Preview Tab
-// ──────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun CompiledPromptTab(
     state: PersonaDnaState,
@@ -1322,11 +1302,7 @@ private fun CompiledPromptTab(
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────────────────
 // Import / Export MMOS Dialog
-// ──────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun DnaImportExportDialog(
     mode: ImportExportMode,
