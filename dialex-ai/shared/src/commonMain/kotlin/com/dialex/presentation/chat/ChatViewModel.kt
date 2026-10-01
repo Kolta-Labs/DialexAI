@@ -22,6 +22,7 @@ import com.dialex.export.toMarkdown
 import com.dialex.model.Discussion
 import com.dialex.model.DiscussionStatus
 import com.dialex.model.Provider
+import com.dialex.model.isFrom
 import com.dialex.model.label
 import io.github.koltalabs.kolt.utils.state.AsyncState
 import com.dialex.presentation.base.MviViewModel
@@ -676,7 +677,7 @@ class ChatViewModel(
                 viewModelScope.launch {
                     val discussion = state.value.discussion ?: return@launch
                     val breakdown = discussion.config.agents.map { agent ->
-                        val agentMessages = discussion.transcript.filter { it.agentId == agent.provider }
+                        val agentMessages = discussion.transcript.filter { it.isFrom(agent) }
                         val inT = agentMessages.sumOf { (it.tokensIn ?: 0).toLong() }
                         val outT = agentMessages.sumOf { (it.tokensOut ?: 0).toLong() }
                         val cachedT = agentMessages.sumOf { (it.tokensCached ?: 0).toLong() }

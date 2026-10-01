@@ -11,6 +11,7 @@ import com.dialex.model.LoopInspectionResult
 import com.dialex.model.PricingTable
 import com.dialex.model.RoundMode
 import com.dialex.model.TokenBudgetAction
+import com.dialex.model.isFrom
 import com.dialex.model.label
 import com.dialex.runner.AgentReply
 import com.dialex.runner.AgentRunner
@@ -318,7 +319,7 @@ class DebateOrchestrator(
                 }
                 if (sharedMem.enabled && sharedMem.includeOwnLastTurn) {
                     val ownLast = transcript.findLast { 
-                        (it.seatId == forAgent.id || it.agentId == forAgent.provider) &&
+                        it.isFrom(forAgent) &&
                             !it.isError && (!sharedMem.includeFullRound1 || it.round > 1) 
                     }
                     if (ownLast != null && !list.contains(ownLast)) {
@@ -357,7 +358,7 @@ class DebateOrchestrator(
         suspend fun speak(agent: Agent, round: Int): Pair<DebateMessage?, String?> {
             val antiLoop = config.antiLoop
             val priorAgentTurns = transcript.filter {
-                (it.seatId == agent.id || it.agentId == agent.provider) && !it.isError && !it.isSystem && !it.isUserComment
+                it.isFrom(agent) && !it.isError && !it.isSystem && !it.isUserComment
             }.map { it.content }
             val lastSpeakerTurn = transcript.lastOrNull { !it.isError && !it.isSystem && !it.isUserComment }?.content
             val candidateTurns = if (lastSpeakerTurn != null && !priorAgentTurns.contains(lastSpeakerTurn)) {

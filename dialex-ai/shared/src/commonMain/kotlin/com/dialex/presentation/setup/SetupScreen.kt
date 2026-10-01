@@ -1342,10 +1342,15 @@ fun SetupScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        val nextProvider = Provider.entries.firstOrNull { p -> config.agents.none { it.provider == p } } ?: Provider.OPENAI
+                                        // Prefer a provider not yet seated; once every provider is in use (or the
+                                        // user has just one key) add another persona seat on the first provider.
+                                        val unused = Provider.entries.firstOrNull { p -> config.agents.none { it.provider == p } }
+                                        val nextProvider = unused ?: config.agents.firstOrNull()?.provider ?: Provider.OPENAI
+                                        val sameProviderCount = config.agents.count { it.provider == nextProvider }
                                         val newAgent = Agent(
                                             provider = nextProvider,
                                             model = nextProvider.defaultModel(),
+                                            displayName = if (sameProviderCount > 0) "${nextProvider.brandName()} ${sameProviderCount + 1}" else "",
                                             runMode = if (state.supportsCli) RunMode.CLI else RunMode.API
                                         )
                                         updateAdditionalAgents(additionalAgents + newAgent)

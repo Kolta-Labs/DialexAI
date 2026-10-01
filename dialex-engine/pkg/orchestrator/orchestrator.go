@@ -282,7 +282,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 				var ownLast *model.DebateMessage
 				for i := len(transcript) - 1; i >= 0; i-- {
 					m := transcript[i]
-					if (m.SeatID == forAgent.ID || m.AgentID == forAgent.Provider) && !m.IsError && (!sharedMem.IncludeFullRound1 || m.Round > 1) {
+					if ownedBySeat(m, forAgent) && !m.IsError && (!sharedMem.IncludeFullRound1 || m.Round > 1) {
 						ownLast = &m
 						break
 					}
@@ -302,7 +302,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 				for _, m := range transcript[start:] {
 					alreadyIncluded := false
 					for _, v := range views {
-						if v.AgentID == m.AgentID && v.Round == m.Round && v.Content == m.Content {
+						if v.AgentID == m.AgentID && v.SeatID == m.SeatID && v.Round == m.Round && v.Content == m.Content {
 							alreadyIncluded = true
 							break
 						}
@@ -951,5 +951,14 @@ func optimizeAttachmentContent(raw string, maxChars int) string {
 			strings.TrimSpace(text[:headLen]), trunc, strings.TrimSpace(text[len(text)-tailLen:]))
 	}
 	return strings.TrimSpace(text)
+}
+
+// ownedBySeat reports whether a message came from this agent seat. Seat IDs distinguish
+// several personas on one provider; the provider only matches messages that carry no seat ID.
+func ownedBySeat(m model.DebateMessage, a model.Agent) bool {
+	if m.SeatID != "" && a.ID != "" {
+		return m.SeatID == a.ID
+	}
+	return m.AgentID == a.Provider
 }
 

@@ -222,10 +222,10 @@ func (r *ApiAgentRunner) callAnthropic(ctx context.Context, agent model.Agent, k
 	messages := make([]anthropicMessage, len(transcript))
 	for i, m := range transcript {
 		role := "user"
-		if m.AgentID == agent.Provider {
+		if isOwnTurn(m, agent) {
 			role = "assistant"
 		}
-		text := fmt.Sprintf("[%s] %s", m.AgentID, m.Content)
+		text := fmt.Sprintf("[%s] %s", speakerLabel(m), m.Content)
 		// Every call resends the full transcript so far — each one is a strict prefix of
 		// the next. Marking the last message as a cache breakpoint means Anthropic reuses
 		// the (large, ever-growing) prefix instead of reprocessing it from scratch every
@@ -340,10 +340,10 @@ func (r *ApiAgentRunner) callOpenAICompatible(ctx context.Context, agent model.A
 	messages := []chatMessage{{Role: "system", Content: system}}
 	for _, m := range transcript {
 		role := "user"
-		if m.AgentID == agent.Provider {
+		if isOwnTurn(m, agent) {
 			role = "assistant"
 		}
-		messages = append(messages, chatMessage{Role: role, Content: fmt.Sprintf("[%s] %s", m.AgentID, m.Content)})
+		messages = append(messages, chatMessage{Role: role, Content: fmt.Sprintf("[%s] %s", speakerLabel(m), m.Content)})
 	}
 	body := chatRequest{
 		Model:       agent.Model,
@@ -425,10 +425,10 @@ func (r *ApiAgentRunner) callGemini(ctx context.Context, agent model.Agent, key,
 	contents := make([]geminiContent, len(transcript))
 	for i, m := range transcript {
 		role := "user"
-		if m.AgentID == agent.Provider {
+		if isOwnTurn(m, agent) {
 			role = "model"
 		}
-		contents[i] = geminiContent{Role: role, Parts: []geminiPart{{Text: fmt.Sprintf("[%s] %s", m.AgentID, m.Content)}}}
+		contents[i] = geminiContent{Role: role, Parts: []geminiPart{{Text: fmt.Sprintf("[%s] %s", speakerLabel(m), m.Content)}}}
 	}
 	var genConfig *geminiGenerationConfig
 	if agent.Temperature != nil || agent.TopP != nil || agent.MaxTokens != nil {
@@ -543,10 +543,10 @@ func (r *ApiAgentRunner) callOllama(ctx context.Context, agent model.Agent, endp
 	}
 	for _, m := range transcript {
 		role := "user"
-		if m.AgentID == agent.Provider {
+		if isOwnTurn(m, agent) {
 			role = "assistant"
 		}
-		messages = append(messages, ollamaMessage{Role: role, Content: fmt.Sprintf("[%s] %s", m.AgentID, m.Content)})
+		messages = append(messages, ollamaMessage{Role: role, Content: fmt.Sprintf("[%s] %s", speakerLabel(m), m.Content)})
 	}
 
 	var opts *ollamaOptions

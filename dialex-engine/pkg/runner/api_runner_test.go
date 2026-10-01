@@ -196,3 +196,42 @@ func TestRespondRequiresAnApiKey(t *testing.T) {
 		t.Errorf("error = %v, want a clear missing-key message", err)
 	}
 }
+
+// Several personas on ONE provider must be told apart: only a seat's own turns are
+// "assistant", and every line is attributed to its persona, not to the shared provider.
+func TestSameProviderSeatsAreToldApart(t *testing.T) {
+	var body struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content any    `json:"content"`
+		} `json:"messages"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&body)
+		json.NewEncoder(w).Encode(anthropicResponse{Content: []struct {
+			Text string `json:"text"`
+		}{{Text: "ok"}}})
+	}))
+	defer server.Close()
+	runner := NewApiAgentRunner(map[model.Provider]string{model.ProviderAnthropic: "k"})
+	runner.URLs[model.ProviderAnthropic] = server.URL
+
+	skeptic := model.NewAgent(model.ProviderAnthropic, "m")
+	skeptic.ID = "seat-skeptic"
+	optimist := model.NewAgent(model.ProviderAnthropic, "m")
+	optimist.ID = "seat-optimist"
+	transcript := []model.DebateMessage{
+		{SeatID: "seat-optimist", AgentID: model.ProviderAnthropic, AuthorDisplayName: "Optimist", Content: "ship it"},
+		{SeatID: "seat-skeptic", AgentID: model.ProviderAnthropic, AuthorDisplayName: "Skeptic", Content: "no"},
+	}
+	if _, err := runner.Respond(context.Background(), skeptic, "t", "", "", transcript, ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Messages) != 2 || body.Messages[0].Role != "user" || body.Messages[1].Role != "assistant" {
+		t.Fatalf("skeptic must see the optimist as 'user' and itself as 'assistant': %+v", body.Messages)
+	}
+	if first, _ := body.Messages[0].Content.(string); !strings.HasPrefix(first, "[Optimist]") {
+		t.Fatalf("line must be attributed to the persona, got %v", body.Messages[0].Content)
+	}
+	_ = optimist
+}

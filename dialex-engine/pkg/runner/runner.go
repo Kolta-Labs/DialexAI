@@ -35,3 +35,22 @@ type AgentRunner interface {
 }
 
 func intPtr(i int) *int { return &i }
+
+// isOwnTurn reports whether a transcript message was written by this agent seat. Seats are
+// matched by ID so several personas on one provider (one API key) are told apart; the
+// provider is only the fallback for old transcripts that carry no seat ID.
+func isOwnTurn(m model.DebateMessage, a model.Agent) bool {
+	if m.SeatID != "" && a.ID != "" {
+		return m.SeatID == a.ID
+	}
+	return m.AgentID == a.Provider
+}
+
+// speakerLabel is the name a transcript line is attributed to: the seat's display name when
+// known, else the provider.
+func speakerLabel(m model.DebateMessage) string {
+	if m.AuthorDisplayName != "" {
+		return m.AuthorDisplayName
+	}
+	return string(m.AgentID)
+}

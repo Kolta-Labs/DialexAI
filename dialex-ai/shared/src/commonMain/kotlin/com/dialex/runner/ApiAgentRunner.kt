@@ -3,6 +3,8 @@ package com.dialex.runner
 import com.dialex.model.Agent
 import com.dialex.model.DebateMessage
 import com.dialex.model.Provider
+import com.dialex.model.isFrom
+import com.dialex.model.speaker
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
@@ -141,17 +143,17 @@ class ApiAgentRunner(
         val messages = buildJsonArray {
             transcript.forEachIndexed { i, m ->
                 add(buildJsonObject {
-                    put("role", if (m.agentId == agent.provider) "assistant" else "user")
+                    put("role", if (m.isFrom(agent)) "assistant" else "user")
                     if (i == transcript.lastIndex) {
                         put("content", buildJsonArray {
                             add(buildJsonObject {
                                 put("type", "text")
-                                put("text", "[${m.agentId}] ${m.content}")
+                                put("text", "[${m.speaker()}] ${m.content}")
                                 put("cache_control", cacheControl)
                             })
                         })
                     } else {
-                        put("content", "[${m.agentId}] ${m.content}")
+                        put("content", "[${m.speaker()}] ${m.content}")
                     }
                 })
             }
@@ -253,8 +255,8 @@ class ApiAgentRunner(
             add(buildJsonObject { put("role", "system"); put("content", system) })
             transcript.forEach { m ->
                 add(buildJsonObject {
-                    put("role", if (m.agentId == agent.provider) "assistant" else "user")
-                    put("content", "[${m.agentId}] ${m.content}")
+                    put("role", if (m.isFrom(agent)) "assistant" else "user")
+                    put("content", "[${m.speaker()}] ${m.content}")
                 })
             }
         }
@@ -339,8 +341,8 @@ class ApiAgentRunner(
         val contents = buildJsonArray {
             transcript.forEach { m ->
                 add(buildJsonObject {
-                    put("role", if (m.agentId == agent.provider) "model" else "user")
-                    put("parts", buildJsonArray { add(buildJsonObject { put("text", "[${m.agentId}] ${m.content}") }) })
+                    put("role", if (m.isFrom(agent)) "model" else "user")
+                    put("parts", buildJsonArray { add(buildJsonObject { put("text", "[${m.speaker()}] ${m.content}") }) })
                 })
             }
         }
@@ -433,8 +435,8 @@ class ApiAgentRunner(
             }
             transcript.forEach { m ->
                 add(buildJsonObject {
-                    put("role", if (m.agentId == agent.provider) "assistant" else "user")
-                    put("content", "[${m.agentId}] ${m.content}")
+                    put("role", if (m.isFrom(agent)) "assistant" else "user")
+                    put("content", "[${m.speaker()}] ${m.content}")
                 })
             }
         }

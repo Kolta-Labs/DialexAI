@@ -116,6 +116,14 @@ data class Agent(
  * just always using [Provider.brandName]. */
 fun Agent.label(): String = displayName.ifBlank { provider.brandName() }
 
+/** True when this agent seat wrote the message. Matched by seat ID so several personas on one
+ * provider (one API key) stay distinct; the provider only matches old messages with no seat ID. */
+fun DebateMessage.isFrom(agent: Agent): Boolean =
+    if (seatId.isNotBlank()) seatId == agent.id else agentId == agent.provider
+
+/** The name a transcript line is attributed to: the seat's display name, else the provider. */
+fun DebateMessage.speaker(): String = authorDisplayName.ifBlank { agentId.name }
+
 /** Source of the LLM model used for shared memory compression or deliverable synthesis. */
 @Serializable
 enum class ModelSource(val label: String) {
