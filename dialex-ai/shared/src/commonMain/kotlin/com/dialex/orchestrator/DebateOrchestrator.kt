@@ -12,6 +12,7 @@ import com.dialex.model.PricingTable
 import com.dialex.model.RoundMode
 import com.dialex.model.TokenBudgetAction
 import com.dialex.model.isFrom
+import com.dialex.model.moderatorAgent
 import com.dialex.model.label
 import com.dialex.runner.AgentReply
 import com.dialex.runner.AgentRunner
@@ -592,9 +593,7 @@ class DebateOrchestrator(
             Note: Note that the discussion concluded gracefully based on ${round - 1} completed deliberation rounds.
             """.trimIndent()
 
-            val moderatorAgent = config.moderation.moderatorProvider?.let { p ->
-                config.agents.find { it.provider == p }
-            } ?: config.primary
+            val moderatorAgent = config.moderatorAgent()
 
             return try {
                 val conclusionReply = runnerFor(moderatorAgent).respondWithRetry(
@@ -700,9 +699,7 @@ class DebateOrchestrator(
 
             if (triggerReason == null) return null
 
-            val moderatorAgent = config.moderation.moderatorProvider?.let { p ->
-                config.agents.find { it.provider == p }
-            } ?: config.primary
+            val moderatorAgent = config.moderatorAgent()
 
             val steeragePrompt = buildModeratorPrompt(triggerReason, modConfig.persona, config.topic, currentRound)
 
@@ -747,9 +744,7 @@ class DebateOrchestrator(
             ) return null
             if (currentRound % modConfig.checkpointFrequencyRounds != 0) return null
 
-            val moderatorAgent = config.moderation.moderatorProvider?.let { p ->
-                config.agents.find { it.provider == p }
-            } ?: config.primary
+            val moderatorAgent = config.moderatorAgent()
 
             val steeragePrompt = buildModeratorPrompt("PERIODIC_CHECKPOINT", modConfig.persona, config.topic, currentRound)
 
@@ -868,9 +863,7 @@ class DebateOrchestrator(
                     transcript += budgetMarker
                     onMessage(budgetMarker)
 
-                    val moderatorAgent = config.moderation.moderatorProvider?.let { p ->
-                        config.agents.find { it.provider == p }
-                    } ?: config.primary
+                    val moderatorAgent = config.moderatorAgent()
 
                     val budgetWrapUp = """
                     You are the Deliberation Moderator. $budgetReason.
@@ -979,9 +972,7 @@ class DebateOrchestrator(
         }
 
         // Conclude using designated moderator agent
-        val moderatorAgent = config.moderation.moderatorProvider?.let { p ->
-            config.agents.find { it.provider == p }
-        } ?: config.primary
+        val moderatorAgent = config.moderatorAgent()
 
         val baseWrapUp = when (config.depth.mode) {
             com.dialex.model.DepthMode.CASUAL -> """

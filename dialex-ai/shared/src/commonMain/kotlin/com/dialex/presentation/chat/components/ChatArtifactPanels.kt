@@ -80,6 +80,8 @@ import com.dialex.model.DeliverableFormat
 import com.dialex.model.Discussion
 import com.dialex.model.DiscussionArtifact
 import com.dialex.model.DiscussionStatus
+import com.dialex.model.label
+import com.dialex.model.moderatorAgent
 import com.dialex.presentation.chat.ChatTypographySettings
 import com.dialex.theme.CcPalette
 import com.dialex.ui.MarkdownText
@@ -100,8 +102,7 @@ fun DeliverableBlock(
     onGenerateFormat: ((DeliverableFormat) -> Unit)? = null,
     onExportDeliverable: ((content: String, name: String) -> Unit)? = null
 ) {
-    val moderatorProvider = discussion.config.moderation.moderatorProvider ?: discussion.config.primary.provider
-    val moderatorName = discussion.labelFor(moderatorProvider)
+    val moderatorName = discussion.config.moderatorAgent().label()
     val moderatorColor = Color(0xFFFF9800)
 
     var activeFormat by remember(discussion.id, milestoneRound) {

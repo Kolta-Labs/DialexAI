@@ -433,15 +433,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 			"- Key remaining points of contention.\n\n"+
 			"Note: Note that the discussion concluded gracefully based on %d completed deliberation rounds.", round-1)
 
-		moderatorAgent := config.Primary
-		if config.Moderation != nil && config.Moderation.ModeratorProvider != "" {
-			for _, a := range config.Agents() {
-				if a.Provider == config.Moderation.ModeratorProvider {
-					moderatorAgent = a
-					break
-				}
-			}
-		}
+		moderatorAgent := config.ModeratorAgent()
 
 		modCopy := moderatorAgent
 		modCopy.SystemPrompt = emergencyWrapUpPrompt
@@ -781,16 +773,8 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 		round++
 	}
 
-	// Conclude using the designated moderator agent (moderatorProvider if configured, otherwise primary)
-	moderatorAgent := config.Primary
-	if config.Moderation != nil && config.Moderation.ModeratorProvider != "" {
-		for _, a := range config.Agents() {
-			if a.Provider == config.Moderation.ModeratorProvider {
-				moderatorAgent = a
-				break
-			}
-		}
-	}
+	// Conclude using the designated moderator agent (moderator seat, else moderator provider, else primary)
+	moderatorAgent := config.ModeratorAgent()
 
 	var wrapUp string
 	if agreedEarly {

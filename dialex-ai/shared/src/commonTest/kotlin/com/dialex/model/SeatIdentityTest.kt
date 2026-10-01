@@ -28,4 +28,20 @@ class SeatIdentityTest {
     fun `system and observer messages are never an agent's own turn`() {
         assertFalse(DebateMessage(agentId = Provider.ANTHROPIC, seatId = "system", content = "note").isFrom(skeptic))
     }
+
+    private fun config(moderation: ModerationConfig) = DebateConfig(
+        topic = "t", primary = skeptic, secondary = optimist, moderation = moderation,
+    )
+
+    @Test
+    fun `moderator is the chosen seat even when both seats share a provider`() {
+        assertEquals(optimist.id, config(ModerationConfig(moderatorSeatId = optimist.id)).moderatorAgent().id)
+    }
+
+    @Test
+    fun `moderator falls back to provider, then primary`() {
+        assertEquals(skeptic.id, config(ModerationConfig(moderatorProvider = Provider.ANTHROPIC)).moderatorAgent().id)
+        assertEquals(skeptic.id, config(ModerationConfig()).moderatorAgent().id)
+        assertEquals(skeptic.id, config(ModerationConfig(moderatorSeatId = "gone")).moderatorAgent().id)
+    }
 }

@@ -112,6 +112,13 @@ data class Agent(
     val allowWebSearch: Boolean? = null,
 )
 
+/** The seat that moderates and writes the wrap-up: the configured seat, else the first seat of the
+ * configured provider (old discussions), else the primary agent. */
+fun DebateConfig.moderatorAgent(): Agent =
+    moderation.moderatorSeatId?.let { id -> agents.firstOrNull { it.id == id } }
+        ?: moderation.moderatorProvider?.let { p -> agents.firstOrNull { it.provider == p } }
+        ?: primary
+
 /** What this seat is actually called — the whole reason [displayName] exists instead of
  * just always using [Provider.brandName]. */
 fun Agent.label(): String = displayName.ifBlank { provider.brandName() }
@@ -426,6 +433,9 @@ data class ModerationConfig(
     val enabled: Boolean = false,
     /** Which provider acts as moderator. null = primary agent. */
     val moderatorProvider: Provider? = null,
+    /** Which seat acts as moderator, so one persona among several on the same provider can.
+     * Wins over [moderatorProvider]. null = fall back to it, then the primary agent. */
+    val moderatorSeatId: String? = null,
     /**
      * Strictness 1–5:
      *  1 = Passive (only breaks infinite loops, 5+ turns)

@@ -215,6 +215,9 @@ type DebateConfig struct {
 }
 
 // ModeratorConfig controls moderator agent loop-detection and summary behaviour.
+	// ModeratorSeatID picks the moderator by seat, so one persona among several on the same
+	// provider can moderate. It wins over ModeratorProvider, which stays for old discussions.
+	ModeratorSeatID     string   `json:"moderatorSeatId,omitempty"`
 type ModeratorConfig struct {
 	Enabled             bool     `json:"enabled"`
 	ModeratorProvider   Provider `json:"moderatorProvider,omitempty"`
@@ -285,6 +288,29 @@ func (c DebateConfig) Agents() []Agent {
 			agents = append(agents, *seat)
 		}
 	}
+// ModeratorAgent is the seat that moderates and writes the wrap-up: the configured seat, else the
+// first seat of the configured provider (old discussions), else the primary agent.
+func (c DebateConfig) ModeratorAgent() Agent {
+	if c.Moderation != nil {
+		agents := c.Agents()
+		if id := c.Moderation.ModeratorSeatID; id != "" {
+			for _, a := range agents {
+				if a.ID == id {
+					return a
+				}
+			}
+		}
+		if p := c.Moderation.ModeratorProvider; p != "" {
+			for _, a := range agents {
+				if a.Provider == p {
+					return a
+				}
+			}
+		}
+	}
+	return c.Primary
+}
+
 	return agents
 }
 
