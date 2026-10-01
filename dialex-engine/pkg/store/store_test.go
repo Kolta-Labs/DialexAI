@@ -253,3 +253,24 @@ func TestPasswordHashingRoundTrips(t *testing.T) {
 		t.Error("VerifyPassword() = true for a wrong password")
 	}
 }
+
+func TestSaveFailsClosedOnBadKey(t *testing.T) {
+	s, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := model.NewAppState()
+	st.ApiKeys.Anthropic = "sk-secret"
+	if err := s.Save(st); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(s.file)
+	s.secrets.key = []byte("bad") // invalid AES key length
+	if err := s.Save(st); err == nil {
+		t.Fatal("Save must fail when the key is unusable")
+	}
+	after, _ := os.ReadFile(s.file)
+	if string(before) != string(after) || strings.Contains(string(after), "sk-secret") {
+		t.Fatal("state file must be untouched and never hold plaintext")
+	}
+}

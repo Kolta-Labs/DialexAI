@@ -1,7 +1,6 @@
-// Package store is the Go port of Kotlin's AppStore — JSON persistence with atomic writes,
-// rolling backups, and API-key encryption at rest. Round-2 decision (ENGINE_SPEC_REVIEW.md):
-// the engine uses a fresh platform-standard config directory rather than reusing the legacy
-// `~/.aidebate` dotfile in place, with a one-time, one-way import if an old file is found.
+// Package store provides JSON persistence with atomic writes, rolling backups, and API-key
+// encryption at rest. It uses a platform-standard config directory rather than the legacy
+// `~/.aidebate` dotfile, with a one-time, one-way import if an old file is found.
 package store
 
 import (
@@ -84,8 +83,8 @@ func (s *Store) Dir() string {
 // Load reads the current state, importing a legacy state.json (see LegacyStatePath) on
 // first run if this store's own file doesn't exist yet and no import has happened before.
 // Falls back to the newest readable backup if the main file is corrupt, then to a fresh
-// AppState if nothing usable exists at all — a load never fails outright, matching the
-// Kotlin AppStore's "never crash the app over a bad state file" behavior.
+// AppState if nothing usable exists at all — a load never fails outright, so a bad
+// state file can never crash the app.
 func (s *Store) Load() (model.AppState, error) {
 	if _, err := os.Stat(s.file); os.IsNotExist(err) {
 		if imported, ok, importErr := s.tryImportLegacy(); importErr == nil && ok {
@@ -131,7 +130,11 @@ func (s *Store) loadFromBackup() (model.AppState, bool) {
 // back).
 func (s *Store) Save(state model.AppState) error {
 	toWrite := state
-	toWrite.ApiKeys = encryptApiKeys(state.ApiKeys, s.secrets)
+	keys, err := encryptApiKeys(state.ApiKeys, s.secrets)
+	if err != nil {
+		return err
+	}
+	toWrite.ApiKeys = keys
 	data, err := json.MarshalIndent(toWrite, "", "  ")
 	if err != nil {
 		return err

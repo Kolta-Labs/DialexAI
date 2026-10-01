@@ -119,3 +119,46 @@ func TestCliRunnerMissingCommandIsAClearError(t *testing.T) {
 		t.Errorf("error = %v, want a clear \"no CLI command configured\" message", err)
 	}
 }
+
+// claudeNamedScript is a fake CLI whose base name is "claude" so the trusted-workspace
+// flag logic applies. It logs argv to a file and reports a headless permission error.
+func claudeNamedScript(t *testing.T) (script, log string) {
+	t.Helper()
+	dir := t.TempDir()
+	log = filepath.Join(dir, "argv.log")
+	script = filepath.Join(dir, "claude")
+	body := "#!/bin/sh\necho \"$@\" >> " + log + "\necho 'headless mode cannot prompt for tool permission' >&2\nexit 1\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return script, log
+}
+
+func bypassRunner(t *testing.T, allow bool) (*CliAgentRunner, string) {
+	script, log := claudeNamedScript(t)
+	r := NewCliAgentRunnerWithContext(model.CliCommands{Anthropic: script},
+		[]model.FolderScope{{Path: t.TempDir(), IsTrusted: true}}, nil)
+	r.AllowPermissionBypass = allow
+	return r, log
+}
+
+func TestCliRunnerNeverBypassesPermissionsByDefault(t *testing.T) {
+	r, log := bypassRunner(t, false)
+	_, err := r.Respond(context.Background(), testAgent(), "t", "", "", nil, "")
+	if err == nil || !strings.Contains(err.Error(), "permission") {
+		t.Fatalf("want a permission error, got %v", err)
+	}
+	b, _ := os.ReadFile(log)
+	if strings.Contains(string(b), "dangerously-skip-permissions") || strings.Count(string(b), "\n") != 1 {
+		t.Fatalf("flag added or CLI retried without opt-in: %q", b)
+	}
+}
+
+func TestCliRunnerBypassWhenOptedIn(t *testing.T) {
+	r, log := bypassRunner(t, true)
+	r.Respond(context.Background(), testAgent(), "t", "", "", nil, "")
+	b, _ := os.ReadFile(log)
+	if !strings.Contains(string(b), "dangerously-skip-permissions") {
+		t.Fatalf("opt-in should add the flag: %q", b)
+	}
+}

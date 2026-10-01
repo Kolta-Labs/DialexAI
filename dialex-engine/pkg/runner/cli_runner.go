@@ -29,7 +29,14 @@ type CliAgentRunner struct {
 	TimeoutSeconds   int
 	WorkspaceFolders []model.FolderScope
 	Permissions      *model.PermissionConfig
+	// AllowPermissionBypass lets the runner add or auto-retry with --dangerously-skip-permissions
+	// for vendor CLIs. Off by default: a debate tool should not silently hand a third-party
+	// coding agent unprompted tool access. Set DIALEX_ALLOW_CLI_PERMISSION_BYPASS=1 to opt in;
+	// a flag the user wrote into their own CLI command is always honoured.
+	AllowPermissionBypass bool
 }
+
+func permissionBypassFromEnv() bool { return os.Getenv("DIALEX_ALLOW_CLI_PERMISSION_BYPASS") == "1" }
 
 // NewCliAgentRunner builds a runner with the same 120s default timeout the Kotlin
 // CliAgentRunner has.
@@ -44,6 +51,8 @@ func NewCliAgentRunnerWithContext(commands model.CliCommands, folders []model.Fo
 		TimeoutSeconds:   120,
 		WorkspaceFolders: folders,
 		Permissions:      permissions,
+
+		AllowPermissionBypass: permissionBypassFromEnv(),
 	}
 }
 
@@ -113,7 +122,7 @@ func (r *CliAgentRunner) Respond(
 	}
 
 	// For Claude Code or Gemini CLI in a trusted workspace, pass trust flags to avoid interactive prompt deadlocks
-	if trustedDir != "" && (baseBin == "claude" || baseBin == "agy") && !hasPermissionSkipFlag(tokens) {
+	if r.AllowPermissionBypass && trustedDir != "" && (baseBin == "claude" || baseBin == "agy") && !hasPermissionSkipFlag(tokens) {
 		cliArgs = append(cliArgs, "--dangerously-skip-permissions")
 	}
 
@@ -141,7 +150,7 @@ func (r *CliAgentRunner) Respond(
 
 	// If the CLI failed because headless mode could not prompt for tool permissions (e.g. jetski, claude, agy),
 	// auto-retry with --dangerously-skip-permissions under autonomous intervention rules.
-	if isPermissionError(output) && !hasPermissionSkipFlag(tokens) {
+	if r.AllowPermissionBypass && isPermissionError(output) && !hasPermissionSkipFlag(tokens) {
 		retryTokens := append([]string{}, tokens...)
 		retryTokens = append(retryTokens, "--dangerously-skip-permissions")
 		var retryOut bytes.Buffer
@@ -170,7 +179,7 @@ func (r *CliAgentRunner) Respond(
 			return AgentReply{}, fmt.Errorf("CLI '%s' needs re-authentication — run it interactively to log in, then try again", tokens[0])
 		}
 		if isPermissionError(output) {
-			return AgentReply{}, fmt.Errorf("CLI '%s' requires tool permission approval. Re-run with --dangerously-skip-permissions in Settings or allow tools in settings.json: %s", tokens[0], strings.TrimSpace(output))
+			return AgentReply{}, fmt.Errorf("CLI '%s' requires tool permission approval. Allow the tools in the CLI's own settings, or set DIALEX_ALLOW_CLI_PERMISSION_BYPASS=1 to let Dialex retry with --dangerously-skip-permissions (unsafe): %s", tokens[0], strings.TrimSpace(output))
 		}
 		return AgentReply{}, fmt.Errorf("CLI '%s' exited with an error: %s", command, strings.TrimSpace(output))
 	}
