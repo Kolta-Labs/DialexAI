@@ -326,10 +326,13 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (runResult mode
 		return model.EnsurePayloadWithinCeiling(forAgent.Provider, rawViews)
 	}
 
-	// speak returns (turnErrorMessage, hardStopErr). Exactly one is non-nil-ish on failure;
+	var activeSteerage string // latest moderator steerage, injected into later turns when enforced
+	interventions := 0        // drift/repetition interventions this Run (checkpoints are not counted)
+
+	// speak returns (message, turnErrorMessage, hardStopErr). Exactly one is non-nil-ish on failure;
 	// both are zero on success (and the reply is appended to transcript + reported via
 	// onMessage before returning).
-	speak := func(agent model.Agent, round int) (string, error) {
+	speak := func(agent model.Agent, round int) (*model.DebateMessage, string, error) {
 		isOpeningTurn := len(transcript) == 0 && agent.Provider == config.Primary.Provider
 		effective := agent
 
@@ -372,48 +375,155 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (runResult mode
 				break
 			}
 		}
-		reply, err := respondWithRetry(ctx, o.RunnerFor(effective), effective, effectiveTopic, turnContext, instructions.String(), applyIndependence(contextView(effective), effective, round, config.Independence, config.Agents()), "")
-		if err != nil {
-			if isCancellation(err) {
-				return "", err
+		antiLoop := config.EffectiveAntiLoop()
+		samplingCfg := AgentSampling(agent, config.EffectiveSampling())
+		candidates := loopCandidates(transcript, agent)
+		maxRetries := 0
+		if antiLoop.Enabled {
+			maxRetries = antiLoop.MaxRetries
+		}
+		var tempBump, freqBump float64
+		for attempt := 0; ; attempt++ {
+			if attempt > 0 && ctx.Err() != nil {
+				return nil, "", ctx.Err()
 			}
-			message := err.Error()
+			ns := NormalizeSampling(samplingCfg, agent.Provider, round, SamplingMaxRounds(config), false, tempBump, freqBump)
+			turnAgent := effective
+			applySampling(&turnAgent, ns)
+			turnInstructions := instructions.String()
+			if activeSteerage != "" {
+				turnInstructions += "\n\n[MANDATORY MODERATOR STEERAGE DIRECTIVE]\n" + activeSteerage
+			}
+			if ns.StyleDirective != "" {
+				turnInstructions += "\n\n" + ns.StyleDirective
+			}
+			if attempt > 0 {
+				turnInstructions += "\n" + AntiLoopDirective
+			}
+			reply, err := respondWithRetry(ctx, o.RunnerFor(turnAgent), turnAgent, effectiveTopic, turnContext, turnInstructions, applyIndependence(contextView(turnAgent), turnAgent, round, config.Independence, config.Agents()), "")
+			if err != nil {
+				if isCancellation(err) {
+					return nil, "", err
+				}
+				message := err.Error()
+				msg := model.DebateMessage{
+					SeatID:            agent.ID,
+					Provider:          agent.Provider,
+					AuthorDisplayName: agent.Label(),
+					AgentID:           agent.Provider,
+					Round:             round,
+					Content:           "Turn dropped due to network/provider error: " + message,
+					IsError:           true,
+					TimestampMs:       time.Now().UnixMilli(),
+				}
+				transcript = append(transcript, msg)
+				onMessage(msg)
+				return &msg, message, nil
+			}
+			if antiLoop.Enabled && len(candidates) > 0 &&
+				InspectLoop(reply.Content, candidates, antiLoop.MaxSimilarityThreshold, antiLoop.MaxContiguousDuplicateChars).Detected {
+				if attempt < maxRetries {
+					tempBump += antiLoop.RetryTemperatureBump
+					freqBump += loopRetryFrequencyBump
+					continue
+				}
+				fb := loopFallback(antiLoop.FallbackAction, agent, config.Primary.Provider, round, reply)
+				if fb != nil {
+					fb.TimestampMs = time.Now().UnixMilli()
+					transcript = append(transcript, *fb)
+					onMessage(*fb)
+				}
+				return fb, "", nil
+			}
 			msg := model.DebateMessage{
 				SeatID:            agent.ID,
 				Provider:          agent.Provider,
 				AuthorDisplayName: agent.Label(),
 				AgentID:           agent.Provider,
 				Round:             round,
-				Content:           "Turn dropped due to network/provider error: " + message,
-				IsError:           true,
+				Content:           reply.Content,
+				Agreed:            consensus.IsTurnAgreed(reply.Content),
+				IsLoopRecovered:   attempt > 0,
+				TokensIn:          reply.TokensIn,
+				TokensOut:         reply.TokensOut,
+				TokensCached:      reply.TokensCached,
 				TimestampMs:       time.Now().UnixMilli(),
 			}
 			transcript = append(transcript, msg)
 			onMessage(msg)
-			return message, nil
+			return &msg, "", nil
+		}
+	}
+
+	// moderatorTurn runs one moderator turn (drift, repetition or checkpoint) on the configured
+	// moderator seat. A failed turn is skipped (nil, nil); only cancellation is an error.
+	moderatorTurn := func(reason string, round int) (*model.DebateMessage, error) {
+		mod := config.EffectiveModeration()
+		modAgent := config.ModeratorAgent()
+		modAgent.SystemPrompt = BuildModeratorPrompt(reason, mod, config.Topic, round)
+		override := ""
+		if m := strings.TrimSpace(mod.ModeratorModel); m != "" && m != model.DefaultModeratorConfig().ModeratorModel {
+			override = m
+		}
+		reply, err := respondWithRetry(ctx, o.RunnerFor(modAgent), modAgent, config.Topic, config.CommonContext, "", contextView(modAgent), override)
+		if err != nil {
+			if isCancellation(err) {
+				return nil, err
+			}
+			return nil, nil
 		}
 		msg := model.DebateMessage{
-			SeatID:            agent.ID,
-			Provider:          agent.Provider,
-			AuthorDisplayName: agent.Label(),
-			AgentID:           agent.Provider,
-			Round:             round,
-			Content:           reply.Content,
-			Agreed:            consensus.IsTurnAgreed(reply.Content),
-			TokensIn:          reply.TokensIn,
-			TokensOut:         reply.TokensOut,
-			TokensCached:      reply.TokensCached,
-			TimestampMs:       time.Now().UnixMilli(),
+			SeatID:                  "moderator",
+			Provider:                modAgent.Provider,
+			AuthorDisplayName:       ModeratorAuthorName(mod.Persona),
+			AgentID:                 modAgent.Provider,
+			Round:                   round,
+			Content:                 reply.Content,
+			IsModeratorIntervention: true,
+			TokensIn:                reply.TokensIn,
+			TokensOut:               reply.TokensOut,
+			TokensCached:            reply.TokensCached,
+			TimestampMs:             time.Now().UnixMilli(),
 		}
 		transcript = append(transcript, msg)
 		onMessage(msg)
-		return "", nil
+		if mod.EnforceSteerageDirectives {
+			activeSteerage = msg.Content
+		}
+		return &msg, nil
+	}
+
+	// maybeIntervene runs the per-turn moderator checks: topical drift, then (if
+	// DetectRepetition) a stalled-novelty streak.
+	maybeIntervene := func(round int, last model.DebateMessage) error {
+		mod := config.EffectiveModeration()
+		if !mod.Enabled {
+			return nil
+		}
+		reason, ok := "", false
+		if !last.IsStalledConcession {
+			reason, ok = ShouldIntervene(mod, config.Topic, last, interventions)
+		}
+		if !ok {
+			reason, ok = ShouldInterveneOnRepetition(mod, config.EffectiveAntiLoop(), transcript, interventions)
+		}
+		if !ok {
+			return nil
+		}
+		iv, err := moderatorTurn(reason, round)
+		if err != nil {
+			return err
+		}
+		if iv != nil {
+			interventions++
+		}
+		return nil
 	}
 
 	handleTurnFailureGracefully := func(failedAgent model.Agent, round int, errorMessage string) (model.DebateResult, error) {
 		round1Turns := 0
 		for _, m := range transcript {
-			if m.Round == 1 && !m.IsError && !m.IsSystem && !m.IsUserComment {
+			if m.Round == 1 && !m.IsError && !m.IsSystem && !m.IsUserComment && !m.IsModeratorIntervention {
 				round1Turns++
 			}
 		}
@@ -435,6 +545,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (runResult mode
 
 		modCopy := moderatorAgent
 		modCopy.SystemPrompt = emergencyWrapUpPrompt
+		applySampling(&modCopy, NormalizeSampling(AgentSampling(modCopy, config.EffectiveSampling()), modCopy.Provider, round, SamplingMaxRounds(config), true, 0, 0))
 		conclusionReply, err := respondWithRetry(ctx, o.RunnerFor(modCopy), modCopy, effectiveTopic, effectiveContext, "", contextView(modCopy), "")
 		if err != nil {
 			if isCancellation(err) {
@@ -484,7 +595,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (runResult mode
 	agentCount := len(agents)
 	agentTurns := make([]model.DebateMessage, 0, len(transcript))
 	for _, m := range transcript {
-		if !m.IsUserComment && !m.IsError {
+		if !m.IsUserComment && !m.IsError && !m.IsModeratorIntervention {
 			agentTurns = append(agentTurns, m)
 		}
 	}
@@ -534,12 +645,17 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (runResult mode
 			if err := maybeCompact(); err != nil && isCancellation(err) {
 				return model.DebateResult{Transcript: transcript, TensionPairs: currentTensions, RetrievedEvidence: currentEvidence}, err
 			}
-			turnErr, hardStop := speak(agent, round)
+			spoken, turnErr, hardStop := speak(agent, round)
 			if hardStop != nil {
 				return model.DebateResult{Transcript: transcript, TensionPairs: currentTensions, RetrievedEvidence: currentEvidence}, hardStop
 			}
 			if turnErr != "" {
 				return handleTurnFailureGracefully(agent, round, turnErr)
+			}
+			if spoken != nil && !spoken.IsError && !spoken.IsSystem && !spoken.IsModeratorIntervention {
+				if err := maybeIntervene(round, *spoken); err != nil {
+					return model.DebateResult{Transcript: transcript, TensionPairs: currentTensions, RetrievedEvidence: currentEvidence}, err
+				}
 			}
 			if tokenBudget > 0 {
 				used := sumTokens(transcript)
@@ -584,7 +700,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (runResult mode
 		// Dialectic Tension Evaluation at round boundary
 		var roundMessages []model.DebateMessage
 		for _, m := range transcript {
-			if m.Round == round && !m.IsError && !m.IsSystem && !m.IsUserComment {
+			if m.Round == round && !m.IsError && !m.IsSystem && !m.IsUserComment && !m.IsModeratorIntervention {
 				roundMessages = append(roundMessages, m)
 			}
 		}
@@ -678,6 +794,11 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (runResult mode
 				onMessage(marker)
 			}
 		}
+		if ShouldCheckpoint(config.EffectiveModeration(), round) {
+			if _, err := moderatorTurn(TriggerPeriodicCheckpoint, round); err != nil {
+				return model.DebateResult{Transcript: transcript, TensionPairs: currentTensions, RetrievedEvidence: currentEvidence}, err
+			}
+		}
 		round++
 	}
 
@@ -708,6 +829,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (runResult mode
 	}
 	concludeAgent := moderatorAgent
 	concludeAgent.SystemPrompt = wrapUp
+	applySampling(&concludeAgent, NormalizeSampling(AgentSampling(concludeAgent, config.EffectiveSampling()), concludeAgent.Provider, round, SamplingMaxRounds(config), true, 0, 0))
 	conclusion, err := respondWithRetry(ctx, o.RunnerFor(concludeAgent), concludeAgent, config.Topic, config.CommonContext, instructions.String(), contextView(moderatorAgent), "")
 	var earlyExitReason *string
 	if agreedEarly {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -310,11 +311,14 @@ type chatMessage struct {
 }
 
 type chatRequest struct {
-	Model       string        `json:"model"`
-	Temperature *float64      `json:"temperature,omitempty"`
-	TopP        *float64      `json:"top_p,omitempty"`
-	MaxTokens   *int          `json:"max_tokens,omitempty"`
-	Messages    []chatMessage `json:"messages"`
+	Model       string   `json:"model"`
+	Temperature *float64 `json:"temperature,omitempty"`
+	TopP        *float64 `json:"top_p,omitempty"`
+	MaxTokens   *int     `json:"max_tokens,omitempty"`
+	// Penalties are sent only when set; the orchestrator clears them for providers without them.
+	FrequencyPenalty *float64      `json:"frequency_penalty,omitempty"`
+	PresencePenalty  *float64      `json:"presence_penalty,omitempty"`
+	Messages         []chatMessage `json:"messages"`
 }
 
 type ChatUsage struct {
@@ -344,11 +348,16 @@ func (r *ApiAgentRunner) callOpenAICompatible(ctx context.Context, agent model.A
 		messages = append(messages, chatMessage{Role: role, Content: fmt.Sprintf("[%s] %s", speakerLabel(m), m.Content)})
 	}
 	body := chatRequest{
-		Model:       agent.Model,
-		Temperature: agent.Temperature,
-		TopP:        agent.TopP,
-		MaxTokens:   agent.MaxTokens,
-		Messages:    messages,
+		Model:            agent.Model,
+		Temperature:      agent.Temperature,
+		TopP:             agent.TopP,
+		MaxTokens:        agent.MaxTokens,
+		FrequencyPenalty: agent.FrequencyPenalty,
+		PresencePenalty:  agent.PresencePenalty,
+		Messages:         messages,
+	}
+	if agent.Provider == model.ProviderOpenAI && rejectsSampling(agent.Model) {
+		body.Temperature, body.TopP, body.FrequencyPenalty, body.PresencePenalty = nil, nil, nil, nil
 	}
 	var resp chatResponse
 	err := postJSON(ctx, r.Client, url, map[string]string{"Authorization": "Bearer " + key}, body, &resp)
@@ -506,9 +515,11 @@ type ollamaMessage struct {
 }
 
 type ollamaOptions struct {
-	Temperature *float64 `json:"temperature,omitempty"`
-	TopP        *float64 `json:"top_p,omitempty"`
-	NumPredict  *int     `json:"num_predict,omitempty"`
+	Temperature     *float64 `json:"temperature,omitempty"`
+	TopP            *float64 `json:"top_p,omitempty"`
+	NumPredict      *int     `json:"num_predict,omitempty"`
+	RepeatPenalty   *float64 `json:"repeat_penalty,omitempty"`
+	PresencePenalty *float64 `json:"presence_penalty,omitempty"`
 }
 
 type ollamaRequest struct {
@@ -548,11 +559,17 @@ func (r *ApiAgentRunner) callOllama(ctx context.Context, agent model.Agent, endp
 	}
 
 	var opts *ollamaOptions
-	if agent.Temperature != nil || agent.TopP != nil || agent.MaxTokens != nil {
+	if agent.Temperature != nil || agent.TopP != nil || agent.MaxTokens != nil || agent.FrequencyPenalty != nil || agent.PresencePenalty != nil {
 		opts = &ollamaOptions{
-			Temperature: agent.Temperature,
-			TopP:        agent.TopP,
-			NumPredict:  agent.MaxTokens,
+			Temperature:     agent.Temperature,
+			TopP:            agent.TopP,
+			NumPredict:      agent.MaxTokens,
+			PresencePenalty: agent.PresencePenalty,
+		}
+		if agent.FrequencyPenalty != nil {
+			// Ollama has no frequency_penalty; map it like the Kotlin runner did.
+			rp := 1.0 + math.Max(*agent.FrequencyPenalty, 0)*0.5
+			opts.RepeatPenalty = &rp
 		}
 	}
 
@@ -576,4 +593,16 @@ func (r *ApiAgentRunner) callOllama(ctx context.Context, agent model.Agent, endp
 		reply.TokensOut = intPtr(resp.EvalCount)
 	}
 	return reply, nil
+}
+
+// rejectsSampling reports OpenAI reasoning models (o-series, gpt-5), whose API returns 400 for
+// temperature/top_p/penalties.
+func rejectsSampling(modelName string) bool {
+	m := strings.ToLower(modelName)
+	for _, p := range []string{"o1", "o3", "o4", "gpt-5"} {
+		if strings.HasPrefix(m, p) {
+			return true
+		}
+	}
+	return false
 }

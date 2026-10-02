@@ -235,3 +235,30 @@ func TestSameProviderSeatsAreToldApart(t *testing.T) {
 	}
 	_ = optimist
 }
+
+func TestOpenAISamplingParamsSentExceptForReasoningModels(t *testing.T) {
+	var got map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = nil
+		json.NewDecoder(r.Body).Decode(&got)
+		w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer server.Close()
+	r := NewApiAgentRunner(map[model.Provider]string{model.ProviderOpenAI: "k"})
+	r.URLs[model.ProviderOpenAI] = server.URL
+
+	f, p, temp := 0.3, 0.0, 0.7
+	for modelName, want := range map[string]bool{"gpt-4o": true, "gpt-5": false, "o3-mini": false} {
+		a := model.NewAgent(model.ProviderOpenAI, modelName)
+		a.Temperature, a.FrequencyPenalty, a.PresencePenalty = &temp, &f, &p
+		if _, err := r.Respond(context.Background(), a, "t", "", "", nil, ""); err != nil {
+			t.Fatal(err)
+		}
+		_, hasT := got["temperature"]
+		_, hasF := got["frequency_penalty"]
+		_, hasP := got["presence_penalty"]
+		if hasT != want || hasF != want || hasP != want {
+			t.Errorf("%s: temperature/frequency/presence sent = %v/%v/%v, want all %v", modelName, hasT, hasF, hasP, want)
+		}
+	}
+}

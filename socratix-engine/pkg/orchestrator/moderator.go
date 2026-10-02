@@ -14,6 +14,9 @@ import (
 const (
 	TriggerTopicalDrift       = "TOPICAL_DRIFT"
 	TriggerPeriodicCheckpoint = "PERIODIC_CHECKPOINT"
+	// TriggerRepetition is a Go addition: consecutive turns showed no novelty (see
+	// ShouldInterveneOnRepetition). Kotlin never used the strictness/loop-detection settings.
+	TriggerRepetition = "REPETITION"
 )
 
 // ModeratorTriggerTurns maps strictness to the consecutive no-novelty turns tolerated before
@@ -144,6 +147,24 @@ Format:
 
 **Mandatory Focus for Next Round:**
 [Targeted question forcing participants to directly resolve the contested points]`, pd, topic, round)
+	case TriggerRepetition:
+		return fmt.Sprintf(`%[1]s
+
+[TRIGGER: REPETITION DETECTED]
+The council is deliberating: "%[2]s".
+The last several turns in Round %[3]d restated earlier arguments without adding anything new.
+
+Intervene authoritatively:
+1. Name the argument that is being repeated and state that it is settled or unproductive.
+2. Demand a genuinely new angle, new evidence, or a concession.
+3. Provide a MANDATORY FOCUS QUESTION that moves the debate forward.
+
+Format:
+### 🏛️ Deliberation Chair — Intervention (Round %[3]d)
+**Order in the council.** [Which argument is looping]
+
+**Mandatory Steerage for Next Turn:**
+[Concrete question that requires new reasoning]`, pd, topic, round)
 	default:
 		return fmt.Sprintf("%s\nDeliver an authoritative steerage intervention to refocus the debate on \"%s\".", pd, topic)
 	}
