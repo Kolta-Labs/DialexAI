@@ -359,6 +359,9 @@ func (r *ApiAgentRunner) callOpenAICompatible(ctx context.Context, agent model.A
 	if agent.Provider == model.ProviderOpenAI && rejectsSampling(agent.Model) {
 		body.Temperature, body.TopP, body.FrequencyPenalty, body.PresencePenalty = nil, nil, nil, nil
 	}
+	if agent.Provider == model.ProviderGrok && grokRejectsPenalties(agent.Model) {
+		body.FrequencyPenalty, body.PresencePenalty = nil, nil
+	}
 	var resp chatResponse
 	err := postJSON(ctx, r.Client, url, map[string]string{"Authorization": "Bearer " + key}, body, &resp)
 	if err != nil {
@@ -605,4 +608,18 @@ func rejectsSampling(modelName string) bool {
 		}
 	}
 	return false
+}
+
+// grokRejectsPenalties reports Grok models that return an error when presence/frequency
+// penalties are sent (xAI: reasoning models reject them). Only models known to be
+// non-reasoning get penalties; the default "grok-4-fast" and every grok-4.x are reasoning.
+func grokRejectsPenalties(modelName string) bool {
+	m := strings.ToLower(modelName)
+	if strings.Contains(m, "non-reasoning") {
+		return false
+	}
+	if strings.HasPrefix(m, "grok-3") && !strings.Contains(m, "mini") {
+		return false
+	}
+	return !strings.HasPrefix(m, "grok-2")
 }

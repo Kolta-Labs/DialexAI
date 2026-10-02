@@ -262,3 +262,115 @@ func TestOpenAISamplingParamsSentExceptForReasoningModels(t *testing.T) {
 		}
 	}
 }
+
+// captureBody serves a canned reply and records the last request body.
+func captureBody(t *testing.T, reply string) (*httptest.Server, *map[string]any) {
+	t.Helper()
+	got := map[string]any{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for k := range got {
+			delete(got, k)
+		}
+		json.NewDecoder(r.Body).Decode(&got)
+		w.Write([]byte(reply))
+	}))
+	t.Cleanup(server.Close)
+	return server, &got
+}
+
+func samplingAgent(provider model.Provider, modelName string) model.Agent {
+	a := model.NewAgent(provider, modelName)
+	temp, topP, f, p := 0.7, 0.9, 0.3, 0.2
+	a.Temperature, a.TopP, a.FrequencyPenalty, a.PresencePenalty = &temp, &topP, &f, &p
+	return a
+}
+
+func TestGrokPenaltiesOnlyForNonReasoningModels(t *testing.T) {
+	server, got := captureBody(t, `{"choices":[{"message":{"content":"ok"}}]}`)
+	r := NewApiAgentRunner(map[model.Provider]string{model.ProviderGrok: "k"})
+	r.URLs[model.ProviderGrok] = server.URL
+	for modelName, want := range map[string]bool{
+		"grok-4-fast": false, "grok-4": false, "grok-4.5": false, "grok-3-mini": false,
+		"grok-4-fast-non-reasoning": true, "grok-3": true, "grok-2-1212": true,
+	} {
+		if _, err := r.Respond(context.Background(), samplingAgent(model.ProviderGrok, modelName), "t", "", "", nil, ""); err != nil {
+			t.Fatal(err)
+		}
+		_, hasF := (*got)["frequency_penalty"]
+		_, hasP := (*got)["presence_penalty"]
+		if hasF != want || hasP != want {
+			t.Errorf("%s: penalties sent = %v/%v, want %v", modelName, hasF, hasP, want)
+		}
+		if _, ok := (*got)["temperature"]; !ok {
+			t.Errorf("%s: temperature must still be sent", modelName)
+		}
+	}
+}
+
+func TestDeepSeekAndMistralSendBothPenalties(t *testing.T) {
+	server, got := captureBody(t, `{"choices":[{"message":{"content":"ok"}}]}`)
+	for _, p := range []model.Provider{model.ProviderDeepSeek, model.ProviderMistral} {
+		r := NewApiAgentRunner(map[model.Provider]string{p: "k"})
+		r.URLs[p] = server.URL
+		if _, err := r.Respond(context.Background(), samplingAgent(p, "some-model"), "t", "", "", nil, ""); err != nil {
+			t.Fatal(err)
+		}
+		if (*got)["frequency_penalty"] != 0.3 || (*got)["presence_penalty"] != 0.2 || (*got)["top_p"] != 0.9 {
+			t.Errorf("%s: body = %v, want both penalties and top_p", p, *got)
+		}
+	}
+}
+
+func TestOllamaOptionsMapPenalties(t *testing.T) {
+	server, got := captureBody(t, `{"message":{"content":"ok"}}`)
+	r := NewApiAgentRunner(map[model.Provider]string{model.ProviderOllama: server.URL})
+	if _, err := r.Respond(context.Background(), samplingAgent(model.ProviderOllama, "llama3"), "t", "", "", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	opts, _ := (*got)["options"].(map[string]any)
+	if opts == nil {
+		t.Fatalf("no options in body: %v", *got)
+	}
+	if opts["temperature"] != 0.7 || opts["top_p"] != 0.9 || opts["presence_penalty"] != 0.2 {
+		t.Errorf("options = %v", opts)
+	}
+	if rp, _ := opts["repeat_penalty"].(float64); rp < 1.149 || rp > 1.151 {
+		t.Errorf("repeat_penalty = %v, want 1 + 0.3*0.5 = 1.15", opts["repeat_penalty"])
+	}
+	if _, bad := opts["frequency_penalty"]; bad {
+		t.Error("Ollama has no frequency_penalty; it must be mapped to repeat_penalty")
+	}
+}
+
+func TestAnthropicSendsTemperatureAndTopPButNoPenalties(t *testing.T) {
+	server, got := captureBody(t, `{"content":[{"text":"ok"}]}`)
+	r := NewApiAgentRunner(map[model.Provider]string{model.ProviderAnthropic: "k"})
+	r.URLs[model.ProviderAnthropic] = server.URL
+	if _, err := r.Respond(context.Background(), samplingAgent(model.ProviderAnthropic, "claude-sonnet-5-5"), "t", "", "", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if (*got)["temperature"] != 0.7 || (*got)["top_p"] != 0.9 {
+		t.Errorf("body = %v, want temperature and top_p", *got)
+	}
+	for _, k := range []string{"frequency_penalty", "presence_penalty"} {
+		if _, bad := (*got)[k]; bad {
+			t.Errorf("Anthropic has no %s", k)
+		}
+	}
+}
+
+func TestGeminiSendsGenerationConfigButNoPenalties(t *testing.T) {
+	server, got := captureBody(t, `{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}`)
+	r := NewApiAgentRunner(map[model.Provider]string{model.ProviderGemini: "k"})
+	r.GeminiBaseURL = server.URL
+	if _, err := r.Respond(context.Background(), samplingAgent(model.ProviderGemini, "gemini-3.7-flash"), "t", "", "", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := (*got)["generationConfig"].(map[string]any)
+	if cfg == nil || cfg["temperature"] != 0.7 || cfg["topP"] != 0.9 {
+		t.Errorf("generationConfig = %v, want temperature and topP", cfg)
+	}
+	if _, bad := cfg["frequencyPenalty"]; bad {
+		t.Error("Gemini must not get penalties")
+	}
+}
