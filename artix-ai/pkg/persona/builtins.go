@@ -236,10 +236,10 @@ func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 				DomainAuthority: "Code ergonomics, idiomatic language patterns, build performance, developer joy, and low-cognitive-overhead abstractions.",
 			},
 			EpistemicBias: model.EpistemicBias{
-				PrimaryMode:         model.ReasoningPragmaticEngineering,
-				TheoryVsPractice:    0.80,
-				SafetyVsVelocity:    0.60,
-				RigorThreshold:      0.88,
+				PrimaryMode:      model.ReasoningPragmaticEngineering,
+				TheoryVsPractice: 0.80,
+				SafetyVsVelocity: 0.60,
+				RigorThreshold:   0.88,
 			},
 			AdversarialPosture: model.AdversarialPosture{
 				Stance:        model.StanceAnalyticalDeconstructor,

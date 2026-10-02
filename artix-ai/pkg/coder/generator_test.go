@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"socratix/pkg/model"
-	"socratix/pkg/runner"
 	"artix/pkg/persona"
 	"artix/pkg/repo"
 	"artix/pkg/reviewer"
 	"artix/pkg/sandbox"
 	"artix/pkg/spec"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 const patchTo = `--- a/counter.txt

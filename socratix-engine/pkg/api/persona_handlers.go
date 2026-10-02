@@ -10,7 +10,6 @@ import (
 	"socratix/pkg/model"
 )
 
-
 func (s *Server) handleListPersonas(w http.ResponseWriter, r *http.Request) {
 	state, err := s.Store.Load()
 	if err != nil {
@@ -128,7 +127,6 @@ type personaChatResponse struct {
 
 var jsonCodeBlockRegex = regexp.MustCompile("(?s)```(?:json)?\\s*(\\{.*?\\})\\s*```")
 
-
 func (s *Server) handleChatPersona(w http.ResponseWriter, r *http.Request) {
 	var req personaChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -224,7 +222,6 @@ When you output or refine a persona, ALWAYS provide a conversational response fo
 		})
 	}
 
-
 	reply, err := s.runnerForAgent(agent).Respond(r.Context(), agent, "Persona Design Consultation", "", "", transcript, "")
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to run persona assistant: "+err.Error())
@@ -249,7 +246,6 @@ When you output or refine a persona, ALWAYS provide a conversational response fo
 		ParsedPersona: parsed,
 	})
 }
-
 
 func (s *Server) handleGetDebateUsage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

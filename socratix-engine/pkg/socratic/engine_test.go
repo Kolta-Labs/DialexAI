@@ -131,7 +131,9 @@ func (m *mockGraphStore) UpsertEdge(ctx context.Context, e *graph.Edge) error {
 	return nil
 }
 
-func (m *mockGraphStore) TouchNode(ctx context.Context, id string, now func() int64) error { return nil }
+func (m *mockGraphStore) TouchNode(ctx context.Context, id string, now func() int64) error {
+	return nil
+}
 func (m *mockGraphStore) GetNode(ctx context.Context, id string, now func() int64) (*graph.Node, error) {
 	return nil, nil
 }

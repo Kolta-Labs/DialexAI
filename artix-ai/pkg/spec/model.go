@@ -16,7 +16,7 @@ const (
 
 // Scenario represents a Gherkin-formatted acceptance test case.
 type Scenario struct {
-	Name string `json:"name"`
+	Name  string `json:"name"`
 	Given string `json:"given"`
 	When  string `json:"when"`
 	Then  string `json:"then"`
@@ -40,24 +40,24 @@ type FileMutation struct {
 
 // StorySpec represents a complete, verified technical specification for a feature or story.
 type StorySpec struct {
-	ID                  string                 `json:"id"`
-	Title               string                 `json:"title"`
-	UserStory           string                 `json:"userStory"`
-	InScope             []string               `json:"inScope"`
-	OutOfScope          []string               `json:"outOfScope"`
-	AcceptanceCriteria  []Scenario             `json:"acceptanceCriteria"`
-	Decisions           []ArchitectureDecision `json:"decisions"`
-	FileManifest        []FileMutation         `json:"fileManifest"`
-	TestCommands        []string               `json:"testCommands"`
-	Style               StyleVector            `json:"style"`
-	RawMarkdown         string                 `json:"rawMarkdown,omitempty"`
+	ID                 string                 `json:"id"`
+	Title              string                 `json:"title"`
+	UserStory          string                 `json:"userStory"`
+	InScope            []string               `json:"inScope"`
+	OutOfScope         []string               `json:"outOfScope"`
+	AcceptanceCriteria []Scenario             `json:"acceptanceCriteria"`
+	Decisions          []ArchitectureDecision `json:"decisions"`
+	FileManifest       []FileMutation         `json:"fileManifest"`
+	TestCommands       []string               `json:"testCommands"`
+	Style              StyleVector            `json:"style"`
+	RawMarkdown        string                 `json:"rawMarkdown,omitempty"`
 }
 
 // PlanningContext contains all background data required for council deliberation.
 type PlanningContext struct {
-	StoryPrompt string                           `json:"storyPrompt"`
-	RepoContext *repo.RepositoryContext          `json:"repoContext"`
+	StoryPrompt string                            `json:"storyPrompt"`
+	RepoContext *repo.RepositoryContext           `json:"repoContext"`
 	Steering    []steering.PersonaSteeringContext `json:"steering"`
-	Style       StyleVector                      `json:"style"`
-	Attached    []string                         `json:"attached,omitempty"`
+	Style       StyleVector                       `json:"style"`
+	Attached    []string                          `json:"attached,omitempty"`
 }

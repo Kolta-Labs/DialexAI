@@ -34,12 +34,12 @@ type PullRequestRequest struct {
 
 // PullRequestResponse contains the created PR details.
 type PullRequestResponse struct {
-	ID        int64  `json:"id"`
-	Number    int    `json:"number"`
-	Title     string `json:"title"`
-	URL       string `json:"url"`
-	HTMLURL   string `json:"htmlUrl"`
-	State     string `json:"state"`
+	ID      int64  `json:"id"`
+	Number  int    `json:"number"`
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	HTMLURL string `json:"htmlUrl"`
+	State   string `json:"state"`
 }
 
 // ForgeClient is the unified interface for remote Git hosts.

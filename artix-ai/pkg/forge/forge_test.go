@@ -194,7 +194,7 @@ func TestWebhookServer_GitLab_Issue(t *testing.T) {
 		"project": map[string]string{
 			"git_http_url":        "https://gitlab.com/group/proj.git",
 			"path_with_namespace": "group/proj",
-			"default_branch":     "main",
+			"default_branch":      "main",
 		},
 		"object_attributes": map[string]string{
 			"title":       "Fix auth timeout",

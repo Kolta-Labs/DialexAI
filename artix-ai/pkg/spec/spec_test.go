@@ -71,11 +71,11 @@ func TestCavemanStyle(t *testing.T) {
 
 func TestFormatAndParseRoundtrip(t *testing.T) {
 	spec := &StorySpec{
-		ID:        "STORY-101",
-		Title:     "OAuth2 PKCE Flow",
-		UserStory: "As an engineer, implement PKCE to eliminate client secret leakage.",
-		Style:     StyleStandard,
-		InScope:   []string{"PKCE code challenge verification", "Unit tests"},
+		ID:         "STORY-101",
+		Title:      "OAuth2 PKCE Flow",
+		UserStory:  "As an engineer, implement PKCE to eliminate client secret leakage.",
+		Style:      StyleStandard,
+		InScope:    []string{"PKCE code challenge verification", "Unit tests"},
 		OutOfScope: []string{"Legacy implicit flow"},
 		AcceptanceCriteria: []Scenario{
 			{
@@ -87,10 +87,10 @@ func TestFormatAndParseRoundtrip(t *testing.T) {
 		},
 		Decisions: []ArchitectureDecision{
 			{
-				ID:       "ADR-01",
-				Title:    "Use SHA-256 for code_challenge",
-				Context:  "S256 is the RFC 7636 recommended challenge method.",
-				Decision: "Mandate S256; reject plain challenges.",
+				ID:           "ADR-01",
+				Title:        "Use SHA-256 for code_challenge",
+				Context:      "S256 is the RFC 7636 recommended challenge method.",
+				Decision:     "Mandate S256; reject plain challenges.",
 				Consequences: []string{"Increases crypto safety"},
 			},
 		},

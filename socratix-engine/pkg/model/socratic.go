@@ -4,7 +4,7 @@ package model
 type DiscussionMode string
 
 const (
-	DiscussionModeCouncil          DiscussionMode = "COUNCIL"
+	DiscussionModeCouncil           DiscussionMode = "COUNCIL"
 	DiscussionModeSocraticInterview DiscussionMode = "SOCRATIC_INTERVIEW"
 )
 
@@ -12,11 +12,11 @@ const (
 type SocraticStance string
 
 const (
-	StanceRuthlessElenchus      SocraticStance = "RUTHLESS_ELENCHUS"       // Contradiction hunting & falsification
-	StanceMaieuticArchitect     SocraticStance = "MAIEUTIC_ARCHITECT"      // Midwife of latent requirements & invariants
-	StanceFirstPrinciples       SocraticStance = "FIRST_PRINCIPLES"        // Axiomatic deconstruction down to physics/math
-	StanceAdversarialRedTeam    SocraticStance = "ADVERSARIAL_RED_TEAM"    // Zero-trust malicious saboteur
-	StanceAporiaBoundaryPusher  SocraticStance = "APORIA_BOUNDARY_PUSHER"  // Catapulting to asymptotic limits & 100x load
+	StanceRuthlessElenchus     SocraticStance = "RUTHLESS_ELENCHUS"      // Contradiction hunting & falsification
+	StanceMaieuticArchitect    SocraticStance = "MAIEUTIC_ARCHITECT"     // Midwife of latent requirements & invariants
+	StanceFirstPrinciples      SocraticStance = "FIRST_PRINCIPLES"       // Axiomatic deconstruction down to physics/math
+	StanceAdversarialRedTeam   SocraticStance = "ADVERSARIAL_RED_TEAM"   // Zero-trust malicious saboteur
+	StanceAporiaBoundaryPusher SocraticStance = "APORIA_BOUNDARY_PUSHER" // Catapulting to asymptotic limits & 100x load
 )
 
 // AllSocraticStances provides the ordered list of all supported stances.
@@ -49,11 +49,11 @@ func (s SocraticStance) DisplayName() string {
 type SocraticStage string
 
 const (
-	StageHypothesisExtraction SocraticStage = "HYPOTHESIS_EXTRACTION"
-	StageAssumptionSurfacing  SocraticStage = "ASSUMPTION_SURFACING"
+	StageHypothesisExtraction  SocraticStage = "HYPOTHESIS_EXTRACTION"
+	StageAssumptionSurfacing   SocraticStage = "ASSUMPTION_SURFACING"
 	StageElenchusStressTesting SocraticStage = "ELENCHUS_STRESS_TESTING"
-	StageAporiaReconciliation SocraticStage = "APORIA_RECONCILIATION"
-	StageMaieuticHardening    SocraticStage = "MAIEUTIC_HARDENING"
+	StageAporiaReconciliation  SocraticStage = "APORIA_RECONCILIATION"
+	StageMaieuticHardening     SocraticStage = "MAIEUTIC_HARDENING"
 )
 
 // LedgerItemType classifies an assumption's status in the Epistemic Ledger.

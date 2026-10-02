@@ -21,21 +21,21 @@ import (
 
 // RemoteWorkerTask configures an autonomous server execution job.
 type RemoteWorkerTask struct {
-	Target       RemoteRepoTarget `json:"target"`
-	Auth         ForgeAuth        `json:"auth"`
-	Prompt       string           `json:"prompt"`
-	Domain       string           `json:"domain"`
+	Target       RemoteRepoTarget                        `json:"target"`
+	Auth         ForgeAuth                               `json:"auth"`
+	Prompt       string                                  `json:"prompt"`
+	Domain       string                                  `json:"domain"`
 	MockPatchGen func(round int, feedback string) string // for tests
 }
 
 // RemoteWorkerResult contains the completed job artifacts.
 type RemoteWorkerResult struct {
-	Success      bool                 `json:"success"`
-	Branch       string               `json:"branch"`
-	Spec         *spec.StorySpec      `json:"spec"`
-	PullRequest  *PullRequestResponse `json:"pullRequest,omitempty"`
-	LoopResult   *coder.LoopResult    `json:"loopResult,omitempty"`
-	Error        string               `json:"error,omitempty"`
+	Success     bool                 `json:"success"`
+	Branch      string               `json:"branch"`
+	Spec        *spec.StorySpec      `json:"spec"`
+	PullRequest *PullRequestResponse `json:"pullRequest,omitempty"`
+	LoopResult  *coder.LoopResult    `json:"loopResult,omitempty"`
+	Error       string               `json:"error,omitempty"`
 }
 
 // RemoteWorker coordinates server-side autonomous repository tasks.

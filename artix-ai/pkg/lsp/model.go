@@ -59,7 +59,7 @@ type DidOpenTextDocumentParams struct {
 
 // DidChangeTextDocumentParams payload.
 type DidChangeTextDocumentParams struct {
-	TextDocument   TextDocumentIdentifier          `json:"textDocument"`
+	TextDocument   TextDocumentIdentifier           `json:"textDocument"`
 	ContentChanges []TextDocumentContentChangeEvent `json:"contentChanges"`
 }
 

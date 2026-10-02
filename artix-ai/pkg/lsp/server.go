@@ -142,7 +142,7 @@ func (s *Server) handleRequest(req *LSPRequest) {
 	case "initialize":
 		result := map[string]interface{}{
 			"capabilities": map[string]interface{}{
-				"textDocumentSync": 1, // Full sync
+				"textDocumentSync":   1, // Full sync
 				"codeActionProvider": true,
 				"codeLensProvider": map[string]interface{}{
 					"resolveProvider": false,

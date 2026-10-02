@@ -20,12 +20,12 @@ type aiSetupAgentSelection struct {
 }
 
 type aiSetupRequest struct {
-	Prompt         string                   `json:"prompt"`
-	ProjectID      string                   `json:"projectId"`
-	Model          string                   `json:"model,omitempty"`
-	Provider       string                   `json:"provider,omitempty"`
-	AutoStart      bool                     `json:"autoStart,omitempty"`
-	NumAgents      int                      `json:"numAgents,omitempty"`
+	Prompt         string                  `json:"prompt"`
+	ProjectID      string                  `json:"projectId"`
+	Model          string                  `json:"model,omitempty"`
+	Provider       string                  `json:"provider,omitempty"`
+	AutoStart      bool                    `json:"autoStart,omitempty"`
+	NumAgents      int                     `json:"numAgents,omitempty"`
 	SelectedAgents []aiSetupAgentSelection `json:"selectedAgents,omitempty"`
 }
 

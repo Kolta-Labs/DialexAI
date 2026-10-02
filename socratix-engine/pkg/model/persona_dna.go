@@ -4,30 +4,30 @@ package model
 type PrimaryReasoningMode string
 
 const (
-	ReasoningFirstPrinciples     PrimaryReasoningMode = "FIRST_PRINCIPLES"
+	ReasoningFirstPrinciples      PrimaryReasoningMode = "FIRST_PRINCIPLES"
 	ReasoningEmpiricalStatistical PrimaryReasoningMode = "EMPIRICAL_STATISTICAL"
-	ReasoningHistoricalAnalogy   PrimaryReasoningMode = "HISTORICAL_ANALOGY"
+	ReasoningHistoricalAnalogy    PrimaryReasoningMode = "HISTORICAL_ANALOGY"
 	ReasoningPragmaticEngineering PrimaryReasoningMode = "PRAGMATIC_ENGINEERING"
-	ReasoningFormalLogical       PrimaryReasoningMode = "FORMAL_LOGICAL"
+	ReasoningFormalLogical        PrimaryReasoningMode = "FORMAL_LOGICAL"
 )
 
 // CombatStance defines the adversarial reaction style when challenged.
 type CombatStance string
 
 const (
-	StanceUnyieldingDogmatic     CombatStance = "UNYIELDING_DOGMATIC"
-	StanceCounterAttacking       CombatStance = "COUNTER_ATTACKING"
-	StanceSocraticInverter       CombatStance = "SOCRATIC_INVERTER"
+	StanceUnyieldingDogmatic      CombatStance = "UNYIELDING_DOGMATIC"
+	StanceCounterAttacking        CombatStance = "COUNTER_ATTACKING"
+	StanceSocraticInverter        CombatStance = "SOCRATIC_INVERTER"
 	StanceAnalyticalDeconstructor CombatStance = "ANALYTICAL_DECONSTRUCTOR"
-	StancePragmaticAccommodator  CombatStance = "PRAGMATIC_ACCOMMODATOR"
+	StancePragmaticAccommodator   CombatStance = "PRAGMATIC_ACCOMMODATOR"
 )
 
 // SynthesisStyle defines consensus behavior.
 type SynthesisStyle string
 
 const (
-	SynthesisSeekSynthesis        SynthesisStyle = "SEEK_SYNTHESIS"
-	SynthesisHoldMinorityReport   SynthesisStyle = "HOLD_MINORITY_REPORT"
+	SynthesisSeekSynthesis         SynthesisStyle = "SEEK_SYNTHESIS"
+	SynthesisHoldMinorityReport    SynthesisStyle = "HOLD_MINORITY_REPORT"
 	SynthesisConditionalCompromise SynthesisStyle = "CONDITIONAL_COMPROMISE"
 )
 
@@ -43,7 +43,7 @@ type HeuristicRule struct {
 // TabooSpace defines negative constraints.
 type TabooSpace struct {
 	ForbiddenArguments   []string `json:"forbiddenArguments" yaml:"forbiddenArguments"`
-	RejectedFallacies     []string `json:"rejectedFallacies" yaml:"rejectedFallacies"`
+	RejectedFallacies    []string `json:"rejectedFallacies" yaml:"rejectedFallacies"`
 	IntolerableBuzzwords []string `json:"intolerableBuzzwords" yaml:"intolerableBuzzwords"`
 	PenaltyAction        string   `json:"penaltyAction" yaml:"penaltyAction"`
 }
@@ -58,11 +58,11 @@ type CoreIdentity struct {
 
 // EpistemicBias defines Layer 2.
 type EpistemicBias struct {
-	PrimaryMode        PrimaryReasoningMode `json:"primaryMode" yaml:"primaryMode"`
-	TheoryVsPractice   float64              `json:"theoryVsPractice" yaml:"theoryVsPractice"`         // 0.0 = Theory, 1.0 = Practice
-	NoveltyVsProvenance float64              `json:"noveltyVsProvenance" yaml:"noveltyVsProvenance"`   // 0.0 = Novelty, 1.0 = Provenance
-	SafetyVsVelocity   float64              `json:"safetyVsVelocity" yaml:"safetyVsVelocity"`         // 0.0 = Safety, 1.0 = Velocity
-	RigorThreshold     float64              `json:"rigorThreshold" yaml:"rigorThreshold"`             // 0.0 - 1.0
+	PrimaryMode         PrimaryReasoningMode `json:"primaryMode" yaml:"primaryMode"`
+	TheoryVsPractice    float64              `json:"theoryVsPractice" yaml:"theoryVsPractice"`       // 0.0 = Theory, 1.0 = Practice
+	NoveltyVsProvenance float64              `json:"noveltyVsProvenance" yaml:"noveltyVsProvenance"` // 0.0 = Novelty, 1.0 = Provenance
+	SafetyVsVelocity    float64              `json:"safetyVsVelocity" yaml:"safetyVsVelocity"`       // 0.0 = Safety, 1.0 = Velocity
+	RigorThreshold      float64              `json:"rigorThreshold" yaml:"rigorThreshold"`           // 0.0 - 1.0
 }
 
 // CommunicationVector defines Layer 3.
@@ -77,7 +77,7 @@ type CommunicationVector struct {
 // DomainOntology defines Layer 6.
 type DomainOntology struct {
 	MandatoryStandards     []string `json:"mandatoryStandards" yaml:"mandatoryStandards"`
-	AuthoritativeRFCs       []string `json:"authoritativeRFCs" yaml:"authoritativeRFCs"`
+	AuthoritativeRFCs      []string `json:"authoritativeRFCs" yaml:"authoritativeRFCs"`
 	SpecializedLexicon     []string `json:"specializedLexicon" yaml:"specializedLexicon"`
 	EnforceFormalCitations bool     `json:"enforceFormalCitations" yaml:"enforceFormalCitations"`
 }

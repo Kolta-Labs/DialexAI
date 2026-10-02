@@ -22,15 +22,15 @@ const (
 
 // RepositoryContext represents the discovered metadata of a repository workspace.
 type RepositoryContext struct {
-	RootDir         string      `json:"rootDir"`
-	IsGit           bool        `json:"isGit"`
-	CurrentBranch   string      `json:"currentBranch,omitempty"`
-	HeadCommit      string      `json:"headCommit,omitempty"`
-	IsDirty         bool        `json:"isDirty"`
-	UntrackedFiles  []string    `json:"untrackedFiles,omitempty"`
-	ModifiedFiles   []string    `json:"modifiedFiles,omitempty"`
-	DetectedEcos    []Ecosystem `json:"detectedEcosystems"`
-	BuildManifests  []string    `json:"buildManifests"`
+	RootDir        string      `json:"rootDir"`
+	IsGit          bool        `json:"isGit"`
+	CurrentBranch  string      `json:"currentBranch,omitempty"`
+	HeadCommit     string      `json:"headCommit,omitempty"`
+	IsDirty        bool        `json:"isDirty"`
+	UntrackedFiles []string    `json:"untrackedFiles,omitempty"`
+	ModifiedFiles  []string    `json:"modifiedFiles,omitempty"`
+	DetectedEcos   []Ecosystem `json:"detectedEcosystems"`
+	BuildManifests []string    `json:"buildManifests"`
 }
 
 // DetectContext discovers the repository root and git/build metadata starting from startPath.
@@ -77,8 +77,8 @@ func findRepoRoot(start string) (string, bool) {
 
 func (c *RepositoryContext) detectBuildSystems() {
 	checks := []struct {
-		eco      Ecosystem
-		files    []string
+		eco   Ecosystem
+		files []string
 	}{
 		{
 			eco:   EcosystemGradleKMP,

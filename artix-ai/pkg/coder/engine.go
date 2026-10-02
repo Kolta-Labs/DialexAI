@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"socratix/pkg/model"
 	"artix/pkg/persona"
 	"artix/pkg/repo"
 	"artix/pkg/spec"
 	"artix/pkg/steering"
+	"socratix/pkg/model"
 )
 
 // DomainCoder compiles prompts and manages generation for domain-specific implementation.

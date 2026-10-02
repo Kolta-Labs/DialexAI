@@ -736,4 +736,3 @@ func checkCliLogins() map[string]bool {
 
 	return logins
 }
-

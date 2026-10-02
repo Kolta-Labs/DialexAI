@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
-	"socratix/pkg/model"
 	"gopkg.in/yaml.v3"
+	"socratix/pkg/model"
 )
 
 // ImportDNA parses a raw byte slice (JSON or YAML) into a validated PersonaDNA struct.

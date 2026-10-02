@@ -359,4 +359,3 @@ func cleanSocraticTitle(s string, maxLen int) string {
 	}
 	return cleaned[:maxLen] + "..."
 }
-

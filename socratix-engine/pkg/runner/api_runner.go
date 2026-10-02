@@ -387,9 +387,9 @@ type geminiGenerationConfig struct {
 }
 
 type geminiRequest struct {
-	SystemInstruction *geminiContent          `json:"systemInstruction,omitempty"`
-	Contents          []geminiContent         `json:"contents"`
-	GenerationConfig  *geminiGenerationConfig `json:"generationConfig,omitempty"`
+	SystemInstruction *geminiContent           `json:"systemInstruction,omitempty"`
+	Contents          []geminiContent          `json:"contents"`
+	GenerationConfig  *geminiGenerationConfig  `json:"generationConfig,omitempty"`
 	Tools             []map[string]interface{} `json:"tools,omitempty"`
 }
 
@@ -577,4 +577,3 @@ func (r *ApiAgentRunner) callOllama(ctx context.Context, agent model.Agent, endp
 	}
 	return reply, nil
 }
-

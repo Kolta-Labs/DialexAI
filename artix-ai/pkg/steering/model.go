@@ -6,10 +6,10 @@ import "socratix/pkg/model"
 type SourceType string
 
 const (
-	SourceLocalFile   SourceType = "local_file"
-	SourceStandard    SourceType = "standard_symlink"
-	SourceRemoteGit   SourceType = "remote_git"
-	SourceRemoteHTTP  SourceType = "remote_http"
+	SourceLocalFile    SourceType = "local_file"
+	SourceStandard     SourceType = "standard_symlink"
+	SourceRemoteGit    SourceType = "remote_git"
+	SourceRemoteHTTP   SourceType = "remote_http"
 	SourceLocalSibling SourceType = "local_sibling_path"
 )
 

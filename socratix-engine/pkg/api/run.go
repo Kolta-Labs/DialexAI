@@ -300,9 +300,9 @@ func (s *Server) executeRun(ctx context.Context, controller *runController, id s
 				}
 			}
 		},
-		GraphStore:          s.GraphStore,
-		ProjectID:           discussion.ProjectID,
-		InitialEvidence:     discussion.RetrievedEvidence,
+		GraphStore:      s.GraphStore,
+		ProjectID:       discussion.ProjectID,
+		InitialEvidence: discussion.RetrievedEvidence,
 		OnEvidenceRetrieved: func(ev []model.RoundEvidence) {
 			discussion.RetrievedEvidence = ev
 			st, err := s.Store.Load()
@@ -316,13 +316,13 @@ func (s *Server) executeRun(ctx context.Context, controller *runController, id s
 				}
 			}
 		},
-		IsStopped:         controller.isPaused,
-		GetInjected:       controller.drainInjected,
-		CompactionModel:   compactionModel,
-		TokenBudget:       tokenBudget,
-		OnMessage:         onMessage,
-		AttachedFolders:   discussion.AttachedFolders,
-		Permissions:       discussion.Config.Permissions,
+		IsStopped:       controller.isPaused,
+		GetInjected:     controller.drainInjected,
+		CompactionModel: compactionModel,
+		TokenBudget:     tokenBudget,
+		OnMessage:       onMessage,
+		AttachedFolders: discussion.AttachedFolders,
+		Permissions:     discussion.Config.Permissions,
 	})
 
 	discussion.Transcript = result.Transcript
@@ -649,4 +649,3 @@ func (s *Server) handleDeliverable(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, deliverableResponse{Content: reply.Content})
 }
-

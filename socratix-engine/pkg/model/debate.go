@@ -171,15 +171,15 @@ type DebateConfig struct {
 	// Shared background every agent sees.
 	CommonContext string `json:"commonContext"`
 	// Third shared card — extra background/data beyond the topic and context.
-	CommonInfo string    `json:"commonInfo"`
-	Primary    Agent     `json:"claude"`
-	Secondary  *Agent    `json:"gemini,omitempty"`
-	Tertiary   *Agent    `json:"chatgpt,omitempty"`
-	Quaternary *Agent    `json:"quaternary,omitempty"`
-	Quinary    *Agent    `json:"quinary,omitempty"`
+	CommonInfo string `json:"commonInfo"`
+	Primary    Agent  `json:"claude"`
+	Secondary  *Agent `json:"gemini,omitempty"`
+	Tertiary   *Agent `json:"chatgpt,omitempty"`
+	Quaternary *Agent `json:"quaternary,omitempty"`
+	Quinary    *Agent `json:"quinary,omitempty"`
 	// Sixth optional seat (spec v2 — 6-agent expansion).
-	Senary     *Agent    `json:"senary,omitempty"`
-	RoundMode  RoundMode `json:"roundMode"`
+	Senary    *Agent    `json:"senary,omitempty"`
+	RoundMode RoundMode `json:"roundMode"`
 	// Only used when RoundMode == FIXED. Default: 10
 	MaxRounds int `json:"maxRounds"`
 	// MasterInstructions is the frozen snapshot of the global master instructions
@@ -227,14 +227,14 @@ type IndependenceConfig struct {
 
 // ModeratorConfig controls moderator agent loop-detection and summary behaviour.
 type ModeratorConfig struct {
-	Enabled             bool     `json:"enabled"`
-	ModeratorProvider   Provider `json:"moderatorProvider,omitempty"`
+	Enabled           bool     `json:"enabled"`
+	ModeratorProvider Provider `json:"moderatorProvider,omitempty"`
 	// ModeratorSeatID picks the moderator by seat, so one persona among several on the same
 	// provider can moderate. It wins over ModeratorProvider, which stays for old discussions.
-	ModeratorSeatID     string   `json:"moderatorSeatId,omitempty"`
-	Strictness          int      `json:"strictness,omitempty"`
-	DetectTopicDrift    bool     `json:"detectTopicDrift,omitempty"`
-	TopicDriftDirective string   `json:"topicDriftDirective,omitempty"`
+	ModeratorSeatID     string `json:"moderatorSeatId,omitempty"`
+	Strictness          int    `json:"strictness,omitempty"`
+	DetectTopicDrift    bool   `json:"detectTopicDrift,omitempty"`
+	TopicDriftDirective string `json:"topicDriftDirective,omitempty"`
 }
 
 // TokenBudgetAction specifies whether to warn or hard-stop when token budget is reached.
@@ -247,14 +247,14 @@ const (
 
 // PermissionConfig encapsulates tool and execution permissions for debates.
 type PermissionConfig struct {
-	AllowWebSearch         bool     `json:"allowWebSearch"`
-	AllowFileRead          bool     `json:"allowFileRead"`
-	AllowSafeShell         bool     `json:"allowSafeShell"`
-	AllowFileWrite         bool     `json:"allowFileWrite"`
-	AllowShellCommands     bool     `json:"allowShellCommands"`
-	AllowMcpTools          bool            `json:"allowMcpTools"`
-	AllowedCommandPatterns []string        `json:"allowedCommandPatterns,omitempty"`
-	AllowedDomains         []string        `json:"allowedDomains,omitempty"`
+	AllowWebSearch          bool            `json:"allowWebSearch"`
+	AllowFileRead           bool            `json:"allowFileRead"`
+	AllowSafeShell          bool            `json:"allowSafeShell"`
+	AllowFileWrite          bool            `json:"allowFileWrite"`
+	AllowShellCommands      bool            `json:"allowShellCommands"`
+	AllowMcpTools           bool            `json:"allowMcpTools"`
+	AllowedCommandPatterns  []string        `json:"allowedCommandPatterns,omitempty"`
+	AllowedDomains          []string        `json:"allowedDomains,omitempty"`
 	AgentWebSearchOverrides map[string]bool `json:"agentWebSearchOverrides,omitempty"`
 }
 
@@ -327,27 +327,27 @@ func (c DebateConfig) ModeratorAgent() Agent {
 
 // DebateMessage is one turn's persisted result.
 type DebateMessage struct {
-	SeatID                  string   `json:"seatId,omitempty"`
-	Provider                Provider `json:"provider,omitempty"`
-	AuthorDisplayName       string   `json:"authorDisplayName,omitempty"`
-	AgentID                 Provider `json:"agentId"`
-	Round                   int      `json:"round"`
-	Content                 string   `json:"content"`
+	SeatID            string   `json:"seatId,omitempty"`
+	Provider          Provider `json:"provider,omitempty"`
+	AuthorDisplayName string   `json:"authorDisplayName,omitempty"`
+	AgentID           Provider `json:"agentId"`
+	Round             int      `json:"round"`
+	Content           string   `json:"content"`
 	// Unused by current runs — kept so old persisted transcripts still decode.
-	IsFinalOpinion          bool     `json:"isFinalOpinion"`
+	IsFinalOpinion bool `json:"isFinalOpinion"`
 	// True when Content is an error (a turn failed) rather than an agent's reply.
-	IsError                 bool     `json:"isError"`
+	IsError bool `json:"isError"`
 	// True when this turn is a system annotation or status notification.
-	IsSystem                bool     `json:"isSystem,omitempty"`
+	IsSystem bool `json:"isSystem,omitempty"`
 	// True when this message was injected by human user as a comment.
-	IsUserComment           bool     `json:"isUserComment,omitempty"`
+	IsUserComment bool `json:"isUserComment,omitempty"`
 	// True when this turn was generated as a moderator intervention.
-	IsModeratorIntervention bool     `json:"isModeratorIntervention,omitempty"`
+	IsModeratorIntervention bool `json:"isModeratorIntervention,omitempty"`
 	// Best-effort — only API providers report usage; CLI turns leave these nil.
-	TokensIn                *int     `json:"tokensIn,omitempty"`
-	TokensOut               *int     `json:"tokensOut,omitempty"`
-	TokensCached            *int     `json:"tokensCached,omitempty"`
-	TimestampMs             int64    `json:"timestampMs,omitempty"`
+	TokensIn     *int  `json:"tokensIn,omitempty"`
+	TokensOut    *int  `json:"tokensOut,omitempty"`
+	TokensCached *int  `json:"tokensCached,omitempty"`
+	TimestampMs  int64 `json:"timestampMs,omitempty"`
 }
 
 type ConsensusMode string
@@ -379,24 +379,24 @@ type ConsensusConfig struct {
 // DebateResult is the outcome of one DebateOrchestrator.Run call — not persisted as-is,
 // folded into a Discussion by the caller.
 type DebateResult struct {
-	Transcript         []DebateMessage `json:"transcript"`
+	Transcript []DebateMessage `json:"transcript"`
 	// Single verdict from the primary agent — only produced when FIXED rounds complete
 	// naturally or the debate ends in unanimous agreement.
-	Conclusion         *string         `json:"conclusion,omitempty"`
+	Conclusion *string `json:"conclusion,omitempty"`
 	// Set when a turn failed and ended the debate early.
-	Error              *string         `json:"error,omitempty"`
+	Error *string `json:"error,omitempty"`
 	// True when Pause halted the debate mid-flight — resumable via the same transcript.
-	Paused             bool            `json:"paused"`
+	Paused bool `json:"paused"`
 	// Set when emergency synthesis salvaged an outcome after a turn failure.
-	Warning            *string         `json:"warning,omitempty"`
-	IsConsensusReached bool            `json:"isConsensusReached,omitempty"`
-	EarlyExitReason    *string         `json:"earlyExitReason,omitempty"`
-	TensionPairs       []TensionPair   `json:"tensionPairs,omitempty"`
+	Warning            *string       `json:"warning,omitempty"`
+	IsConsensusReached bool          `json:"isConsensusReached,omitempty"`
+	EarlyExitReason    *string       `json:"earlyExitReason,omitempty"`
+	TensionPairs       []TensionPair `json:"tensionPairs,omitempty"`
 	// TensionFallbackRounds is how many rounds had their disagreements guessed by a keyword
 	// heuristic because the model analysis failed. When non-zero, TensionPairs is not a model finding.
-	TensionFallbackRounds int `json:"tensionFallbackRounds,omitempty"`
-	RetrievedEvidence  []RoundEvidence `json:"retrievedEvidence,omitempty"`
-	CredenceLedger     *CredenceLedger `json:"credenceLedger,omitempty"`
+	TensionFallbackRounds int             `json:"tensionFallbackRounds,omitempty"`
+	RetrievedEvidence     []RoundEvidence `json:"retrievedEvidence,omitempty"`
+	CredenceLedger        *CredenceLedger `json:"credenceLedger,omitempty"`
 }
 
 var ProviderMaxInputLimits = map[Provider]int{

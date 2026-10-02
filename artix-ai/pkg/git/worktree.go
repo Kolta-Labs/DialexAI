@@ -11,22 +11,22 @@ import (
 
 // RoundCheckpoint records a snapshot of code and feedback at an iteration round.
 type RoundCheckpoint struct {
-	Round       int       `json:"round"`
-	CommitHash  string    `json:"commitHash"`
-	Diff        string    `json:"diff"`
-	Feedback    string    `json:"feedback"`
-	Approved    bool      `json:"approved"`
-	Timestamp   time.Time `json:"timestamp"`
+	Round      int       `json:"round"`
+	CommitHash string    `json:"commitHash"`
+	Diff       string    `json:"diff"`
+	Feedback   string    `json:"feedback"`
+	Approved   bool      `json:"approved"`
+	Timestamp  time.Time `json:"timestamp"`
 }
 
 // ShadowWorktree represents an isolated, background git worktree.
 type ShadowWorktree struct {
-	TaskID       string            `json:"taskId"`
-	Branch       string            `json:"branch"`
-	BaseBranch   string            `json:"baseBranch"`
-	Path         string            `json:"path"`
-	Checkpoints  []RoundCheckpoint `json:"checkpoints"`
-	repoRoot     string
+	TaskID      string            `json:"taskId"`
+	Branch      string            `json:"branch"`
+	BaseBranch  string            `json:"baseBranch"`
+	Path        string            `json:"path"`
+	Checkpoints []RoundCheckpoint `json:"checkpoints"`
+	repoRoot    string
 }
 
 // WorktreeManager manages isolated shadow execution environments.

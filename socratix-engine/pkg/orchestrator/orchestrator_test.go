@@ -578,5 +578,3 @@ func TestRoundAwareDynamicGraphRetrieval_InjectsEvidenceIntoSubsequentRound(t *t
 		t.Errorf("expected system notification marker in transcript for retrieved evidence")
 	}
 }
-
-

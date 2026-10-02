@@ -7,9 +7,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"socratix/pkg/model"
 	"artix/pkg/persona"
 	"artix/pkg/repo"
+	"socratix/pkg/model"
 )
 
 // CouncilMember represents an assembled participant in the planning council.

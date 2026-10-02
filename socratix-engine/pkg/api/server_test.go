@@ -772,7 +772,3 @@ func TestChatPersona(t *testing.T) {
 		t.Errorf("expected persona name 'Cloud Security Lead', got '%s'", chatResp.ParsedPersona.Name)
 	}
 }
-
-
-
-

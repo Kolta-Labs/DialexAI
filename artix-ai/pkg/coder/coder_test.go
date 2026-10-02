@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"socratix/pkg/model"
 	"artix/pkg/git"
 	"artix/pkg/persona"
 	"artix/pkg/repo"
@@ -16,6 +15,7 @@ import (
 	"artix/pkg/sandbox"
 	"artix/pkg/spec"
 	"artix/pkg/steering"
+	"socratix/pkg/model"
 )
 
 func TestDomainCoderPromptCompilation(t *testing.T) {

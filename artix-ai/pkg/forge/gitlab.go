@@ -71,11 +71,11 @@ func (c *GitLabClient) CreatePullRequest(target *RemoteRepoTarget, req *PullRequ
 	}
 
 	var glResp struct {
-		ID      int64  `json:"id"`
-		IID     int    `json:"iid"`
-		Title   string `json:"title"`
-		WebURL  string `json:"web_url"`
-		State   string `json:"state"`
+		ID     int64  `json:"id"`
+		IID    int    `json:"iid"`
+		Title  string `json:"title"`
+		WebURL string `json:"web_url"`
+		State  string `json:"state"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&glResp); err != nil {
