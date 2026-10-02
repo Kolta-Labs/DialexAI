@@ -16,7 +16,7 @@ DialexAI/
 │   │   │   ├── domain/             # Pure Kotlin Domain (UseCases, Repositories, Entities)
 │   │   │   ├── data/               # Ktor HTTP Client, SSE Parser, AppLogStore
 │   │   │   ├── model/              # Domain Models (Discussion, Agent, Persona, Deliverable)
-│   │   │   ├── orchestrator/       # Client-Side Deliberation & Consensus Logic
+│   │   │   ├── orchestrator/       # Client-side cost/deliberation estimates (the Go engine is the only orchestrator)
 │   │   │   ├── presentation/       # MVI Screens (Chat, Setup, Settings, Workspace)
 │   │   │   ├── theme/              # CcPalette, LocalCcColors, Typography Tokens
 │   │   │   └── ui/                 # Reusable Compose Multiplatform Components

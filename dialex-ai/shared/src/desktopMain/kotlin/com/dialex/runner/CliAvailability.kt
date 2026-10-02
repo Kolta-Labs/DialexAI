@@ -2,8 +2,8 @@ package com.dialex.runner
 
 /**
  * Checks whether each known CLI binary resolves to a real file via [resolveBinary] — i.e.
- * the same lookup [CliAgentRunner] actually uses to launch it, so this status can't say
- * "installed" for something that then fails to spawn (or vice versa).
+ * the same login-shell PATH lookup used everywhere in the desktop app, so this status
+ * matches what can actually be launched.
  * Google renamed the Gemini CLI to "Antigravity" — its binary is `agy`; older installs
  * may still have `gemini` or `antigravity`, so all three are checked.
  */

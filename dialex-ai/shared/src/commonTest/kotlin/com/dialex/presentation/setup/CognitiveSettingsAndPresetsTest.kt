@@ -8,7 +8,6 @@ import com.dialex.model.DiscussionPresets
 import com.dialex.model.PresetArchetype
 import com.dialex.model.Provider
 import com.dialex.model.defaultModel
-import com.dialex.model.TemperatureSchedule
 import com.dialex.orchestrator.DeliberationEstimator
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -40,8 +39,6 @@ class CognitiveSettingsAndPresetsTest {
         val quickTake = DiscussionPresets.applyArchetype(baseConfig, PresetArchetype.QUICK_TAKE)
         assertEquals(2, quickTake.maxRounds)
         assertEquals(DepthMode.CASUAL, quickTake.depth.mode)
-        assertEquals(TemperatureSchedule.STATIC, quickTake.sampling.schedule)
-        assertEquals(0.70, quickTake.sampling.temperature, 0.01)
         assertEquals(ConsensusMode.SIMPLE_MAJORITY, quickTake.consensus.mode)
         assertEquals(PresetArchetype.QUICK_TAKE, DiscussionPresets.detectArchetype(quickTake))
 
@@ -49,8 +46,6 @@ class CognitiveSettingsAndPresetsTest {
         val exec = DiscussionPresets.applyArchetype(baseConfig, PresetArchetype.EXECUTIVE_DECISION)
         assertEquals(3, exec.maxRounds)
         assertEquals(DepthMode.EXECUTIVE, exec.depth.mode)
-        assertEquals(TemperatureSchedule.LINEAR_COOLING, exec.sampling.schedule)
-        assertEquals(0.80, exec.sampling.temperature, 0.01)
         assertEquals(ConsensusMode.SUPERMAJORITY, exec.consensus.mode)
         assertEquals(PresetArchetype.EXECUTIVE_DECISION, DiscussionPresets.detectArchetype(exec))
 
@@ -58,15 +53,12 @@ class CognitiveSettingsAndPresetsTest {
         val deep = DiscussionPresets.applyArchetype(baseConfig, PresetArchetype.DEEP_RESEARCH)
         assertEquals(5, deep.maxRounds)
         assertEquals(DepthMode.ACADEMIC, deep.depth.mode)
-        assertEquals(TemperatureSchedule.THREE_STAGE_DELIBERATION, deep.sampling.schedule)
         assertEquals(ConsensusMode.UNANIMOUS, deep.consensus.mode)
         assertEquals(PresetArchetype.DEEP_RESEARCH, DiscussionPresets.detectArchetype(deep))
 
         // 4. Red-Team Stress-Test
         val redTeam = DiscussionPresets.applyArchetype(baseConfig, PresetArchetype.RED_TEAM_STRESS_TEST)
         assertEquals(4, redTeam.maxRounds)
-        assertEquals(TemperatureSchedule.STATIC, redTeam.sampling.schedule)
-        assertEquals(0.90, redTeam.sampling.temperature, 0.01)
         assertEquals(ConsensusMode.DISABLED, redTeam.consensus.mode)
         assertEquals(PresetArchetype.RED_TEAM_STRESS_TEST, DiscussionPresets.detectArchetype(redTeam))
     }
@@ -106,9 +98,7 @@ class CognitiveSettingsAndPresetsTest {
         assertEquals(PresetArchetype.QUICK_TAKE, DiscussionPresets.detectArchetype(quickTake))
 
         // Modify a single parameter manually in Level 3 drawer
-        val modified = quickTake.copy(
-            sampling = quickTake.sampling.copy(temperature = 0.33)
-        )
+        val modified = quickTake.copy(maxRounds = quickTake.maxRounds + 1)
         assertEquals(PresetArchetype.CUSTOM, DiscussionPresets.detectArchetype(modified))
     }
 

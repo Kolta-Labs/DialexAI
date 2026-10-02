@@ -107,20 +107,9 @@ object DiscussionPresets {
                     minRoundsBeforeExit = 1,
                     allowMidRoundTermination = true
                 ),
-                sampling = SamplingConfig(
-                    temperature = 0.70,
-                    schedule = TemperatureSchedule.STATIC,
-                    startTemperature = 0.70,
-                    floorTemperature = 0.70
-                ),
                 moderation = ModerationConfig(
-                    style = ModerationStyle.PASSIVE_WRAPUP_ONLY,
                     persona = ModeratorPersona.EXECUTIVE_ARBITER,
                     strictness = 2
-                ),
-                antiLoop = AntiLoopConfig(
-                    enabled = true,
-                    maxSimilarityThreshold = 0.65
                 ),
                 costEfficiency = CostEfficiencyConfig(
                     enabled = true,
@@ -153,21 +142,9 @@ object DiscussionPresets {
                     minRoundsBeforeExit = 2,
                     allowMidRoundTermination = true
                 ),
-                sampling = SamplingConfig(
-                    schedule = TemperatureSchedule.LINEAR_COOLING,
-                    startTemperature = 0.80,
-                    floorTemperature = 0.40,
-                    temperature = 0.80
-                ),
                 moderation = ModerationConfig(
-                    style = ModerationStyle.PERIODIC_CHECKPOINT,
                     persona = ModeratorPersona.EXECUTIVE_ARBITER,
-                    checkpointFrequencyRounds = 2,
                     strictness = 3
-                ),
-                antiLoop = AntiLoopConfig(
-                    enabled = true,
-                    maxSimilarityThreshold = 0.55
                 ),
                 costEfficiency = CostEfficiencyConfig(
                     enabled = true,
@@ -200,20 +177,9 @@ object DiscussionPresets {
                     minRoundsBeforeExit = 2,
                     allowMidRoundTermination = false
                 ),
-                sampling = SamplingConfig(
-                    schedule = TemperatureSchedule.THREE_STAGE_DELIBERATION,
-                    startTemperature = 0.85,
-                    floorTemperature = 0.35,
-                    temperature = 0.80
-                ),
                 moderation = ModerationConfig(
-                    style = ModerationStyle.DYNAMIC_ACTIVE_STEERAGE,
                     persona = ModeratorPersona.SOCRATIC_PROBE,
                     strictness = 3
-                ),
-                antiLoop = AntiLoopConfig(
-                    enabled = true,
-                    maxSimilarityThreshold = 0.65
                 ),
                 costEfficiency = CostEfficiencyConfig(
                     enabled = true,
@@ -246,20 +212,9 @@ object DiscussionPresets {
                     minRoundsBeforeExit = 4,
                     allowMidRoundTermination = false
                 ),
-                sampling = SamplingConfig(
-                    schedule = TemperatureSchedule.STATIC,
-                    temperature = 0.90,
-                    startTemperature = 0.90,
-                    floorTemperature = 0.90
-                ),
                 moderation = ModerationConfig(
-                    style = ModerationStyle.STRICT_ARBITRATION,
                     persona = ModeratorPersona.DEVILS_ADVOCATE_CHAIR,
                     strictness = 4
-                ),
-                antiLoop = AntiLoopConfig(
-                    enabled = true,
-                    maxSimilarityThreshold = 0.50
                 ),
                 costEfficiency = CostEfficiencyConfig(
                     enabled = true,
@@ -294,9 +249,7 @@ object DiscussionPresets {
             maxRounds = templated.maxRounds,
             depth = templated.depth,
             consensus = templated.consensus,
-            sampling = templated.sampling,
             moderation = templated.moderation,
-            antiLoop = templated.antiLoop,
             costEfficiency = templated.costEfficiency
         )
     }
@@ -317,10 +270,6 @@ object DiscussionPresets {
             if (config.depth.mode == ref.depth.mode &&
                 config.maxRounds == ref.maxRounds &&
                 config.consensus.mode == ref.consensus.mode &&
-                config.sampling.schedule == ref.sampling.schedule &&
-                kotlin.math.abs(config.sampling.temperature - ref.sampling.temperature) < 0.05 &&
-                config.moderation.style == ref.moderation.style &&
-                kotlin.math.abs(config.antiLoop.maxSimilarityThreshold - ref.antiLoop.maxSimilarityThreshold) < 0.02 &&
                 config.costEfficiency.triggerTokenThreshold == ref.costEfficiency.triggerTokenThreshold
             ) {
                 return archetype

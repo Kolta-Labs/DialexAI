@@ -3833,7 +3833,7 @@ private fun DebatePolicyTab(
         SettingCard {
             SettingRow(
                 title = "Dynamic Moderator & Dialectic Steerage",
-                description = "Active AI Moderator Chair to detect semantic drift, inject checkpoints, and enforce convergence."
+                description = "Active AI Moderator Chair to guide convergence."
             ) {
                 AestheticSwitch(
                     checked = mod.enabled,
@@ -3847,38 +3847,6 @@ private fun DebatePolicyTab(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    // Style Selection
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Moderation Style", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = cc.textPrimary)
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf(
-                                com.dialex.model.ModerationStyle.DYNAMIC_ACTIVE_STEERAGE to "Dynamic Drift",
-                                com.dialex.model.ModerationStyle.PERIODIC_CHECKPOINT to "Checkpoints",
-                                com.dialex.model.ModerationStyle.STRICT_ARBITRATION to "Strict Arbiter",
-                                com.dialex.model.ModerationStyle.PASSIVE_WRAPUP_ONLY to "Wrap-Up Only"
-                            ).forEach { (st, label) ->
-                                val isSelected = mod.style == st
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = if (isSelected) cc.accent.copy(alpha = 0.12f) else cc.panelAlt,
-                                    border = BorderStroke(0.75.dp, if (isSelected) cc.accent else cc.border.copy(alpha = 0.45f)),
-                                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).clickable {
-                                        onPolicyChange(policy.copy(moderation = mod.copy(style = st)))
-                                    }
-                                ) {
-                                    Box(modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp), contentAlignment = Alignment.Center) {
-                                        Text(
-                                            label,
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal),
-                                            color = if (isSelected) cc.accent else cc.textPrimary,
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     // Persona Selection
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Moderator Persona", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = cc.textPrimary)
@@ -3909,38 +3877,6 @@ private fun DebatePolicyTab(
                                 }
                             }
                         }
-                    }
-
-                    // Drift Sensitivity Slider
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Topic Drift Sensitivity Threshold", style = MaterialTheme.typography.bodyMedium, color = cc.textPrimary)
-                            Text("${(mod.driftThreshold * 100).toInt()}% minimum topicality", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = cc.textPrimary)
-                        }
-                        AestheticSlider(
-                            value = mod.driftThreshold.toFloat().coerceIn(0.2f, 0.8f),
-                            onValueChange = {
-                                onPolicyChange(policy.copy(moderation = mod.copy(driftThreshold = (it * 100).roundToInt() / 100.0)))
-                            },
-                            valueRange = 0.2f..0.8f,
-                            modifier = Modifier.fillMaxWidth().height(22.dp)
-                        )
-                    }
-
-                    // Steerage Directives Enforcement
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Enforce Steerage Directives in Prompts", style = MaterialTheme.typography.bodySmall, color = cc.textPrimary)
-                            Text("Injects moderator directives into next agent turns as mandatory context.", style = MaterialTheme.typography.labelSmall, color = cc.textMuted)
-                        }
-                        AestheticSwitch(
-                            checked = mod.enforceSteerageDirectives,
-                            onCheckedChange = { onPolicyChange(policy.copy(moderation = mod.copy(enforceSteerageDirectives = it))) }
-                        )
                     }
 
                     // Topic Drift Guardrail (Anti-Rabbit-Hole)

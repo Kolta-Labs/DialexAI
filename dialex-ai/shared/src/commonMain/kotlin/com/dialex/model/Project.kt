@@ -187,7 +187,7 @@ data class AppState(
     val discussions: List<Discussion> = emptyList(),
     val apiKeys: ApiKeys = ApiKeys(),
     val cliCommands: CliCommands = CliCommands(),
-    // Model used only for transcript-compaction summaries (see DebateOrchestrator) — a
+    // Model used only for transcript-compaction summaries — a
     // mechanical task, so a cheap/fast model regardless of what the user picked in the
     // debate itself. Applies in both API and CLI mode. Superseded by CompactionSettings
     // when that is non-null, but kept for backward-compat with older persisted state.

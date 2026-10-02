@@ -80,7 +80,7 @@ $$P(H | E) = \frac{P(E | H) \cdot P(H)}{P(E)}$$
 ### 3.2 3-Tier Anti-Fluff & Anti-Rabbit-Hole Guardrails
 To prevent models from wandering into semantic tangents or drowning in polite pleasantries, Dialex AI enforces strict architectural guardrails:
 - **Human Dialogue Enforcement:** Directs agents to speak with the precision of senior principal engineers—concise turns (2–4 punchy paragraphs), zero pleasantries, immediate technical substance.
-- **Topic Drift Suppression:** The engine monitors semantic distance from the root prompt. If debaters diverge into peripheral arguments, the orchestrator penalizes drift and prompts the Moderator to refocus the council.
+- **Topic Drift Suppression:** When enabled, the engine injects an anti-rabbit-hole directive into every agent prompt so debaters stay anchored to the core question instead of drifting into peripheral arguments.
 - **3-Tier Configurable Hierarchy:** Master rules live in **Global Settings**, can be overridden per **Project**, and fine-tuned per individual **Discussion**.
 
 ### 3.3 Zero-Trust & Absolute Data Sovereignty

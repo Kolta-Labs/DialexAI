@@ -37,9 +37,7 @@ class DebateConfigSerializationTest {
                 allowMathFormulas = false
             ),
             moderation = ModerationConfig(
-                style = ModerationStyle.DYNAMIC_ACTIVE_STEERAGE,
                 persona = ModeratorPersona.DELIBERATION_CHAIR,
-                driftThreshold = 0.50,
                 enabled = true
             )
         )
@@ -51,9 +49,7 @@ class DebateConfigSerializationTest {
         assertEquals(150, decoded.depth.targetWordCountPerTurn)
         assertEquals(false, decoded.depth.allowMathFormulas)
 
-        assertEquals(ModerationStyle.DYNAMIC_ACTIVE_STEERAGE, decoded.moderation.style)
         assertEquals(ModeratorPersona.DELIBERATION_CHAIR, decoded.moderation.persona)
-        assertEquals(0.50, decoded.moderation.driftThreshold)
         assertEquals(true, decoded.moderation.enabled)
     }
 }

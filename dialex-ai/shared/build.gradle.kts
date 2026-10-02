@@ -22,7 +22,7 @@ kotlin {
             implementation("io.github.koltalabs.kolt:utils")
             implementation("io.github.koltalabs.kolt:logutils")
             implementation("io.github.koltalabs.kolt:compose-kmp")
-            // api: ApiAgentRunner's constructor takes an HttpClient, so callers need this type too.
+            // api: EngineClient takes an HttpClient, so callers need this type too.
             api(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)

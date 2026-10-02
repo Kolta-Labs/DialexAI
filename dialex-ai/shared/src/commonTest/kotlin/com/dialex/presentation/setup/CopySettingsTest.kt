@@ -63,8 +63,7 @@ class CopySettingsTest {
                 roundMode = RoundMode.FIXED,
                 maxRounds = 6,
                 depth = DepthConfig(mode = DepthMode.ACADEMIC, targetWordCountPerTurn = 600),
-                consensus = ConsensusConfig(mode = ConsensusMode.UNANIMOUS),
-                sampling = SamplingConfig(schedule = TemperatureSchedule.LINEAR_COOLING, temperature = 0.85)
+                consensus = ConsensusConfig(mode = ConsensusMode.UNANIMOUS)
             ),
             attachedFolders = listOf(
                 FolderScope(path = "/workspace/project-alpha", isReadOnly = true)
@@ -172,7 +171,6 @@ class CopySettingsTest {
         assertEquals(6, disc.config.maxRounds)
         assertEquals(DepthMode.ACADEMIC, disc.config.depth.mode)
         assertEquals(ConsensusMode.UNANIMOUS, disc.config.consensus.mode)
-        assertEquals(TemperatureSchedule.LINEAR_COOLING, disc.config.sampling.schedule)
 
         // Workspace folders copied
         assertEquals(1, disc.attachedFolders.size)

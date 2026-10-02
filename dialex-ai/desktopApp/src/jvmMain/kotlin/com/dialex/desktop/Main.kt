@@ -27,7 +27,6 @@ import com.dialex.ui.CliCatalog
 import com.dialex.util.installCrashLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.swing.JFileChooser
@@ -58,11 +57,7 @@ private fun pickFile(deliver: (fileName: String, content: String) -> Unit) {
     }
 }
 
-/** Thin shell: all screens live in `shared`. Desktop adds CLI-mode agents + a file-based store.
- * With no args, launches the normal windowed app. With `--topic ...`, runs one debate
- * headlessly instead — for a self-hosted server / cron job / CI step, no windowing system
- * needed. That branch has to happen before touching Compose's `application {}` at all, since
- * that's what would otherwise require a display. */
+/** Thin shell: all screens live in `shared`; debates run on the Go engine. */
 fun main(args: Array<String>) {
     System.setProperty("apple.awt.application.name", "Dialex")
     System.setProperty("apple.awt.application.appearance", "system")
@@ -73,8 +68,6 @@ fun main(args: Array<String>) {
     installCrashLogger(File(System.getProperty("user.home"), ".dialex/crash.log"))
     if (args.contains("--persona-studio") || args.contains("--studio")) {
         com.dialex.desktop.personastudio.main(args)
-    } else if (args.isNotEmpty()) {
-        kotlin.system.exitProcess(runBlocking { runHeadless(args) })
     } else {
         mainApplication()
     }

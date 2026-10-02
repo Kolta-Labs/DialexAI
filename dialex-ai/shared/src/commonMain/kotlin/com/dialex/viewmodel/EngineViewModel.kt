@@ -15,8 +15,7 @@ import com.dialex.model.Provider
 import com.dialex.model.defaultModel
 
 /**
- * The engine-backed counterpart to `AppViewModel` (the retired local-only view model) — same
- * method names/shapes wherever the concept carries over, but every mutation is a real HTTP
+ * The app's view model: every mutation is a real HTTP
  * call to a Go engine instead of a local file write, and there is no `runnerFor`/`trackJob`
  * (the engine owns runner selection and turn-loop cancellation now, not this process). This
  * is what `AppShell`/`MainActivity` actually talk to.
@@ -132,7 +131,7 @@ class EngineViewModel(private val client: EngineClient) {
     }
 
     /** Halts the debate after the turn in flight — Resume continues from that exact point.
-     * Unlike `AppViewModel.pause` this is a real HTTP call (the engine, not this process,
+     * This is a real HTTP call (the engine, not this process,
      * owns the turn loop), so it's suspend — the caller launches it in its own scope, same
      * as [start]/[resume] already require. */
     suspend fun pause(discussionId: String) {
