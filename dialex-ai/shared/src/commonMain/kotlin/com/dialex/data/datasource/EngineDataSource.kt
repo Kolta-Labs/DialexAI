@@ -80,6 +80,15 @@ class EngineDataSource(private val client: EngineClient) {
     suspend fun setupDiscussionWithAi(request: com.dialex.domain.model.AiSetupRequest): Discussion =
         wrap { client.setupDiscussionWithAi(request) }
 
+    suspend fun evaluateConsensus(
+        config: com.dialex.model.DebateConfig,
+        transcript: List<com.dialex.model.DebateMessage>,
+        round: Int?,
+    ): com.dialex.domain.model.ConsensusResult = wrap { client.evaluateConsensus(config, transcript, round) }
+
+    suspend fun applyQuickstart(modeId: String, config: com.dialex.model.DebateConfig): com.dialex.model.DebateConfig =
+        wrap { client.applyQuickstart(modeId, config) }
+
     suspend fun getDiscussionUsage(id: String): EngineClient.UsageResponse =
         wrap { client.getDiscussionUsage(id) }
 

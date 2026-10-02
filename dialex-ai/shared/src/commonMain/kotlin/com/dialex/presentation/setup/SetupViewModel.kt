@@ -48,6 +48,8 @@ class SetupViewModel(
     )
 ) {
 
+    private val applyQuickstartMode = com.dialex.domain.usecase.ApplyQuickstartModeUseCase(discussionRepository)
+
     init {
         loadInitialData()
     }
@@ -460,17 +462,23 @@ class SetupViewModel(
             }
             is SetupIntent.SelectOneKeyMode -> {
                 val currentDisc = state.value.discussion ?: return
-                val newConfig = com.dialex.model.OneKeyCouncil.apply(currentDisc.config, intent.mode)
-                val estimate = DeliberationEstimator.estimate(newConfig)
-                setState {
-                    copy(
-                        discussion = currentDisc.copy(config = newConfig),
-                        step = SetupStep.ConfigForm,
-                        activeArchetype = PresetArchetype.CUSTOM,
-                        runEstimate = estimate
-                    )
+                viewModelScope.launch {
+                    try {
+                        val newConfig = applyQuickstartMode(intent.mode.id, currentDisc.config)
+                        val estimate = DeliberationEstimator.estimate(newConfig)
+                        setState {
+                            copy(
+                                discussion = currentDisc.copy(config = newConfig),
+                                step = SetupStep.ConfigForm,
+                                activeArchetype = PresetArchetype.CUSTOM,
+                                runEstimate = estimate
+                            )
+                        }
+                        validateConfig(newConfig)
+                    } catch (e: Exception) {
+                        sendEffect(SetupEffect.ShowSnackbar("Failed to apply ${intent.mode.title}: ${e.message ?: "Unknown error"}"))
+                    }
                 }
-                validateConfig(newConfig)
             }
             is SetupIntent.ToggleAdvancedDrawer -> {
                 setState { copy(advancedExpanded = !advancedExpanded) }

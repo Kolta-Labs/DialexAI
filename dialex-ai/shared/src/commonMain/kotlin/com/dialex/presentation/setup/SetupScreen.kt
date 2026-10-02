@@ -1794,8 +1794,11 @@ fun SetupScreen(
                                     } catch (e: Throwable) {
                                         ConsensusMode.UNANIMOUS
                                     }
-                                    val newConfig = config.consensus.copy(mode = newMode)
-                                    updateConfig(config.copy(consensus = newConfig))
+                                    var newConfig = config.consensus.copy(mode = newMode)
+                                    if (newMode == ConsensusMode.SUPERMAJORITY && newConfig.consensusThreshold !in 0.5..0.99) {
+                                        newConfig = newConfig.copy(consensusThreshold = 0.66)
+                                    }
+                                    updateConfig(config.copy(consensus = newConfig, consensusTolerance = newConfig.consensusThreshold))
                                 },
                                 isMinimal = true,
                                 minHeight = 34.dp
@@ -1853,6 +1856,56 @@ fun SetupScreen(
                                         modifier = Modifier.size(28.dp)
                                     ) {
                                         Icon(Icons.Filled.Add, contentDescription = "Increase", tint = cc.textPrimary)
+                                    }
+                                }
+                            }
+
+                            if (config.consensus.mode == ConsensusMode.SUPERMAJORITY) {
+                                // Stepper for the agreement ratio (0.50..0.95 in 0.05 steps)
+                                fun setThreshold(value: Double) {
+                                    val t = kotlin.math.round(value * 100) / 100.0
+                                    updateConfig(config.copy(consensus = config.consensus.copy(consensusThreshold = t), consensusTolerance = t))
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "Agreement needed",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp, fontWeight = FontWeight.Medium),
+                                            color = cc.textPrimary
+                                        )
+                                        Text(
+                                            "Share of seats that must agree to end the debate early.",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.5.sp),
+                                            color = cc.textMuted
+                                        )
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        IconButton(
+                                            onClick = { setThreshold(config.consensus.consensusThreshold - 0.05) },
+                                            enabled = config.consensus.consensusThreshold > 0.5 + 1e-6,
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(Icons.Filled.Remove, contentDescription = "Decrease agreement needed", tint = cc.textPrimary)
+                                        }
+                                        Text(
+                                            "${kotlin.math.round(config.consensus.consensusThreshold * 100).toInt()}%",
+                                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp),
+                                            color = cc.textPrimary
+                                        )
+                                        IconButton(
+                                            onClick = { setThreshold(config.consensus.consensusThreshold + 0.05) },
+                                            enabled = config.consensus.consensusThreshold < 0.95 - 1e-6,
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(Icons.Filled.Add, contentDescription = "Increase agreement needed", tint = cc.textPrimary)
+                                        }
                                     }
                                 }
                             }

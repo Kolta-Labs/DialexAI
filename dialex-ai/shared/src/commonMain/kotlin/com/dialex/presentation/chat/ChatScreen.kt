@@ -67,11 +67,9 @@ import com.dialex.export.toDeliverableMarkdown
 import com.dialex.export.toExecutiveMemorandumHtml
 import com.dialex.export.toMarkdown
 import com.dialex.export.toSummaryMarkdown
+import com.dialex.domain.model.ConsensusResult
 import com.dialex.model.DeliverableFormat
 import com.dialex.model.DiscussionArtifact
-import com.dialex.model.ConsensusEvaluationResult
-import com.dialex.model.ConsensusStrategy
-import com.dialex.orchestrator.ConsensusDetector
 import com.dialex.util.writeTextFile
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -149,6 +147,7 @@ fun ChatScreen(
     onSearchMatchesChanged: ((count: Int, currentIndex: Int) -> Unit)? = null,
     snackbarMessage: String? = null,
     onClearSnackbar: (() -> Unit)? = null,
+    evaluateConsensus: (suspend (DebateConfig, List<DebateMessage>) -> ConsensusResult?)? = null,
     modifier: Modifier = Modifier
 ) {
     val cc = LocalCcColors.current
@@ -554,7 +553,8 @@ fun ChatScreen(
                                     discussion = discussion,
                                     onRenameDiscussion = { onIntent(ChatIntent.RenameDiscussion(it)) },
                                     onRegenerateTitle = { onIntent(ChatIntent.GenerateSummaryTitle) },
-                                    typographySettings = typographySettings
+                                    typographySettings = typographySettings,
+                                    evaluateConsensus = evaluateConsensus
                                 )
                             }
                         }
@@ -772,6 +772,7 @@ fun ChatScreen(
                                     isUserComment = msg.isUserComment,
                                     isLoopRecovered = msg.isLoopRecovered,
                                     isStalledConcession = msg.isStalledConcession,
+                                    agreed = msg.agreed,
                                     timestampMs = msg.timestampMs,
                                     searchQuery = if (isMatch) effectiveSearchQuery else null,
                                     activeOccurrenceIndex = activeOccurrenceInMsg,

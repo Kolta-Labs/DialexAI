@@ -238,6 +238,26 @@ class EngineClient(
     suspend fun setupDiscussionWithAi(request: com.dialex.domain.model.AiSetupRequest): Discussion =
         post("/api/v1/debates/ai-setup", request)
 
+    suspend fun evaluateConsensus(
+        config: DebateConfig,
+        transcript: List<DebateMessage>,
+        round: Int? = null,
+    ): com.dialex.domain.model.ConsensusResult =
+        post("/api/v1/consensus/evaluate", ConsensusEvaluateRequest(config, transcript, round))
+
+    suspend fun applyQuickstart(modeId: String, config: DebateConfig): DebateConfig =
+        post("/api/v1/quickstart/apply", QuickstartApplyRequest(modeId, config))
+
+    @Serializable
+    private data class ConsensusEvaluateRequest(
+        val config: DebateConfig,
+        val transcript: List<DebateMessage>,
+        val round: Int? = null,
+    )
+
+    @Serializable
+    private data class QuickstartApplyRequest(val mode: String, val config: DebateConfig)
+
     // ── Bayesian Credence & Epistemic Uncertainty ────────────────────────────
 
     suspend fun getCredenceLedger(discussionId: String): com.dialex.domain.model.CredenceLedger =

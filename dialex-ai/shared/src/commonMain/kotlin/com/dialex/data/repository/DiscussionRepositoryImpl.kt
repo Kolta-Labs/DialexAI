@@ -54,6 +54,15 @@ class DiscussionRepositoryImpl(private val dataSource: EngineDataSource) : Discu
     override suspend fun setupDiscussionWithAi(request: com.dialex.domain.model.AiSetupRequest): Discussion =
         dataSource.setupDiscussionWithAi(request)
 
+    override suspend fun evaluateConsensus(
+        config: com.dialex.model.DebateConfig,
+        transcript: List<com.dialex.model.DebateMessage>,
+        round: Int?,
+    ): com.dialex.domain.model.ConsensusResult = dataSource.evaluateConsensus(config, transcript, round)
+
+    override suspend fun applyQuickstart(modeId: String, config: com.dialex.model.DebateConfig): com.dialex.model.DebateConfig =
+        dataSource.applyQuickstart(modeId, config)
+
     override suspend fun socraticTurn(
         discussionId: String,
         request: com.dialex.domain.model.SocraticTurnRequest,

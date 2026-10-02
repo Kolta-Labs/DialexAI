@@ -648,6 +648,8 @@ data class DebateMessage(
     val isLoopRecovered: Boolean = false,
     /** True when this turn was converted into an auto-concession by the anti-loop circuit breaker. */
     val isStalledConcession: Boolean = false,
+    /** True when the engine judged this agent turn to be in agreement with the council. */
+    val agreed: Boolean = false,
 ) {
     constructor(
         seatId: String,

@@ -42,6 +42,14 @@ interface DiscussionRepository {
     suspend fun setupDiscussionWithAi(request: com.dialex.domain.model.AiSetupRequest): Discussion =
         throw NotImplementedError()
 
+    suspend fun evaluateConsensus(
+        config: com.dialex.model.DebateConfig,
+        transcript: List<com.dialex.model.DebateMessage>,
+        round: Int? = null,
+    ): com.dialex.domain.model.ConsensusResult = throw NotImplementedError()
+    suspend fun applyQuickstart(modeId: String, config: com.dialex.model.DebateConfig): com.dialex.model.DebateConfig =
+        throw NotImplementedError()
+
     // ── Socratic Interview ─────────────────────────────────────────────────────
 
     suspend fun socraticTurn(discussionId: String, request: com.dialex.domain.model.SocraticTurnRequest): com.dialex.domain.model.SocraticTurnResponse =

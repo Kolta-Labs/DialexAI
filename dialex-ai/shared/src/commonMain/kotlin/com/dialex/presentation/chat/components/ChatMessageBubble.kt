@@ -66,9 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.dialex.orchestrator.ConsensusDetector
 import com.dialex.model.Agent
-import com.dialex.model.ConsensusStrategy
 import com.dialex.model.Provider
 import com.dialex.model.brandName
 import com.dialex.model.label
@@ -103,6 +101,7 @@ fun AeratedMessageItem(
     isUserComment: Boolean = false,
     isLoopRecovered: Boolean = false,
     isStalledConcession: Boolean = false,
+    agreed: Boolean = false,
     timestampMs: Long = 0L,
     searchQuery: String? = null,
     activeOccurrenceIndex: Int = -1,
@@ -135,9 +134,7 @@ fun AeratedMessageItem(
         cc.panelAlt
     }
 
-    val isConcurred = remember(content, isUserComment, isError) {
-        !isUserComment && !isError && ConsensusDetector.isTurnInConsensus(content, ConsensusStrategy.HEURISTIC_HYBRID)
-    }
+    val isConcurred = agreed && !isUserComment && !isError
     val consensusGreen = Color(0xFF2E7D32)
 
     val interactionSource = remember { MutableInteractionSource() }

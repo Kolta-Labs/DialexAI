@@ -3,9 +3,6 @@ package com.dialex.presentation.chat
 import com.dialex.domain.repository.DiscussionRepository
 import com.dialex.domain.repository.DiscussionUsage
 import com.dialex.model.Agent
-import com.dialex.model.ConsensusConfig
-import com.dialex.model.ConsensusMode
-import com.dialex.model.ConsensusStrategy
 import com.dialex.model.DebateConfig
 import com.dialex.model.DebateMessage
 import com.dialex.model.DeliverableConfig
@@ -15,7 +12,6 @@ import com.dialex.model.DiscussionStatus
 import com.dialex.model.Provider
 import com.dialex.model.RoundMode
 import com.dialex.model.defaultModel
-import com.dialex.orchestrator.ConsensusDetector
 import com.dialex.presentation.chat.components.effectiveRoundFor
 import com.dialex.presentation.chat.components.resolveAllArtifacts
 import kotlinx.coroutines.Dispatchers
@@ -142,39 +138,6 @@ class ChatChronologyTest {
 
         // 5. Resume was invoked on the repository
         assertEquals(1, repo.resumeCallCount)
-    }
-
-    @Test
-    fun testConsensusDetectorIgnoresTurnsBeforeLatestUserComment() {
-        val agent1 = Agent(id = "agent_1", provider = Provider.ANTHROPIC, model = Provider.ANTHROPIC.defaultModel())
-        val agent2 = Agent(id = "agent_2", provider = Provider.OPENAI, model = Provider.OPENAI.defaultModel())
-
-        val config = DebateConfig(
-            topic = "Topic",
-            primary = agent1,
-            secondary = agent2,
-            consensus = ConsensusConfig(
-                mode = ConsensusMode.UNANIMOUS,
-                strategy = ConsensusStrategy.PREFIX_AND_PATTERN,
-                minRoundsBeforeExit = 1
-            )
-        )
-
-        val transcriptWithUserComment = listOf(
-            DebateMessage(seatId = "agent_1", agentId = Provider.ANTHROPIC, round = 1, content = "AGREED: first topic", timestampMs = 1000L),
-            DebateMessage(seatId = "agent_2", agentId = Provider.OPENAI, round = 1, content = "AGREED: first topic", timestampMs = 2000L),
-            DebateMessage(seatId = "observer", round = 2, content = "New constraint injected", isUserComment = true, timestampMs = 3000L),
-            DebateMessage(seatId = "agent_1", agentId = Provider.ANTHROPIC, round = 2, content = "Looking at the new constraint...", timestampMs = 4000L)
-        )
-
-        val result = ConsensusDetector.evaluateConsensus(
-            currentRound = 2,
-            transcript = transcriptWithUserComment,
-            config = config
-        )
-
-        // Since agent_2 has not yet spoken after the user comment, consensus must NOT be achieved
-        assertTrue(result is com.dialex.model.ConsensusEvaluationResult.Ongoing, "Consensus must be Ongoing because Agent 2 has not spoken since user comment")
     }
 
     @Test

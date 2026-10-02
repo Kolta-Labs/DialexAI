@@ -51,6 +51,8 @@ fun ChatRoute(
     val generateSocraticDigestUseCase = remember(discussionRepository) { com.dialex.domain.usecase.GenerateSocraticDigestUseCase(discussionRepository) }
     val elevateSocraticToCouncilUseCase = remember(discussionRepository) { com.dialex.domain.usecase.ElevateSocraticToCouncilUseCase(discussionRepository) }
 
+    val evaluateConsensusUseCase = remember(discussionRepository) { com.dialex.domain.usecase.EvaluateConsensusUseCase(discussionRepository) }
+
     val viewModel: ChatViewModel = viewModel(key = "chat_$discussionId") {
         ChatViewModel(
             discussionRepository = discussionRepository,
@@ -114,6 +116,7 @@ fun ChatRoute(
         onSearchMatchesChanged = onSearchMatchesChanged,
         snackbarMessage = snackbarMessage,
         onClearSnackbar = { snackbarMessage = null },
+        evaluateConsensus = { config, transcript -> evaluateConsensusUseCase(config, transcript) },
         modifier = modifier
     )
 }

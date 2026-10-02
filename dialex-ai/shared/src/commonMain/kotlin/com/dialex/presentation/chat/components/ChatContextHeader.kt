@@ -63,8 +63,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.dialex.orchestrator.ConsensusDetector
-import com.dialex.model.ConsensusEvaluationResult
+import com.dialex.domain.model.ConsensusResult
+import com.dialex.model.DebateConfig
+import com.dialex.model.DebateMessage
 import com.dialex.model.Discussion
 import com.dialex.model.RoundMode
 import com.dialex.model.brandName
@@ -81,7 +82,8 @@ fun ContextHeader(
     discussion: Discussion,
     onRenameDiscussion: ((String) -> Unit)? = null,
     onRegenerateTitle: (() -> Unit)? = null,
-    typographySettings: ChatTypographySettings? = null
+    typographySettings: ChatTypographySettings? = null,
+    evaluateConsensus: (suspend (DebateConfig, List<DebateMessage>) -> ConsensusResult?)? = null
 ) {
     val config = discussion.config
     val title = discussion.name.ifBlank { "Dialex Deliberation" }
@@ -656,12 +658,19 @@ fun ContextHeader(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    val consensusResult = remember(discussion.transcript.size, discussion.isConsensusReached) {
-                                        val currentMaxRound = discussion.transcript.filter { !it.isError && !it.isUserComment && !it.isSystem }.maxOfOrNull { it.round } ?: 1
-                                        ConsensusDetector.evaluateConsensus(currentMaxRound, discussion.transcript, discussion.config)
+                                    // Engine-evaluated; null (not loaded / failed) simply shows "Debating".
+                                    var consensusResult by remember { mutableStateOf<ConsensusResult?>(null) }
+                                    LaunchedEffect(discussion.transcript.size, discussion.isConsensusReached) {
+                                        consensusResult = try {
+                                            evaluateConsensus?.invoke(discussion.config, discussion.transcript)
+                                        } catch (e: kotlinx.coroutines.CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            null
+                                        }
                                     }
-                                    val isConsensusAchieved = discussion.isConsensusReached || discussion.earlyExitReason == "CONSENSUS" || consensusResult is ConsensusEvaluationResult.Achieved
-                                    val isConverging = consensusResult is ConsensusEvaluationResult.Ongoing && consensusResult.agreedCount > 0
+                                    val isConsensusAchieved = discussion.isConsensusReached || discussion.earlyExitReason == "CONSENSUS" || consensusResult?.achieved == true
+                                    val isConverging = consensusResult?.let { it.ongoing && it.agreedCount > 0 } == true
 
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
@@ -692,7 +701,7 @@ fun ContextHeader(
                                             Text(
                                                 text = when {
                                                     isConsensusAchieved -> "🟢 Consensus Reached"
-                                                    isConverging -> "🟠 Converging (${(consensusResult as ConsensusEvaluationResult.Ongoing).agreedCount}/${consensusResult.totalCount} Agreed)"
+                                                    isConverging -> "🟠 Converging (${consensusResult?.agreedCount}/${consensusResult?.totalCount} Agreed)"
                                                     else -> "🟡 Debating (0/${config.agents.size} Agreed)"
                                                 },
                                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold),
