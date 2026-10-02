@@ -28,6 +28,8 @@ func main() {
 		runUsers(os.Args[2:])
 	case "service":
 		runService(os.Args[2:])
+	case "ask":
+		runAsk(os.Args[2:])
 	case "-h", "--help", "help":
 		printUsage()
 	default:
@@ -44,6 +46,10 @@ Usage:
   dialex serve [flags]        Run the HTTP/SSE daemon
   dialex users add <name>     Add an account to the multi-user store (--dir to target
                               a non-default store, e.g. for scripting/testing)
+  dialex ask [flags] "plan or question"
+                              One-shot council on a single API key: a few personas on one
+                              model stress-test your plan and print a decision memo. See
+                              "dialex ask --list" for modes (pre-mortem, red team, tenth man).
   dialex service install      Register the engine to start at login (launchd on macOS,
                               systemd --user on Linux; not yet supported on Windows)
   dialex service uninstall    Remove that login-time registration
