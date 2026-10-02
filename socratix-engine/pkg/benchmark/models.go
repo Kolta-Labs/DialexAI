@@ -1,7 +1,7 @@
 package benchmark
 
 import (
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // MetricDimension identifies one of the four orthogonal evaluation dimensions.

@@ -55,7 +55,7 @@ func TestGitDriverOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateWorkingBranch failed: %v", err)
 	}
-	if !strings.HasPrefix(branchName, "kritix/add-auth-") {
+	if !strings.HasPrefix(branchName, "artix/add-auth-") {
 		t.Errorf("unexpected branch name: %s", branchName)
 	}
 

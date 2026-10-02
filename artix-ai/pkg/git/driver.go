@@ -120,7 +120,7 @@ func (d *Driver) CommitAll(message string) (string, error) {
 // CreateWorkingBranch generates a standardized task branch name and checks it out.
 func (d *Driver) CreateWorkingBranch(taskID string) (string, error) {
 	cleanID := strings.ToLower(strings.ReplaceAll(taskID, " ", "-"))
-	branchName := fmt.Sprintf("kritix/%s-%d", cleanID, time.Now().Unix())
+	branchName := fmt.Sprintf("artix/%s-%d", cleanID, time.Now().Unix())
 	if err := d.CreateBranch(branchName); err != nil {
 		return "", err
 	}

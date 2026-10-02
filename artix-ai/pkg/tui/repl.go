@@ -9,13 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"kritix/pkg/coder"
-	"kritix/pkg/git"
-	"kritix/pkg/persona"
-	"kritix/pkg/repo"
-	"kritix/pkg/reviewer"
-	"kritix/pkg/sandbox"
-	"kritix/pkg/spec"
+	"artix/pkg/coder"
+	"artix/pkg/git"
+	"artix/pkg/persona"
+	"artix/pkg/repo"
+	"artix/pkg/reviewer"
+	"artix/pkg/sandbox"
+	"artix/pkg/spec"
 )
 
 // ANSI color codes for rich terminal styling
@@ -62,11 +62,11 @@ func NewREPL(rootDir string, reg *persona.Registry, in io.Reader, out io.Writer)
 
 // Run starts the REPL loop until exit or EOF.
 func (r *REPL) Run(ctx context.Context) error {
-	fmt.Fprintf(r.out, "%s%sKritix AI Shell%s — Dialectic Coding & Alignment Studio\n", ColorCyan, ColorBold, ColorReset)
+	fmt.Fprintf(r.out, "%s%sArtix AI Shell%s — Dialectic Coding & Alignment Studio\n", ColorCyan, ColorBold, ColorReset)
 	fmt.Fprintf(r.out, "Type %s/help%s for available commands or %s/exit%s to quit.\n\n", ColorYellow, ColorReset, ColorYellow, ColorReset)
 
 	scanner := bufio.NewScanner(r.in)
-	promptPrefix := fmt.Sprintf("%skritix>%s ", ColorCyan, ColorReset)
+	promptPrefix := fmt.Sprintf("%sartix>%s ", ColorCyan, ColorReset)
 
 	for {
 		fmt.Fprint(r.out, promptPrefix)

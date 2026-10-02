@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"dialex/pkg/model"
-	"dialex/pkg/persona"
+	"socratix/pkg/model"
+	"socratix/pkg/persona"
 )
 
 func TestPersonaDNAHandlers(t *testing.T) {

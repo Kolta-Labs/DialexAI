@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // applyIndependence returns the transcript view a seat is allowed to see. It never mutates the

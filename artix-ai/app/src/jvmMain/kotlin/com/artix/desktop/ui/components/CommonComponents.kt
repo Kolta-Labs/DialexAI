@@ -1,4 +1,4 @@
-package com.kritix.desktop.ui.components
+package com.artix.desktop.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -20,7 +20,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kritix.desktop.ui.theme.*
+import com.artix.desktop.ui.theme.*
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -61,7 +61,7 @@ fun TabHeader(
                 Text("K", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
             Spacer(modifier = Modifier.width(10.dp))
-            Text("KRITIX AI", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text("ARTIX AI", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(modifier = Modifier.width(6.dp))
             Text("Cockpit", color = AccentCyan, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
         }

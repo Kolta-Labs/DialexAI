@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 func TestCompilePrompt(t *testing.T) {

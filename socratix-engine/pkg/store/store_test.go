@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 func newTestStore(t *testing.T) *Store {

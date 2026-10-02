@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // ValidateDNA verifies schema bounds, required identifiers, and checks for cognitive contradictions.

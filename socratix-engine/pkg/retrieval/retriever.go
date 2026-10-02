@@ -10,9 +10,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"dialex/pkg/graph"
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/graph"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 // DynamicRetriever orchestrates in-debate RAG across the local epistemic knowledge graph,

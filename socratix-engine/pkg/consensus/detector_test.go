@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 func TestHeuristicTensionExtraction(t *testing.T) {

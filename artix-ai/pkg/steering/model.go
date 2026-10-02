@@ -1,6 +1,6 @@
 package steering
 
-import "dialex/pkg/model"
+import "socratix/pkg/model"
 
 // SourceType represents where a steering rule came from.
 type SourceType string
@@ -34,7 +34,7 @@ type ExternalSource struct {
 	PollInterval string     `json:"pollInterval,omitempty"`
 }
 
-// SteeringConfig represents the persistent .kritix/steering.json configuration.
+// SteeringConfig represents the persistent .artix/steering.json configuration.
 type SteeringConfig struct {
 	ExternalSources []ExternalSource    `json:"external_sources,omitempty"`
 	GlobalRules     []string            `json:"global_rules,omitempty"`

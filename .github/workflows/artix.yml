@@ -1,19 +1,19 @@
-name: Kritix AI Verification & Release Pipeline
+name: Artix AI Verification & Release Pipeline
 
 on:
   push:
     branches: [ main, develop ]
     paths:
-      - 'kritix-ai/**'
-      - '.github/workflows/kritix.yml'
+      - 'artix-ai/**'
+      - '.github/workflows/artix.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
-      - 'kritix-ai/**'
-      - '.github/workflows/kritix.yml'
+      - 'artix-ai/**'
+      - '.github/workflows/artix.yml'
 
 concurrency:
-  group: kritix-ci-${{ github.ref }}
+  group: artix-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -30,33 +30,33 @@ jobs:
           go-version: "1.22.x"
 
       - name: Verify Go Modules
-        working-directory: kritix-ai
+        working-directory: artix-ai
         run: |
           go mod download
           go mod verify
 
       - name: Static Analysis (go vet)
-        working-directory: kritix-ai
+        working-directory: artix-ai
         run: go vet ./pkg/... ./cli/... ./cmd/...
 
       - name: Run Unit Tests with Race Detector & Coverage
-        working-directory: kritix-ai
+        working-directory: artix-ai
         run: go test -v -race -cover ./pkg/...
 
       - name: Build Native CLI Binaries
-        working-directory: kritix-ai
+        working-directory: artix-ai
         run: |
           mkdir -p bin
-          CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/kritix ./cli/main.go
-          CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/kritixd ./cmd/kritixd/main.go
-          ./bin/kritix version
-          ./bin/kritix help
+          CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/artix ./cli/main.go
+          CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/artixd ./cmd/artixd/main.go
+          ./bin/artix version
+          ./bin/artix help
 
       - name: Upload CLI Binaries
         uses: actions/upload-artifact@v4
         with:
-          name: kritix-binaries-linux
-          path: kritix-ai/bin/
+          name: artix-binaries-linux
+          path: artix-ai/bin/
           retention-days: 7
 
   cockpit-kmp-build:
@@ -86,8 +86,8 @@ jobs:
         with:
           cache-read-only: false
 
-      - name: Compile Kritix Cockpit Desktop App
-        working-directory: DialexAI/kritix-ai
+      - name: Compile Artix Cockpit Desktop App
+        working-directory: DialexAI/artix-ai
         run: ./gradlew :app:compileKotlinJvm --no-daemon --stacktrace
 
   adversarial-pr-check:
@@ -106,17 +106,17 @@ jobs:
         with:
           go-version: "1.22.x"
 
-      - name: Build Kritix CLI
-        working-directory: kritix-ai
-        run: go build -o bin/kritix ./cli/main.go
+      - name: Build Artix CLI
+        working-directory: artix-ai
+        run: go build -o bin/artix ./cli/main.go
 
       - name: Run Adversarial Reviewer on PR Diff
-        working-directory: kritix-ai
+        working-directory: artix-ai
         run: |
-          echo "Running Kritix Adversarial Reviewer against base branch ${{ github.base_ref }}..."
+          echo "Running Artix Adversarial Reviewer against base branch ${{ github.base_ref }}..."
           git diff origin/${{ github.base_ref }}...HEAD > pr.diff
           if [ -s pr.diff ]; then
-            ./bin/kritix review || exit 1
+            ./bin/artix review || exit 1
           else
             echo "Clean PR diff; review passed."
           fi

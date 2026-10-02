@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"dialex/pkg/model"
-	"dialex/pkg/socratic"
+	"socratix/pkg/model"
+	"socratix/pkg/socratic"
 )
 
 // handleSocraticTurn processes a single user message and returns the persona's probe and updated ledger.

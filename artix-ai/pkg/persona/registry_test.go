@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 func TestRegistryBuiltins(t *testing.T) {
@@ -71,7 +71,7 @@ func TestRegistryCustomPersona(t *testing.T) {
 	}
 
 	// 2. Verify file was written to disk
-	expectedFile := filepath.Join(tempDir, ".kritix", "personas", "custom_cloud_finops.json")
+	expectedFile := filepath.Join(tempDir, ".artix", "personas", "custom_cloud_finops.json")
 	if _, err := os.Stat(expectedFile); err != nil {
 		t.Errorf("expected custom persona file to exist at %s", expectedFile)
 	}

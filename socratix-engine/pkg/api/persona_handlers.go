@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 

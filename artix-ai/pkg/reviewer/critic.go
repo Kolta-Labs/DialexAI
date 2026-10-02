@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 // Critic asks a model one question and returns its raw reply. Any engine AgentRunner can back it.

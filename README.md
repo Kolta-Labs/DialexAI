@@ -7,10 +7,10 @@ Dialex Suite is three products on one deliberation engine:
 | Product | Folder | What it is | Stack |
 |---|---|---|---|
 | **Dialex AI** | [`dialex-ai/`](./dialex-ai) | Desktop and Android app where several AI models debate a decision and a moderator synthesizes the result. | Kotlin Multiplatform, Compose |
-| **Kritix AI** | [`kritix-ai/`](./kritix-ai) | Adversarial review and spec-to-patch workflow for AI-written code (CLI and desktop cockpit). | Go, Compose Desktop |
-| **Dialex Engine** | [`dialex-engine/`](./dialex-engine) | The shared deliberation daemon: consensus, orchestration, mesh networking, model runners. | Go 1.27 |
+| **Artix AI** | [`artix-ai/`](./artix-ai) | Autonomous engineering platform & spec-to-patch workflow for AI-written code (CLI and desktop cockpit). | Go, Compose Desktop |
+| **Socratix Engine** | [`socratix-engine/`](./socratix-engine) | The shared deliberation daemon: consensus, orchestration, mesh networking, model runners. | Go 1.27 |
 
-Start with Dialex AI for decisions, or Kritix AI for code review. The engine is a dependency of both.
+Start with Dialex AI for decisions, or Artix AI for autonomous development. The engine is a dependency of both.
 
 ---
 
@@ -18,10 +18,10 @@ Start with Dialex AI for decisions, or Kritix AI for code review. The engine is 
 
 ```text
 DialexAI/
-├── dialex-engine/         # Core Go Engine & Orchestration Daemon
-│   ├── cmd/               # Daemon binaries (dialex, dialexd)
+├── socratix-engine/       # Core Go Engine & Orchestration Daemon
+│   ├── cmd/               # Daemon binaries (socratix, socratixbench)
 │   ├── pkg/               # Engine packages (consensus, orchestrator, socratic, etc.)
-│   └── go.mod             # Go module: dialex
+│   └── go.mod             # Go module: socratix
 │
 ├── dialex-ai/             # Kotlin Multiplatform Client Application
 │   ├── shared/            # Common business logic, MVI architecture & UI components
@@ -29,14 +29,14 @@ DialexAI/
 │   ├── androidApp/        # Compose Android mobile client
 │   └── build.gradle.kts   # Independent Gradle build & wrapper
 │
-├── kritix-ai/             # Kritix Autonomous Engineering Platform
-│   ├── cli/               # kritix CLI frontend (spec, code, review, steering)
-│   ├── cmd/               # kritixd remote server daemon & webhooks
+├── artix-ai/              # Artix Autonomous Engineering Platform
+│   ├── cli/               # artix CLI frontend (spec, code, review, steering)
+│   ├── cmd/               # artixd remote server daemon & webhooks
 │   ├── pkg/               # Core packages (coder, reviewer, spec, forge, steering)
 │   ├── app/               # Standalone Compose Desktop Cockpit application
 │   └── build.gradle.kts   # Independent Gradle build & wrapper
 │
-├── go.work                # Go Workspace uniting dialex-engine and kritix-ai
+├── go.work                # Go Workspace uniting socratix-engine and artix-ai
 └── .github/workflows/     # Unified CI/CD pipelines
 ```
 
@@ -44,11 +44,11 @@ DialexAI/
 
 ## Quick Start
 
-### 1. Dialex Engine (Go Daemon)
+### 1. Socratix Engine (Go Daemon)
 ```bash
-cd dialex-engine
+cd socratix-engine
 go test ./pkg/...
-go run ./cmd/dialex
+go run ./cmd/socratix
 ```
 
 ### 2. Dialex AI (Compose Desktop & Android)
@@ -61,14 +61,14 @@ cd dialex-ai
 ./gradlew :androidApp:assembleDebug
 ```
 
-### 3. Kritix AI (CLI & Desktop Cockpit)
+### 3. Artix AI (CLI & Desktop Cockpit)
 ```bash
-cd kritix-ai
+cd artix-ai
 # Build CLI binary
-go build -o bin/kritix ./cli/main.go
-./bin/kritix help
+go build -o bin/artix ./cli/main.go
+./bin/artix help
 
-# Run Kritix Cockpit Desktop App
+# Run Artix Cockpit Desktop App
 ./gradlew :app:run
 ```
 
@@ -79,9 +79,9 @@ go build -o bin/kritix ./cli/main.go
 Run the tests yourself:
 
 ```bash
-(cd dialex-engine && go test ./pkg/...)
-(cd kritix-ai     && go test ./pkg/...)
-(cd dialex-ai     && ./gradlew :shared:allTests)   # includes real-engine integration tests
+(cd socratix-engine && go test ./pkg/...)
+(cd artix-ai        && go test ./pkg/...)
+(cd dialex-ai       && ./gradlew :shared:allTests)   # includes real-engine integration tests
 ```
 
 **Feature maturity**
@@ -96,9 +96,9 @@ Run the tests yourself:
 
 | Area | Status |
 |---|---|
-| Debate vs single model | A benchmark harness and a 10-case set (`Dialex-Bench-10`) exist in `dialex-engine/pkg/benchmark`. **No results are published yet.** |
-| Kritix `plan` and review | `plan` is template-based and the reviewer is rule-based; neither calls a model. See [kritix-ai/README.md](kritix-ai/README.md). `kritix code` writes patches with a model only when you pass `--provider` and `--model`. |
-| Kritix execution isolation | macOS: commands run under `sandbox-exec` with writes limited to the workspace, temp and tool caches, and network denied by default (tested). Linux: same via `bwrap` if installed (not yet tested in CI). Windows or no tool: process-group only. Reads are not restricted, so it is **not** a defence against a hostile repository. Each result reports its `isolation` level. |
+| Debate vs single model | A benchmark harness and a 10-case set (`Dialex-Bench-10`) exist in `socratix-engine/pkg/benchmark`. **No results are published yet.** |
+| Artix `plan` and review | `plan` is template-based and the reviewer is rule-based; neither calls a model. See [artix-ai/README.md](artix-ai/README.md). `artix code` writes patches with a model only when you pass `--provider` and `--model`. |
+| Artix execution isolation | macOS: commands run under `sandbox-exec` with writes limited to the workspace, temp and tool caches, and network denied by default (tested). Linux: same via `bwrap` if installed (not yet tested in CI). Windows or no tool: process-group only. Reads are not restricted, so it is **not** a defence against a hostile repository. Each result reports its `isolation` level. |
 | API key storage | AES-256-GCM; the key is kept in the OS keychain (macOS Keychain, Linux `secret-tool`) with a `0600` key-file fallback (Windows, or `DIALEX_KEY_STORAGE=file`). |
 | Third-party CLI runners | Driving vendor CLIs (`claude`, `codex`, ...) depends on each vendor's terms and may break. Direct API keys or Ollama are the stable path. |
 

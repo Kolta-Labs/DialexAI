@@ -14,8 +14,8 @@ The project is dual-licensed (see [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md)
 
 ## Setup
 ```bash
-(cd dialex-engine && go test ./pkg/...)
-(cd kritix-ai && go test ./pkg/...)
+(cd socratix-engine && go test ./pkg/...)
+(cd artix-ai && go test ./pkg/...)
 (cd dialex-ai && ./gradlew :shared:allTests)
 ```
 The Kotlin client needs the public [Kolt](https://github.com/Kolta-Labs/Kolt) libraries (Apache-2.0) as a sibling checkout: `git clone https://github.com/Kolta-Labs/Kolt.git KoltLibs` next to this repo (see `dialex-ai/settings.gradle.kts`).
@@ -24,17 +24,17 @@ The Kotlin client needs the public [Kolt](https://github.com/Kolta-Labs/Kolt) li
 
 | Area | Task | Size |
 |---|---|---|
-| Benchmark | Add 10 new cases to `dialex-engine/pkg/benchmark/bundled.go` in a domain you know (legal, security, product) | S |
+| Benchmark | Add 10 new cases to `socratix-engine/pkg/benchmark/bundled.go` in a domain you know (legal, security, product) | S |
 | Benchmark | Run `Dialex-Bench-10` council vs single model and publish method, cost, latency, results in `dialex-ai/docs/` | M |
-| Engine | OpenAI-compatible runner (covers OpenRouter, vLLM, LM Studio) in `dialex-engine/pkg/runner` with a contract test | M |
+| Engine | OpenAI-compatible runner (covers OpenRouter, vLLM, LM Studio) in `socratix-engine/pkg/runner` with a contract test | M |
 | Engine | Runner health check: probe CLI version/flags at startup and disable a broken runner cleanly | M |
-| Kritix | Container or VM execution for `kritix-ai/pkg/sandbox` (today: `sandbox-exec`/`bwrap`; reads are unrestricted) | L |
-| Kritix | Make `kritix plan` a real model-backed council (use `coder.NewAPIRunnerFromEnv`; keep the template as offline fallback) | L |
-| Kritix | Model-backed reviewer that evaluates acceptance criteria, alongside the rule-based checks | L |
-| Kritix | Give the TUI REPL and `forge` worker a model via `coder.PatchGenerator` | M |
-| Kritix | Deeper tests for `lsp`, `mcp`, `knowledge`, `plugins`, `forge` (each has only 2-5 test functions) | M |
-| Tests | Deepen `dialex-engine/pkg/graph` tests (temporal decay, FTS5 recall) | S |
-| Docs | Verify one end-to-end demo per Kritix feature (shadow worktrees, time travel, LSP, knowledge items) or mark it "planned" in the docs | M |
+| Artix | Container or VM execution for `artix-ai/pkg/sandbox` (today: `sandbox-exec`/`bwrap`; reads are unrestricted) | L |
+| Artix | Make `artix plan` a real model-backed council (use `coder.NewAPIRunnerFromEnv`; keep the template as offline fallback) | L |
+| Artix | Model-backed reviewer that evaluates acceptance criteria, alongside the rule-based checks | L |
+| Artix | Give the TUI REPL and `forge` worker a model via `coder.PatchGenerator` | M |
+| Artix | Deeper tests for `lsp`, `mcp`, `knowledge`, `plugins`, `forge` (each has only 2-5 test functions) | M |
+| Tests | Deepen `socratix-engine/pkg/graph` tests (temporal decay, FTS5 recall) | S |
+| Docs | Verify one end-to-end demo per Artix feature (shadow worktrees, time travel, LSP, knowledge items) or mark it "planned" in the docs | M |
 | Platform | Linux and Windows desktop smoke test in CI | M |
 | Design partner | Try Dialex on a real decision at your company and write up what broke | S |
 | Security | Native OIDC login (today: trusted-proxy headers only); tamper-evident audit log | L |

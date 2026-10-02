@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"kritix/pkg/sandbox"
+	"artix/pkg/sandbox"
 )
 
 // SkillParameter defines an input argument for a skill.
@@ -43,7 +43,7 @@ func NewLoader(projectDir string) *Loader {
 	home, _ := os.UserHomeDir()
 	globalDir := ""
 	if home != "" {
-		globalDir = filepath.Join(home, ".kritix", "skills")
+		globalDir = filepath.Join(home, ".artix", "skills")
 	}
 
 	return &Loader{
@@ -64,9 +64,9 @@ func (l *Loader) LoadAll() ([]Skill, error) {
 		}
 	}
 
-	// 2. Load project-level skills (.kritix/skills)
+	// 2. Load project-level skills (.artix/skills)
 	if l.projectDir != "" {
-		pDir := filepath.Join(l.projectDir, ".kritix", "skills")
+		pDir := filepath.Join(l.projectDir, ".artix", "skills")
 		pSkills, _ := l.scanDir(pDir, true)
 		for _, s := range pSkills {
 			skillMap[s.Name] = s
@@ -207,11 +207,11 @@ func (l *Loader) Execute(ctx context.Context, skill *Skill, args map[string]stri
 	}
 
 	// Arguments may come from an LLM or a user, so they must never be parsed as shell code:
-	// pass each value through the environment and reference it as ${KRITIX_ARG_<name>}.
+	// pass each value through the environment and reference it as ${ARTIX_ARG_<name>}.
 	cmdStr := skill.Command
 	env := make(map[string]string, len(args))
 	for k, v := range args {
-		name := "KRITIX_ARG_" + unsafeEnvChars.ReplaceAllString(k, "_")
+		name := "ARTIX_ARG_" + unsafeEnvChars.ReplaceAllString(k, "_")
 		env[name] = v
 		cmdStr = strings.ReplaceAll(cmdStr, fmt.Sprintf("{{%s}}", k), "${"+name+"}")
 	}

@@ -83,15 +83,15 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.22.x"
-          cache-dependency-path: dialex-engine/go.sum
+          cache-dependency-path: socratix-engine/go.sum
 
       - name: Verify Go Modules
-        working-directory: dialex-engine
+        working-directory: socratix-engine
         run: |
           go mod download
           go mod verify
 
       - name: Run Engine Tests with Race Detector
-        working-directory: dialex-engine
+        working-directory: socratix-engine
         run: go test -v -race -timeout 5m ./pkg/...
 

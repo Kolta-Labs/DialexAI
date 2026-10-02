@@ -162,7 +162,7 @@ The `domain` layer represents the enterprise business rules and is platform-agno
 
 ## 5. Go Orchestration Engine Architecture
 
-The Go engine (`dialex-engine/`) is the heart of Dialex's deliberation coordination. It can be compiled as a standalone daemon, hosted inside Docker, or run as a local child process managed by the desktop GUI.
+The Go engine (`socratix-engine/`) is the heart of Dialex's deliberation coordination. It can be compiled as a standalone daemon, hosted inside Docker, or run as a local child process managed by the desktop GUI.
 
 ```mermaid
 sequenceDiagram

@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"dialex/pkg/credence"
-	"dialex/pkg/model"
+	"socratix/pkg/credence"
+	"socratix/pkg/model"
 )
 
 // handleGetCredenceLedger returns the Bayesian Credence Ledger for a discussion.

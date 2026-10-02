@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"dialex/pkg/decomposition"
-	"dialex/pkg/model"
+	"socratix/pkg/decomposition"
+	"socratix/pkg/model"
 )
 
 // handleDecomposeProblem handles POST /api/v1/discussions/decompose

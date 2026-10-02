@@ -1,4 +1,4 @@
-package com.kritix.desktop.ui.council
+package com.artix.desktop.ui.council
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,9 +18,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kritix.desktop.model.CouncilMessage
-import com.kritix.desktop.model.Stakeholder
-import com.kritix.desktop.ui.theme.*
+import com.artix.desktop.model.CouncilMessage
+import com.artix.desktop.model.Stakeholder
+import com.artix.desktop.ui.theme.*
 
 @Composable
 fun CouncilChamberView(

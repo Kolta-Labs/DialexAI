@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"kritix/pkg/persona"
+	"artix/pkg/persona"
 )
 
 func TestGitHubClient_CreatePullRequest(t *testing.T) {

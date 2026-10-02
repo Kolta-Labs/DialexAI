@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // A non-2xx response must surface the provider's own error body instead of failing to parse

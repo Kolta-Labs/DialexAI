@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"kritix/pkg/persona"
+	"artix/pkg/persona"
 )
 
 func TestMentionResolver_ResolveAll(t *testing.T) {
@@ -99,7 +99,7 @@ func TestREPL_InteractiveSession(t *testing.T) {
 	}
 
 	output := out.String()
-	if !strings.Contains(output, "Kritix AI Shell") {
+	if !strings.Contains(output, "Artix AI Shell") {
 		t.Errorf("expected banner in output")
 	}
 	if !strings.Contains(output, "Conduct Socratic alignment interview") {

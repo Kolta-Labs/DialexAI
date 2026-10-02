@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"dialex/pkg/graph"
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/graph"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 // fakeRunner echoes provider + transcript length, no network/process involved.

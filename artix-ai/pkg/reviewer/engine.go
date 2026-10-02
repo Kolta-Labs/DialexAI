@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"dialex/pkg/model"
-	"kritix/pkg/persona"
-	"kritix/pkg/sandbox"
-	"kritix/pkg/steering"
+	"socratix/pkg/model"
+	"artix/pkg/persona"
+	"artix/pkg/sandbox"
+	"artix/pkg/steering"
 )
 
 // ReviewVerdict represents the Adversarial Reviewer's evaluation result.

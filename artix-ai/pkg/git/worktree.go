@@ -37,7 +37,7 @@ type WorktreeManager struct {
 
 // NewWorktreeManager creates a worktree manager for a repository.
 func NewWorktreeManager(repoRoot string) *WorktreeManager {
-	wtDir := filepath.Join(repoRoot, ".kritix", "worktrees")
+	wtDir := filepath.Join(repoRoot, ".artix", "worktrees")
 	_ = os.MkdirAll(wtDir, 0755)
 
 	return &WorktreeManager{
@@ -52,7 +52,7 @@ func (m *WorktreeManager) CreateShadow(taskID, baseBranch string) (*ShadowWorktr
 		baseBranch = "HEAD"
 	}
 
-	branchName := fmt.Sprintf("kritix/shadow-%s-%d", taskID, time.Now().Unix())
+	branchName := fmt.Sprintf("artix/shadow-%s-%d", taskID, time.Now().Unix())
 	targetPath := filepath.Join(m.worktreeDir, taskID)
 
 	// Remove any leftover worktree at target path

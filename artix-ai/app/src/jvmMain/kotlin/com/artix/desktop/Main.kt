@@ -1,4 +1,4 @@
-package com.kritix.desktop
+package com.artix.desktop
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,21 +9,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
-import com.kritix.desktop.ui.components.TabHeader
-import com.kritix.desktop.ui.council.CouncilChamberView
-import com.kritix.desktop.ui.knowledge.KnowledgeInsightsView
-import com.kritix.desktop.ui.lab.EngineeringLabView
-import com.kritix.desktop.ui.persona.PersonaStudioView
-import com.kritix.desktop.ui.steering.SteeringStudioView
-import com.kritix.desktop.ui.theme.KritixTheme
+import com.artix.desktop.ui.components.TabHeader
+import com.artix.desktop.ui.council.CouncilChamberView
+import com.artix.desktop.ui.knowledge.KnowledgeInsightsView
+import com.artix.desktop.ui.lab.EngineeringLabView
+import com.artix.desktop.ui.persona.PersonaStudioView
+import com.artix.desktop.ui.steering.SteeringStudioView
+import com.artix.desktop.ui.theme.ArtixTheme
 
 fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Kritix AI — Autonomous Engineering & Cockpit Studio",
+        title = "Artix AI — Autonomous Engineering & Cockpit Studio",
         state = WindowState(width = 1280.dp, height = 850.dp)
     ) {
-        KritixTheme {
+        ArtixTheme {
             var selectedTab by remember { mutableStateOf(0) }
 
             Column(modifier = Modifier.fillMaxSize()) {

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 type scriptedJudge struct {

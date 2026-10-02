@@ -320,16 +320,16 @@ Click **`⚔️ Run Benchmark`** on any dilemma:
 For CI/CD automated regression testing and high-throughput headless evaluations:
 ```bash
 # List all bundled and custom benchmark cases
-./dialex-engine/bin/dialexbench list
+./socratix-engine/bin/dialexbench list
 
 # Run a specific benchmark dilemma
-./dialex-engine/bin/dialexbench run DB01 --rounds 2
+./socratix-engine/bin/dialexbench run DB01 --rounds 2
 
 # Print aggregate Student's t-test summary
-./dialex-engine/bin/dialexbench stats
+./socratix-engine/bin/dialexbench stats
 
 # Export results
-./dialex-engine/bin/dialexbench export --format=markdown > benchmark_report.md
+./socratix-engine/bin/dialexbench export --format=markdown > benchmark_report.md
 ```
 
 ---

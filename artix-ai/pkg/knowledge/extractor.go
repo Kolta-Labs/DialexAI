@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"kritix/pkg/coder"
-	"kritix/pkg/spec"
+	"artix/pkg/coder"
+	"artix/pkg/spec"
 )
 
 // LearningExtractor synthesizes institutional knowledge from converged coding sessions.

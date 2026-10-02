@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // Persona is one seat: a name, and the instructions that make it argue from a fixed stance.

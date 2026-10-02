@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // Confidence is a deliberately blunt, rule-based trust level for a council's verdict.

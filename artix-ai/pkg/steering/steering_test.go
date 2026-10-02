@@ -17,8 +17,8 @@ func TestAggregatorLocalRules(t *testing.T) {
 	claudePath := filepath.Join(tempDir, "CLAUDE.md")
 	_ = os.WriteFile(claudePath, []byte("# General Standards\n- Always write unit tests.\n- Never bypass repository layer.\n"), 0644)
 
-	// Create .kritix/steering/arch.md
-	archDir := filepath.Join(tempDir, ".kritix", "steering")
+	// Create .artix/steering/arch.md
+	archDir := filepath.Join(tempDir, ".artix", "steering")
 	_ = os.MkdirAll(archDir, 0755)
 	_ = os.WriteFile(filepath.Join(archDir, "arch.md"), []byte("# Architecture\n- Prefer Result<T> over exceptions.\n- Do not use raw SQLite in ViewModel.\n"), 0644)
 

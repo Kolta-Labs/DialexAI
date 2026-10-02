@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // Registry manages built-in and user-customized SWE personas.
@@ -29,16 +29,16 @@ func NewRegistry(repoRoot string) *Registry {
 		r.personas[p.ID] = p
 	}
 
-	// 2. Discover user global dir (~/.kritix/personas)
+	// 2. Discover user global dir (~/.artix/personas)
 	if home, err := os.UserHomeDir(); err == nil {
-		r.customUserDir = filepath.Join(home, ".kritix", "personas")
+		r.customUserDir = filepath.Join(home, ".artix", "personas")
 		_ = os.MkdirAll(r.customUserDir, 0755)
 		r.loadDir(r.customUserDir, false)
 	}
 
-	// 3. Discover repo-level dir (<repo>/.kritix/personas)
+	// 3. Discover repo-level dir (<repo>/.artix/personas)
 	if repoRoot != "" {
-		r.customRepoDir = filepath.Join(repoRoot, ".kritix", "personas")
+		r.customRepoDir = filepath.Join(repoRoot, ".artix", "personas")
 		r.loadDir(r.customRepoDir, true)
 	}
 

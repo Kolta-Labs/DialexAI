@@ -1,7 +1,7 @@
 package persona
 
 import (
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // GetBuiltinHeuristics returns the standard repository of software and system mental models.

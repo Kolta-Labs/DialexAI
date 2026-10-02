@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"kritix/pkg/coder"
-	"kritix/pkg/spec"
+	"artix/pkg/coder"
+	"artix/pkg/spec"
 )
 
 func TestKnowledgeStore_CRUD(t *testing.T) {

@@ -1,4 +1,4 @@
-rootProject.name = "Kritix"
+rootProject.name = "Artix"
 
 pluginManagement {
     repositories {

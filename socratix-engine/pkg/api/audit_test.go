@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 func do(t *testing.T, method, url, token string, body any) *http.Response {

@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"kritix/pkg/steering"
+	"artix/pkg/steering"
 )
 
 // MentionType classifies what kind of context was referenced.

@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"dialex/pkg/model"
-	"dialex/pkg/persona"
+	"socratix/pkg/model"
+	"socratix/pkg/persona"
 )
 
 // handleGetPersonaDNA returns the 8-Layer DNA for a specific persona.

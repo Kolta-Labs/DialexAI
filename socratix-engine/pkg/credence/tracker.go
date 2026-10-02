@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // CalculateShannonEntropy calculates Shannon entropy in bits for a discrete probability distribution.

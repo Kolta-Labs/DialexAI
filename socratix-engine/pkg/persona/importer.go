@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 	"gopkg.in/yaml.v3"
 )
 

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // writeScript creates an executable shell script in a temp dir and returns its absolute

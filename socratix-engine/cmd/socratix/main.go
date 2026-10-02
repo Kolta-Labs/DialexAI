@@ -10,9 +10,9 @@ import (
 	"os"
 	"strings"
 
-	"dialex/pkg/api"
-	"dialex/pkg/service"
-	"dialex/pkg/store"
+	"socratix/pkg/api"
+	"socratix/pkg/service"
+	"socratix/pkg/store"
 )
 
 func main() {
@@ -40,20 +40,20 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println(`dialex — the Dialex consensus & CLI engine by Kolta Labs
+	fmt.Println(`socratix — the Socratix consensus & deliberation engine by Kolta Labs
 
 Usage:
-  dialex serve [flags]        Run the HTTP/SSE daemon
-  dialex users add <name>     Add an account to the multi-user store (--dir to target
+  socratix serve [flags]        Run the HTTP/SSE daemon
+  socratix users add <name>     Add an account to the multi-user store (--dir to target
                               a non-default store, e.g. for scripting/testing)
-  dialex ask [flags] "plan or question"
+  socratix ask [flags] "plan or question"
                               One-shot council on a single API key: a few personas on one
                               model stress-test your plan and print a decision memo. See
-                              "dialex ask --list" for modes (pre-mortem, red team, tenth man).
-  dialex service install      Register the engine to start at login (launchd on macOS,
+                              "socratix ask --list" for modes (pre-mortem, red team, tenth man).
+  socratix service install      Register the engine to start at login (launchd on macOS,
                               systemd --user on Linux; not yet supported on Windows)
-  dialex service uninstall    Remove that login-time registration
-  dialex service status       Report whether it's currently registered
+  socratix service uninstall    Remove that login-time registration
+  socratix service status       Report whether it's currently registered
 
 serve flags:
   --host string             Address to bind (default "127.0.0.1:7890", or env DIALEX_HOST)

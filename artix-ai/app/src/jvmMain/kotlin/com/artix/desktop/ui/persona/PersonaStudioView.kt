@@ -1,4 +1,4 @@
-package com.kritix.desktop.ui.persona
+package com.artix.desktop.ui.persona
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,9 +16,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kritix.desktop.model.PersonaDnaUI
-import com.kritix.desktop.ui.components.PersonaRadarChart
-import com.kritix.desktop.ui.theme.*
+import com.artix.desktop.model.PersonaDnaUI
+import com.artix.desktop.ui.components.PersonaRadarChart
+import com.artix.desktop.ui.theme.*
 
 @Composable
 fun PersonaStudioView() {

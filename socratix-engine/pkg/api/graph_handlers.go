@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"dialex/pkg/graph"
+	"socratix/pkg/graph"
 )
 
 // handleGetGraph returns the active knowledge graph for a project.

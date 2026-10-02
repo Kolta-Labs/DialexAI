@@ -15,12 +15,12 @@ import (
 	"sync"
 	"time"
 
-	"dialex/pkg/benchmark"
-	"dialex/pkg/graph"
-	"dialex/pkg/model"
-	"dialex/pkg/orchestrator"
-	"dialex/pkg/runner"
-	"dialex/pkg/store"
+	"socratix/pkg/benchmark"
+	"socratix/pkg/graph"
+	"socratix/pkg/model"
+	"socratix/pkg/orchestrator"
+	"socratix/pkg/runner"
+	"socratix/pkg/store"
 )
 
 // Server holds everything a request handler needs — the persisted state, the orchestrator,

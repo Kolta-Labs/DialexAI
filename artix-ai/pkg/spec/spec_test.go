@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"kritix/pkg/persona"
-	"kritix/pkg/repo"
+	"artix/pkg/persona"
+	"artix/pkg/repo"
 )
 
 func TestCouncilAssemblyAndPlanning(t *testing.T) {

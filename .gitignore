@@ -45,6 +45,7 @@ dialex.db
 /discussions/
 /backups/
 .dialex/
+.artix/
 
 # ------------------------------------------------------------------------------
 # 3. Cryptographic Keys, Keystores & TLS/SSL Certificates
@@ -94,12 +95,18 @@ output-metadata.json
 # 6. Compose Desktop & Go Engine Binaries
 # ------------------------------------------------------------------------------
 # Compiled Go engine binaries
-dialex-engine/dialex
-dialex-engine/dialex.exe
-dialex-engine/bin/
-dialex-engine/dist/
-kritix-ai/bin/
-kritix-ai/dist/
+socratix-engine/bin/
+socratix-engine/dist/
+socratix-engine/socratix
+socratix-engine/socratix.exe
+socratix-engine/dialex
+socratix-engine/dialex.exe
+socratix-engine/bin/
+socratix-engine/dist/
+artix-ai/bin/
+artix-ai/dist/
+artix-ai/bin/
+artix-ai/dist/
 
 
 # Release staging & output packages (anchored to root)

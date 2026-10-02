@@ -1,4 +1,4 @@
-module dialex
+module socratix
 
 go 1.27.0
 

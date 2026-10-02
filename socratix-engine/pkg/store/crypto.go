@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // secretBox encrypts just the API keys before they touch disk. AES-256-GCM with a random

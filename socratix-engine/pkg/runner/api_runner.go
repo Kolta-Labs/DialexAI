@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // ApiAgentRunner calls each provider's REST API directly with a key from the global

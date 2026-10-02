@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"dialex/pkg/consensus"
-	"dialex/pkg/graph"
-	"dialex/pkg/model"
-	"dialex/pkg/retrieval"
-	"dialex/pkg/runner"
+	"socratix/pkg/consensus"
+	"socratix/pkg/graph"
+	"socratix/pkg/model"
+	"socratix/pkg/retrieval"
+	"socratix/pkg/runner"
 )
 
 var consensusPrefixRegex = regexp.MustCompile(`(?mi)^(?:>\s*)*(?:#{1,6}\s*)?(?:\[\s*)?(?:\*{1,2}|_{1,2})?\s*(?:AGREED|CONCUR|CONSENSUS REACHED|UNANIMOUS AGREEMENT|I AGREE)\b\s*(?:\])?\s*[:—\-]?(?:\*{1,2}|_{1,2})?`)

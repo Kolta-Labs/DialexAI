@@ -1,4 +1,4 @@
-// Command dialexbench runs the Null Hypothesis Benchmarking Suite headlessly.
+// Command socratixbench runs the Null Hypothesis Benchmarking Suite headlessly.
 package main
 
 import (
@@ -9,11 +9,11 @@ import (
 	"os"
 	"strings"
 
-	"dialex/pkg/benchmark"
-	"dialex/pkg/model"
-	"dialex/pkg/quickstart"
-	"dialex/pkg/runner"
-	"dialex/pkg/store"
+	"socratix/pkg/benchmark"
+	"socratix/pkg/model"
+	"socratix/pkg/quickstart"
+	"socratix/pkg/runner"
+	"socratix/pkg/store"
 )
 
 func main() {
@@ -39,12 +39,12 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println(`dialexbench — Dialex AI Null Hypothesis Benchmarking & Evaluation CLI
+	fmt.Println(`socratixbench — Socratix Deliberation Benchmarking & Evaluation CLI
 
 Usage:
-  dialexbench list                 List all 10 canonical DialexBench dilemmas
-  dialexbench run [flags]          Execute a dual-arm benchmark evaluation
-  dialexbench compare [--dir d]    Table of stored runs grouped by baseline and independence
+  socratixbench list                 List all 10 canonical benchmark dilemmas
+  socratixbench run [flags]          Execute a dual-arm benchmark evaluation
+  socratixbench compare [--dir d]    Table of stored runs grouped by baseline and independence
 
 Flags:
   --case string      Case ID to evaluate (e.g. DB01, DB02, or "all", default: "DB01")

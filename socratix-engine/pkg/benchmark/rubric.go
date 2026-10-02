@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 // Rubric scoring asks the judge a yes/no question per checklist item instead of for a holistic

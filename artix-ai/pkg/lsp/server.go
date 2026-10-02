@@ -9,10 +9,10 @@ import (
 	"strings"
 	"sync"
 
-	"kritix/pkg/steering"
+	"artix/pkg/steering"
 )
 
-// Server implements a Language Server Protocol 3.17 backend for Kritix AI.
+// Server implements a Language Server Protocol 3.17 backend for Artix AI.
 type Server struct {
 	rootDir   string
 	in        *bufio.Reader
@@ -149,7 +149,7 @@ func (s *Server) handleRequest(req *LSPRequest) {
 				},
 			},
 			"serverInfo": map[string]string{
-				"name":    "kritix-lsp",
+				"name":    "artix-lsp",
 				"version": "1.0.0",
 			},
 		}
@@ -190,19 +190,19 @@ func (s *Server) handleRequest(req *LSPRequest) {
 		_ = json.Unmarshal(req.Params, &p)
 		actions := []CodeAction{
 			{
-				Title: "Kritix: Fix Taboo Space Violation",
+				Title: "Artix: Fix Taboo Space Violation",
 				Kind:  "quickfix",
 				Command: &Command{
 					Title:   "Fix Violation",
-					Command: "kritix.fixTaboo",
+					Command: "artix.fixTaboo",
 				},
 			},
 			{
-				Title: "Kritix: Deliberate with Stakeholder Council",
+				Title: "Artix: Deliberate with Stakeholder Council",
 				Kind:  "refactor",
 				Command: &Command{
 					Title:   "Deliberate",
-					Command: "kritix.deliberate",
+					Command: "artix.deliberate",
 				},
 			},
 		}
@@ -218,8 +218,8 @@ func (s *Server) handleRequest(req *LSPRequest) {
 					End:   Position{Line: 0, Character: 10},
 				},
 				Command: &Command{
-					Title:   "⚡ Kritix: Deliberate Story Spec",
-					Command: "kritix.plan",
+					Title:   "⚡ Artix: Deliberate Story Spec",
+					Command: "artix.plan",
 				},
 			},
 		}
@@ -252,7 +252,7 @@ func (s *Server) validateDocument(uri, text string) {
 				},
 				Severity: SeverityError,
 				Code:     "TABOO-01",
-				Source:   "Kritix Steering",
+				Source:   "Artix Steering",
 				Message:  "Violates Taboo Space: Direct SQLite usage prohibited in UI layer.",
 			})
 		}
@@ -266,7 +266,7 @@ func (s *Server) validateDocument(uri, text string) {
 				},
 				Severity: SeverityWarning,
 				Code:     "TABOO-02",
-				Source:   "Kritix Steering",
+				Source:   "Artix Steering",
 				Message:  "Violates Taboo Space: Blocking main thread with Thread.sleep.",
 			})
 		}

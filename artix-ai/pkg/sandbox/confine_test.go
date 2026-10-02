@@ -19,7 +19,7 @@ func TestConfinementBlocksNetworkAndOutsideWrites(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) }))
 	defer srv.Close()
 	ws := t.TempDir()
-	outside := filepath.Join(os.Getenv("HOME"), ".kritix-sandbox-test-should-not-exist")
+	outside := filepath.Join(os.Getenv("HOME"), ".artix-sandbox-test-should-not-exist")
 	defer os.Remove(outside)
 	box := NewSandbox(ws)
 	ctx := context.Background()
@@ -36,7 +36,7 @@ func TestConfinementBlocksNetworkAndOutsideWrites(t *testing.T) {
 	if r := box.Run(ctx, "curl -s -m 3 "+srv.URL, nil); r.Success() {
 		t.Fatal("network must be denied")
 	}
-	t.Setenv("KRITIX_SANDBOX_NETWORK", "1")
+	t.Setenv("ARTIX_SANDBOX_NETWORK", "1")
 	if r := box.Run(ctx, "curl -s -m 3 "+srv.URL, nil); !r.Success() || r.Stdout != "ok" {
 		t.Fatalf("network opt-in must work: %+v", r)
 	}

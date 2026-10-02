@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"dialex/pkg/graph"
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/graph"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 var digestJSONRegex = regexp.MustCompile(`(?s)\{.*"hardenedThesis".*\}`)

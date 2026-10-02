@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"dialex/pkg/graph"
-	"dialex/pkg/model"
+	"socratix/pkg/graph"
+	"socratix/pkg/model"
 )
 
 func TestBuildSocraticSystemPrompt_AllStances(t *testing.T) {

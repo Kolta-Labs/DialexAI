@@ -12,7 +12,7 @@ func project(t *testing.T, files map[string]string) *Loader {
 	t.Helper()
 	root := t.TempDir()
 	for rel, content := range files {
-		p := filepath.Join(root, ".kritix", "skills", rel)
+		p := filepath.Join(root, ".artix", "skills", rel)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -20,7 +20,7 @@ func project(t *testing.T, files map[string]string) *Loader {
 			t.Fatal(err)
 		}
 	}
-	return &Loader{projectDir: root} // no global dir: isolate from the real ~/.kritix
+	return &Loader{projectDir: root} // no global dir: isolate from the real ~/.artix
 }
 
 // Argument values can come from an LLM or a user. They must reach the command as data,

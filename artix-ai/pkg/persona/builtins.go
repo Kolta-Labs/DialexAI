@@ -1,7 +1,7 @@
 package persona
 
 import (
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // SWEPersonaCategory defines groupings for software engineering personas.
@@ -55,7 +55,7 @@ func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 	// STAKEHOLDER COUNCIL
 	case "product_owner_lead", "po":
 		return &model.PersonaDNA{
-			SchemaVersion: "kritix.dna/v1.0",
+			SchemaVersion: "artix.dna/v1.0",
 			ID:            "product_owner_lead",
 			Name:          "Product Owner & Lead",
 			Role:          "Value Maximizer & Scope Pruner",
@@ -100,7 +100,7 @@ func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 
 	case "senior_software_architect", "architect":
 		return &model.PersonaDNA{
-			SchemaVersion: "kritix.dna/v1.0",
+			SchemaVersion: "artix.dna/v1.0",
 			ID:            "senior_software_architect",
 			Name:          "Senior Software Architect",
 			Role:          "Systems & Boundary Architect",
@@ -145,7 +145,7 @@ func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 
 	case "qa_testing_lead", "qa_lead", "qa":
 		return &model.PersonaDNA{
-			SchemaVersion: "kritix.dna/v1.0",
+			SchemaVersion: "artix.dna/v1.0",
 			ID:            "qa_testing_lead",
 			Name:          "QA & Verification Lead",
 			Role:          "Adversarial Edge-Case & Failure Modeler",
@@ -190,7 +190,7 @@ func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 
 	case "engineering_manager", "em":
 		return &model.PersonaDNA{
-			SchemaVersion: "kritix.dna/v1.0",
+			SchemaVersion: "artix.dna/v1.0",
 			ID:            "engineering_manager",
 			Name:          "Engineering Manager",
 			Role:          "Delivery Feasibility & Risk Balancer",
@@ -224,7 +224,7 @@ func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 
 	case "senior_staff_engineer", "staff_engineer":
 		return &model.PersonaDNA{
-			SchemaVersion: "kritix.dna/v1.0",
+			SchemaVersion: "artix.dna/v1.0",
 			ID:            "senior_staff_engineer",
 			Name:          "Senior Staff Engineer",
 			Role:          "Pragmatic Implementation & Ergonomics Overseer",
@@ -252,7 +252,7 @@ func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 	// DOMAIN ENGINEERS
 	case "backend_engineer", "backend":
 		return &model.PersonaDNA{
-			SchemaVersion: "kritix.dna/v1.0",
+			SchemaVersion: "artix.dna/v1.0",
 			ID:            "backend_engineer",
 			Name:          "Backend Systems Engineer",
 			Role:          "High-Throughput & Safe Data Implementer",
@@ -280,7 +280,7 @@ func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 
 	case "android_engineer", "android":
 		return &model.PersonaDNA{
-			SchemaVersion: "kritix.dna/v1.0",
+			SchemaVersion: "artix.dna/v1.0",
 			ID:            "android_engineer",
 			Name:          "Android & Compose Engineer",
 			Role:          "Lifecycle-Safe & Reactive Mobile Implementer",
@@ -308,7 +308,7 @@ func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 
 	case "ios_engineer", "ios":
 		return &model.PersonaDNA{
-			SchemaVersion: "kritix.dna/v1.0",
+			SchemaVersion: "artix.dna/v1.0",
 			ID:            "ios_engineer",
 			Name:          "iOS & SwiftUI Engineer",
 			Role:          "Idiomatic Apple Platform Implementer",
@@ -336,7 +336,7 @@ func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 
 	case "business_domain_expert", "domain_expert":
 		return &model.PersonaDNA{
-			SchemaVersion: "kritix.dna/v1.0",
+			SchemaVersion: "artix.dna/v1.0",
 			ID:            "business_domain_expert",
 			Name:          "Business Invariant Expert",
 			Role:          "Domain Logic & Rule Sentinel",
@@ -365,7 +365,7 @@ func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 	// ADVERSARIAL REVIEWERS
 	case "adversarial_code_reviewer", "reviewer":
 		return &model.PersonaDNA{
-			SchemaVersion: "kritix.dna/v1.0",
+			SchemaVersion: "artix.dna/v1.0",
 			ID:            "adversarial_code_reviewer",
 			Name:          "Adversarial Code Reviewer",
 			Role:          "Diff Scrutinizer & Test Enforcer",
@@ -403,7 +403,7 @@ func GetBuiltinPersonaDNA(id string) *model.PersonaDNA {
 
 	case "security_auditor", "security":
 		return &model.PersonaDNA{
-			SchemaVersion: "kritix.dna/v1.0",
+			SchemaVersion: "artix.dna/v1.0",
 			ID:            "security_auditor",
 			Name:          "Security & Vulnerability Auditor",
 			Role:          "Threat Vector & Token Sanitizer",

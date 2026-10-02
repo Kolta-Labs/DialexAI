@@ -1,4 +1,4 @@
-package com.kritix.desktop.ui.theme
+package com.artix.desktop.ui.theme
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -36,7 +36,7 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 @Composable
-fun KritixTheme(content: @Composable () -> Unit) {
+fun ArtixTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = DarkColorScheme,
         content = content

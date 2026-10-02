@@ -153,7 +153,7 @@ func (c *StdioClient) Initialize(ctx context.Context) (*InitializeResult, error)
 	params := InitializeParams{
 		ProtocolVersion: "2024-11-05",
 		ClientInfo: ClientInfo{
-			Name:    "kritix",
+			Name:    "artix",
 			Version: "1.0.0",
 		},
 		Capabilities: map[string]interface{}{
@@ -334,7 +334,7 @@ func (c *HTTPClient) Initialize(ctx context.Context) (*InitializeResult, error) 
 	params := InitializeParams{
 		ProtocolVersion: "2024-11-05",
 		ClientInfo: ClientInfo{
-			Name:    "kritix",
+			Name:    "artix",
 			Version: "1.0.0",
 		},
 		Capabilities: map[string]interface{}{

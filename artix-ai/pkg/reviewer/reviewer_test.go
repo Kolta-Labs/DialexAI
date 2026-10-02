@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"dialex/pkg/model"
-	"kritix/pkg/persona"
-	"kritix/pkg/sandbox"
-	"kritix/pkg/steering"
+	"socratix/pkg/model"
+	"artix/pkg/persona"
+	"artix/pkg/sandbox"
+	"artix/pkg/steering"
 )
 
 func TestReviewerEvaluatesSuccess(t *testing.T) {

@@ -1,4 +1,4 @@
-package com.kritix.desktop.mvi
+package com.artix.desktop.mvi
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * Kolt-compliant MVI ViewModel for Kritix Cockpit.
+ * Kolt-compliant MVI ViewModel for Artix Cockpit.
  */
 abstract class MviViewModel<S : Any, I : Any, E : Any>(initialState: S) : ViewModel() {
 

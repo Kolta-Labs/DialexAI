@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"kritix/pkg/persona"
+	"artix/pkg/persona"
 )
 
 // GrillQuestion represents a probing question formulated by a stakeholder.

@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 func TestAISetupHandler_Validation(t *testing.T) {

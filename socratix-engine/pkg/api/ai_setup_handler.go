@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 type aiSetupAgentSelection struct {

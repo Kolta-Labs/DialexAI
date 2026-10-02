@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"dialex/pkg/model"
-	"dialex/pkg/store"
+	"socratix/pkg/model"
+	"socratix/pkg/store"
 )
 
 func TestGetAndRecalculateCredenceEndpoints(t *testing.T) {

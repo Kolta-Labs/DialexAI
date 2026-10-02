@@ -14,7 +14,7 @@ func TestSkillsLoader_LoadAndExecute(t *testing.T) {
 	}
 	defer os.RemoveAll(tempProject)
 
-	skillsDir := filepath.Join(tempProject, ".kritix", "skills")
+	skillsDir := filepath.Join(tempProject, ".artix", "skills")
 	_ = os.MkdirAll(skillsDir, 0755)
 
 	// 1. Write markdown skill with frontmatter

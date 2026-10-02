@@ -22,12 +22,12 @@ func NewStore(projectDir string) *Store {
 	home, _ := os.UserHomeDir()
 	globalDir := ""
 	if home != "" {
-		globalDir = filepath.Join(home, ".kritix", "knowledge")
+		globalDir = filepath.Join(home, ".artix", "knowledge")
 	}
 
 	pDir := ""
 	if projectDir != "" {
-		pDir = filepath.Join(projectDir, ".kritix", "knowledge")
+		pDir = filepath.Join(projectDir, ".artix", "knowledge")
 		_ = os.MkdirAll(pDir, 0755)
 	}
 

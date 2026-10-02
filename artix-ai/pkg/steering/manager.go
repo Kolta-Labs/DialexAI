@@ -16,14 +16,21 @@ type Manager struct {
 
 // NewManager creates a steering manager for a repository.
 func NewManager(rootDir string) *Manager {
+	cfgPath := filepath.Join(rootDir, ".artix", "steering.json")
+	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+		fallback := filepath.Join(rootDir, ".kritix", "steering.json")
+		if _, ferr := os.Stat(fallback); ferr == nil {
+			cfgPath = fallback
+		}
+	}
 	return &Manager{
 		rootDir:    rootDir,
-		configPath: filepath.Join(rootDir, ".kritix", "steering.json"),
+		configPath: cfgPath,
 		aggregator: NewAggregator(rootDir),
 	}
 }
 
-// LoadConfig reads .kritix/steering.json or returns default empty configuration.
+// LoadConfig reads .artix/steering.json or returns default empty configuration.
 func (m *Manager) LoadConfig() (*SteeringConfig, error) {
 	if _, err := os.Stat(m.configPath); os.IsNotExist(err) {
 		return &SteeringConfig{
@@ -49,7 +56,7 @@ func (m *Manager) LoadConfig() (*SteeringConfig, error) {
 	return &cfg, nil
 }
 
-// SaveConfig persists the steering configuration to .kritix/steering.json.
+// SaveConfig persists the steering configuration to .artix/steering.json.
 func (m *Manager) SaveConfig(cfg *SteeringConfig) error {
 	_ = os.MkdirAll(filepath.Dir(m.configPath), 0755)
 	data, err := json.MarshalIndent(cfg, "", "  ")

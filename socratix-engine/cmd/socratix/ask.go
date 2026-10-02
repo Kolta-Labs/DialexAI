@@ -9,10 +9,10 @@ import (
 	"os/signal"
 	"strings"
 
-	"dialex/pkg/model"
-	"dialex/pkg/orchestrator"
-	"dialex/pkg/quickstart"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/orchestrator"
+	"socratix/pkg/quickstart"
+	"socratix/pkg/runner"
 )
 
 // runAsk is the 60-second first run: one API key (or local Ollama), one question, one memo.

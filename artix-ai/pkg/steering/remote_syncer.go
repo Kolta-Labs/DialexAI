@@ -22,7 +22,7 @@ type RemoteSyncer struct {
 // NewRemoteSyncer creates a remote steering syncer.
 func NewRemoteSyncer() *RemoteSyncer {
 	home, _ := os.UserHomeDir()
-	cache := filepath.Join(home, ".kritix", "cache", "steering")
+	cache := filepath.Join(home, ".artix", "cache", "steering")
 	_ = os.MkdirAll(cache, 0755)
 
 	return &RemoteSyncer{

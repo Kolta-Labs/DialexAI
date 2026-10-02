@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // Single sign-on through a trusted identity-aware proxy (oauth2-proxy, Tailscale serve,

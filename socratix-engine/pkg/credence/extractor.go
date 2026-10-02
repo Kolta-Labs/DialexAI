@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 var defaultHypothesisColors = []string{

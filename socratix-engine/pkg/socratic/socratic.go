@@ -1,7 +1,7 @@
 package socratic
 
 import (
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // SocraticTurnRequest represents user input during an active Socratic session.

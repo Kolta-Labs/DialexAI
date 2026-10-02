@@ -14,7 +14,7 @@ A judge model scores both deliverables on four dimensions: factuality, blind spo
 ## Run it
 
 ```bash
-cd dialex-engine
+cd socratix-engine
 go run ./cmd/dialexbench list
 go run ./cmd/dialexbench run --case all --rounds 2 --format markdown
 ```

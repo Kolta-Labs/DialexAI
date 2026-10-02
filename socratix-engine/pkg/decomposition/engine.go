@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"strings"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 // Whole-word match: bare substrings like "go" hit "algorithm", "good", "google", "rust" hits "trust".

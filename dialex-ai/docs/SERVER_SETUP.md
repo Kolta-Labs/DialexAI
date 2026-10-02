@@ -1,6 +1,6 @@
 # Dialex AI Go Orchestration Engine — Server, Self-Hosting & Deployment Guide
 
-This guide covers building, configuring, deploying, and maintaining the standalone **Dialex AI Go Orchestration Engine** (`dialex-engine/`). The engine coordinates multi-agent turns, evaluates consensus, manages local CLI subprocesses, persists discussions atomically, and streams real-time Server-Sent Events (SSE) to connected desktop, mobile, and web clients.
+This guide covers building, configuring, deploying, and maintaining the standalone **Dialex AI Go Orchestration Engine** (`socratix-engine/`). The engine coordinates multi-agent turns, evaluates consensus, manages local CLI subprocesses, persists discussions atomically, and streams real-time Server-Sent Events (SSE) to connected desktop, mobile, and web clients.
 
 ---
 
@@ -46,10 +46,10 @@ Dialex AI supports two complementary engine execution models:
 
 ## 3. Compiling from Source
 
-Navigate to the `dialex-engine/` directory and compile the binary:
+Navigate to the `socratix-engine/` directory and compile the binary:
 
 ```bash
-cd dialex-engine
+cd socratix-engine
 
 # Download and verify dependencies
 go mod download

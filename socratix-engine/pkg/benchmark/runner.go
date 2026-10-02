@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"dialex/pkg/model"
-	"dialex/pkg/orchestrator"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/orchestrator"
+	"socratix/pkg/runner"
 )
 
 // Runner orchestrates the execution of Arm A (Solo) and Arm B (Council).

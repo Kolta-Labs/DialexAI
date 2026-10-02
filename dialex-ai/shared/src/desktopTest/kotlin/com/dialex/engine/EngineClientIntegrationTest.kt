@@ -208,11 +208,15 @@ class EngineClientIntegrationTest {
         val goBinary = listOf("/opt/homebrew/bin/go", "/usr/local/go/bin/go", "go")
             .firstOrNull { candidate -> runCatching { ProcessBuilder(candidate, "version").start().waitFor() == 0 }.getOrDefault(false) }
             ?: return null
-        val engineModuleDir = File(File(System.getProperty("user.dir")).parentFile, "engine")
-        if (!engineModuleDir.exists()) return null
-        val out = File.createTempFile("dialex-engine-it-binary", "")
+        val parent = File(System.getProperty("user.dir")).parentFile
+        val engineModuleDir = listOf("socratix-engine", "dialex-engine", "engine")
+            .map { File(parent, it) }
+            .firstOrNull { it.exists() }
+            ?: return null
+        val cmdPkg = if (File(engineModuleDir, "cmd/socratix").exists()) "./cmd/socratix" else "./cmd/dialex"
+        val out = File.createTempFile("socratix-engine-it-binary", "")
         out.delete()
-        val build = ProcessBuilder(goBinary, "build", "-o", out.absolutePath, "./cmd/dialex")
+        val build = ProcessBuilder(goBinary, "build", "-o", out.absolutePath, cmdPkg)
             .directory(engineModuleDir)
             .redirectErrorStream(true)
             .start()

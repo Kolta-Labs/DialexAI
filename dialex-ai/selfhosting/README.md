@@ -99,7 +99,7 @@ To run Dialex as a supervised system daemon:
 
 ```bash
 # 1. Download or build the dialex binary
-cd dialex-engine
+cd socratix-engine
 go build -o /usr/local/bin/dialex ./cmd/dialex
 
 # 2. Create service user and data directory

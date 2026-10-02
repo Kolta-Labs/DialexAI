@@ -31,19 +31,19 @@ kotlin {
 
 compose.desktop {
     application {
-        mainClass = "com.kritix.desktop.MainKt"
+        mainClass = "com.artix.desktop.MainKt"
         jvmArgs += listOf(
-            "-Xdock:name=Kritix AI",
-            "-Dapple.awt.application.name=Kritix AI",
+            "-Xdock:name=Artix AI",
+            "-Dapple.awt.application.name=Artix AI",
             "-Dapple.awt.application.appearance=system",
             "-Dapple.laf.useScreenMenuBar=true"
         )
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "KritixAI"
+            packageName = "ArtixAI"
             packageVersion = "1.0.0"
             vendor = "Kolta Labs"
-            description = "Kritix AI - Dialectic Software Engineering & Autonomous Coding Cockpit"
+            description = "Artix AI - Dialectic Software Engineering & Autonomous Coding Cockpit"
         }
     }
 }

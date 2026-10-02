@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"dialex/pkg/benchmark"
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/benchmark"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 // handleListBenchmarkCases returns all bundled and custom benchmark cases.

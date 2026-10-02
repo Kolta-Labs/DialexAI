@@ -1,8 +1,8 @@
 package spec
 
 import (
-	"kritix/pkg/repo"
-	"kritix/pkg/steering"
+	"artix/pkg/repo"
+	"artix/pkg/steering"
 )
 
 // StyleVector defines the communication and brevity profile.

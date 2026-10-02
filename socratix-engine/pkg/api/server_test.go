@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
-	"dialex/pkg/store"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
+	"socratix/pkg/store"
 )
 
 // fakeRunner is a fast, in-memory AgentRunner — no network/process involved, same pattern

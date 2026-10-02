@@ -8,8 +8,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"dialex/pkg/graph"
-	"dialex/pkg/model"
+	"socratix/pkg/graph"
+	"socratix/pkg/model"
 )
 
 func TestCleanSnippetKeepsValidUTF8AndCollapsesWhitespace(t *testing.T) {

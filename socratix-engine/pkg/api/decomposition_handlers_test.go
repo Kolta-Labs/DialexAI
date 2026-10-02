@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"dialex/pkg/decomposition"
-	"dialex/pkg/store"
+	"socratix/pkg/decomposition"
+	"socratix/pkg/store"
 )
 
 func TestDecomposeProblemHandler(t *testing.T) {

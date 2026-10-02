@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"dialex/pkg/benchmark"
+	"socratix/pkg/benchmark"
 )
 
 func TestBenchmarkHandlers(t *testing.T) {

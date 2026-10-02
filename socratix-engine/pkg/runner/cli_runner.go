@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // CliAgentRunner shells out to a local CLI (claude, agy, ...) per turn. Command always

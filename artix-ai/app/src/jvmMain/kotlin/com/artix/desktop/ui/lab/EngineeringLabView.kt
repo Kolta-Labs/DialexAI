@@ -1,4 +1,4 @@
-package com.kritix.desktop.ui.lab
+package com.artix.desktop.ui.lab
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,8 +17,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kritix.desktop.model.DiffChunk
-import com.kritix.desktop.ui.theme.*
+import com.artix.desktop.model.DiffChunk
+import com.artix.desktop.ui.theme.*
 
 @Composable
 fun EngineeringLabView() {
@@ -105,7 +105,7 @@ fun EngineeringLabView() {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("🛡️ Shadow Worktree:", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(".kritix/worktrees/task-101", color = AccentCyan, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                Text(".artix/worktrees/task-101", color = AccentCyan, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                 Spacer(modifier = Modifier.width(10.dp))
                 Text("• Active workspace clean", color = AccentGreen, fontSize = 11.sp)
             }

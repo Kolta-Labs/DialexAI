@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // CompilePrompt transforms an 8-Layer PersonaDNA struct into a high-density, prompt-injected instruction block.

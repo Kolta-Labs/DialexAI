@@ -9,26 +9,26 @@ import (
 	"path/filepath"
 	"strings"
 
-	"kritix/pkg/coder"
-	"kritix/pkg/forge"
-	"kritix/pkg/git"
-	"kritix/pkg/lsp"
-	"kritix/pkg/persona"
-	"kritix/pkg/repo"
-	"kritix/pkg/reviewer"
-	"kritix/pkg/sandbox"
-	"kritix/pkg/spec"
-	"kritix/pkg/steering"
-	"kritix/pkg/tui"
+	"artix/pkg/coder"
+	"artix/pkg/forge"
+	"artix/pkg/git"
+	"artix/pkg/lsp"
+	"artix/pkg/persona"
+	"artix/pkg/repo"
+	"artix/pkg/reviewer"
+	"artix/pkg/sandbox"
+	"artix/pkg/spec"
+	"artix/pkg/steering"
+	"artix/pkg/tui"
 )
 
 const version = "1.0.0"
 
 func printUsage() {
-	fmt.Printf(`Kritix AI - Dialectic Software Engineering & Autonomous Coding (v%s)
+	fmt.Printf(`Artix AI - Dialectic Software Engineering & Autonomous Coding (v%s)
 
 Usage:
-  kritix [command] [options] [arguments]
+  artix [command] [options] [arguments]
 
 Commands:
   repl          Launch interactive TUI shell with @mentions and /grill-me
@@ -41,8 +41,8 @@ Commands:
   daemon        Launch webhook server for GitHub & GitLab automation
   version       Print version
 
-Running 'kritix' without arguments enters interactive REPL mode.
-Use "kritix <command> -h" for detailed options on any command.
+Running 'artix' without arguments enters interactive REPL mode.
+Use "artix <command> -h" for detailed options on any command.
 `, version)
 }
 
@@ -87,7 +87,7 @@ func main() {
 	case "daemon":
 		handleDaemon(cwd, registry, args)
 	case "version", "--version", "-v":
-		fmt.Printf("kritix version %s\n", version)
+		fmt.Printf("artix version %s\n", version)
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -104,7 +104,7 @@ func handlePlan(cwd string, reg *persona.Registry, args []string) {
 
 	remaining := fs.Args()
 	if len(remaining) == 0 {
-		fmt.Fprintf(os.Stderr, "Error: User story prompt is required. Example: kritix plan \"Add OAuth2 Google login\"\n")
+		fmt.Fprintf(os.Stderr, "Error: User story prompt is required. Example: artix plan \"Add OAuth2 Google login\"\n")
 		os.Exit(1)
 	}
 	prompt := strings.Join(remaining, " ")
@@ -171,7 +171,7 @@ func handleCode(cwd string, reg *persona.Registry, args []string) {
 	}
 
 	if specFile == "" {
-		fmt.Fprintf(os.Stderr, "Error: No story spec specified and none found in docs/specs/.\nRun 'kritix plan' first.\n")
+		fmt.Fprintf(os.Stderr, "Error: No story spec specified and none found in docs/specs/.\nRun 'artix plan' first.\n")
 		os.Exit(1)
 	}
 
@@ -209,7 +209,7 @@ func handleCode(cwd string, reg *persona.Registry, args []string) {
 		Autonomy:  coder.AutonomyLevel(*autonomyFlag),
 	}
 	if *providerFlag == "" {
-		fmt.Fprintf(os.Stderr, "Error: kritix code needs a model to write the patches. Pass --provider and --model (e.g. --provider anthropic --model <model-name>) and set the provider's API key in your environment.\n")
+		fmt.Fprintf(os.Stderr, "Error: artix code needs a model to write the patches. Pass --provider and --model (e.g. --provider anthropic --model <model-name>) and set the provider's API key in your environment.\n")
 		os.Exit(1)
 	}
 	modelRunner, agent, err := coder.NewAPIRunnerFromEnv(*providerFlag, *modelFlag, os.Getenv)
@@ -307,7 +307,7 @@ func handleSteering(cwd string, args []string) {
 	if args[0] == "sync" {
 		fmt.Println("Syncing external steering rules...")
 		syncer := steering.NewRemoteSyncer()
-		fmt.Println("Remote syncer initialized. Cache at ~/.kritix/cache/steering")
+		fmt.Println("Remote syncer initialized. Cache at ~/.artix/cache/steering")
 		_ = syncer
 		return
 	}
@@ -328,7 +328,7 @@ func handleDaemon(cwd string, reg *persona.Registry, args []string) {
 	addr := fs.String("addr", ":8080", "Server listen address")
 	fs.Parse(args)
 
-	workerDir := filepath.Join(cwd, ".kritix", "worker_cache")
+	workerDir := filepath.Join(cwd, ".artix", "worker_cache")
 	worker := forge.NewRemoteWorker(workerDir, reg)
 
 	server := forge.NewWebhookServer(forge.WebhookServerConfig{
@@ -336,7 +336,7 @@ func handleDaemon(cwd string, reg *persona.Registry, args []string) {
 		Worker:     worker,
 	})
 
-	fmt.Printf("Kritix Daemon listening on %s (Endpoints: /healthz, /webhook/github, /webhook/gitlab)...\n", *addr)
+	fmt.Printf("Artix Daemon listening on %s (Endpoints: /healthz, /webhook/github, /webhook/gitlab)...\n", *addr)
 	if err := http.ListenAndServe(*addr, server.Handler()); err != nil {
 		fmt.Fprintf(os.Stderr, "Daemon server error: %v\n", err)
 		os.Exit(1)

@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	"kritix/pkg/persona"
-	"kritix/pkg/repo"
+	"artix/pkg/persona"
+	"artix/pkg/repo"
 )
 
 func plan(t *testing.T, prompt string, rc *repo.RepositoryContext, style StyleVector) *StorySpec {

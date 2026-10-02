@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // RoundConvergence is the mean pairwise Jaccard similarity of the word sets that the council

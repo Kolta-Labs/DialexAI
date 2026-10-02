@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	"kritix/pkg/git"
-	"kritix/pkg/repo"
-	"kritix/pkg/reviewer"
-	"kritix/pkg/sandbox"
-	"kritix/pkg/spec"
-	"kritix/pkg/steering"
+	"artix/pkg/git"
+	"artix/pkg/repo"
+	"artix/pkg/reviewer"
+	"artix/pkg/sandbox"
+	"artix/pkg/spec"
+	"artix/pkg/steering"
 )
 
 // AutonomyLevel defines human-in-the-loop gates.

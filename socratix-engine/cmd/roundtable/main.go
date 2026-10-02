@@ -9,9 +9,9 @@ import (
 	"log"
 	"os"
 
-	"dialex/pkg/api"
-	"dialex/pkg/service"
-	"dialex/pkg/store"
+	"socratix/pkg/api"
+	"socratix/pkg/service"
+	"socratix/pkg/store"
 )
 
 func main() {

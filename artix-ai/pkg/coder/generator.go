@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 // PatchRequest is what the loop hands a generator each round.

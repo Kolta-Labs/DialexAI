@@ -8,8 +8,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 func msg(p model.Provider, round int, content string) model.DebateMessage {

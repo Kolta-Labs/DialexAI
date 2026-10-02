@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 func TestCalculateShannonEntropy(t *testing.T) {

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"dialex/pkg/model"
-	"dialex/pkg/socratic"
-	"dialex/pkg/store"
+	"socratix/pkg/model"
+	"socratix/pkg/socratic"
+	"socratix/pkg/store"
 )
 
 func TestSocraticTurnHandler_And_ElevateFlow(t *testing.T) {

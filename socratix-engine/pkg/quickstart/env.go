@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 // KeyEnv names the environment variable that holds each provider's API key. Keys are read from

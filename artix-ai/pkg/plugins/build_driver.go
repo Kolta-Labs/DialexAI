@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"kritix/pkg/sandbox"
+	"artix/pkg/sandbox"
 )
 
 // DiagnosticSeverity classifies error levels in compiler or linter output.

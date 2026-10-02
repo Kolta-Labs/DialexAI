@@ -1,6 +1,6 @@
 # Commercial License
 
-Dialex Suite (Dialex AI, Dialex Engine, Kritix AI) is **dual-licensed** by Kolta Labs:
+Dialex Suite (Dialex AI, Socratix Engine, Artix AI) is **dual-licensed** by Kolta Labs:
 
 | | Noncommercial (default) | Commercial |
 |---|---|---|

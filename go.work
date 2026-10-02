@@ -1,6 +1,6 @@
 go 1.27.0
 
 use (
-	./dialex-engine
-	./kritix-ai
+	./socratix-engine
+	./artix-ai
 )

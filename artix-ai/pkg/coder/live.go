@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 // providerEnv maps each supported provider to the environment variable holding its API key.

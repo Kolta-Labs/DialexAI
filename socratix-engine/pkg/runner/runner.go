@@ -4,7 +4,7 @@ package runner
 import (
 	"context"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // AgentReply is one turn's reply. Token counts are best-effort — API providers report them

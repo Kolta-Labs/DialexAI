@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"dialex/pkg/model"
-	"dialex/pkg/orchestrator"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/orchestrator"
+	"socratix/pkg/runner"
 )
 
 type scripted struct {

@@ -9,14 +9,14 @@ import (
 	"strings"
 	"time"
 
-	"kritix/pkg/coder"
-	"kritix/pkg/git"
-	"kritix/pkg/persona"
-	"kritix/pkg/repo"
-	"kritix/pkg/reviewer"
-	"kritix/pkg/sandbox"
-	"kritix/pkg/spec"
-	"kritix/pkg/steering"
+	"artix/pkg/coder"
+	"artix/pkg/git"
+	"artix/pkg/persona"
+	"artix/pkg/repo"
+	"artix/pkg/reviewer"
+	"artix/pkg/sandbox"
+	"artix/pkg/spec"
+	"artix/pkg/steering"
 )
 
 // RemoteWorkerTask configures an autonomous server execution job.

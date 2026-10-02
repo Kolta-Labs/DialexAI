@@ -72,8 +72,9 @@ func (a *Aggregator) CollectLocalRules() ([]RuleFile, error) {
 		})
 	}
 
-	// 3. Scan .kritix/steering and .dialex/steering directories
+	// 3. Scan .artix/steering, .kritix/steering and .dialex/steering directories
 	projectDirs := []string{
+		filepath.Join(a.repoRoot, ".artix", "steering"),
 		filepath.Join(a.repoRoot, ".kritix", "steering"),
 		filepath.Join(a.repoRoot, ".dialex", "steering"),
 	}

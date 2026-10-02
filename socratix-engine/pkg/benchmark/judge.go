@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"strings"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 var jsonBlockRegex = regexp.MustCompile(`(?s)\{.*"submission_a".*"submission_b".*\}`)

@@ -1,4 +1,4 @@
-package com.kritix.desktop.model
+package com.artix.desktop.model
 
 import kotlinx.serialization.Serializable
 

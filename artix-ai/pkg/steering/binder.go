@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // Binder manages persona-to-steering-rule mappings and compiles them into Persona DNA constraints.

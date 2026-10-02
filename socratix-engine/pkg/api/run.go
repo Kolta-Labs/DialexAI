@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"dialex/pkg/model"
-	"dialex/pkg/orchestrator"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/orchestrator"
+	"socratix/pkg/runner"
 )
 
 // handleStartDebate begins a fresh run — resets the transcript to empty first, same as the

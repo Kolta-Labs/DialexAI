@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"dialex/pkg/model"
-	"dialex/pkg/store"
+	"socratix/pkg/model"
+	"socratix/pkg/store"
 )
 
 // Minimal HS256 JWT — issued by POST /auth/login, checked as a Bearer token on every other

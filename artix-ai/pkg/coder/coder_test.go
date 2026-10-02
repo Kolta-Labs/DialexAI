@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"dialex/pkg/model"
-	"kritix/pkg/git"
-	"kritix/pkg/persona"
-	"kritix/pkg/repo"
-	"kritix/pkg/reviewer"
-	"kritix/pkg/sandbox"
-	"kritix/pkg/spec"
-	"kritix/pkg/steering"
+	"socratix/pkg/model"
+	"artix/pkg/git"
+	"artix/pkg/persona"
+	"artix/pkg/repo"
+	"artix/pkg/reviewer"
+	"artix/pkg/sandbox"
+	"artix/pkg/spec"
+	"artix/pkg/steering"
 )
 
 func TestDomainCoderPromptCompilation(t *testing.T) {

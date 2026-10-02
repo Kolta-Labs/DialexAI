@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"time"
 
-	"dialex/pkg/model"
-	"dialex/pkg/store"
+	"socratix/pkg/model"
+	"socratix/pkg/store"
 )
 
 type adminStatsResponse struct {

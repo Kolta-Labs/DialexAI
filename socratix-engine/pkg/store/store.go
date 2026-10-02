@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"strconv"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 const backupCount = 2

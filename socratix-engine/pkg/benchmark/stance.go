@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode"
 
-	"dialex/pkg/model"
-	"dialex/pkg/runner"
+	"socratix/pkg/model"
+	"socratix/pkg/runner"
 )
 
 // StanceMetrics replaces "word overlap" with what a reader means by agreement: do the seats

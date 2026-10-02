@@ -17,7 +17,7 @@ const (
 )
 
 // Confinement: writes are limited to the workspace, temp dirs and common tool caches; network
-// is denied unless KRITIX_SANDBOX_NETWORK=1. Reads are unrestricted. KRITIX_SANDBOX=off disables
+// is denied unless ARTIX_SANDBOX_NETWORK=1. Reads are unrestricted. ARTIX_SANDBOX=off disables
 // it. If no confinement tool exists the command still runs, flagged IsolationProcessGroup.
 //
 // ponytail: macOS sandbox-exec is deprecated by Apple but still ships; the Linux bwrap path is
@@ -25,10 +25,10 @@ const (
 // Upgrade path: container/VM per task.
 func confine(cwd, cmdStr string) (*exec.Cmd, string) {
 	plain := func() (*exec.Cmd, string) { return exec.Command("sh", "-c", cmdStr), IsolationProcessGroup }
-	if os.Getenv("KRITIX_SANDBOX") == "off" {
+	if os.Getenv("ARTIX_SANDBOX") == "off" || os.Getenv("KRITIX_SANDBOX") == "off" {
 		return plain()
 	}
-	net := os.Getenv("KRITIX_SANDBOX_NETWORK") == "1"
+	net := os.Getenv("ARTIX_SANDBOX_NETWORK") == "1" || os.Getenv("KRITIX_SANDBOX_NETWORK") == "1"
 	home, _ := os.UserHomeDir()
 	real := func(p string) string {
 		if r, err := filepath.EvalSymlinks(p); err == nil {
@@ -37,7 +37,7 @@ func confine(cwd, cmdStr string) (*exec.Cmd, string) {
 		return p
 	}
 	writable := []string{real(cwd), real(os.TempDir()), "/tmp", "/private/tmp", "/private/var/folders"}
-	for _, c := range []string{"Library/Caches", ".cache", "go/pkg", ".gradle", ".m2", ".npm", ".cargo", ".kritix"} {
+	for _, c := range []string{"Library/Caches", ".cache", "go/pkg", ".gradle", ".m2", ".npm", ".cargo", ".artix", ".kritix"} {
 		writable = append(writable, filepath.Join(home, c))
 	}
 

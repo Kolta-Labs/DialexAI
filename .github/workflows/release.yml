@@ -295,7 +295,7 @@ jobs:
           go-version: "1.22.x"
 
       - name: Compile Engine Binary
-        working-directory: dialex-engine
+        working-directory: socratix-engine
         env:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
@@ -306,7 +306,7 @@ jobs:
             -o dist/dialex-engine${{ matrix.ext }} ./cmd/dialex
 
       - name: Package Archive
-        working-directory: dialex-engine
+        working-directory: socratix-engine
         run: |
           mkdir -p ../staging-engine
           TARGET_NAME="dialex-engine-v${{ needs.prepare-release.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"

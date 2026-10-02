@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"dialex/pkg/model"
+	"socratix/pkg/model"
 )
 
 // ErrJudgeNotIndependent means the judge comes from the same model family as an arm it scores.
