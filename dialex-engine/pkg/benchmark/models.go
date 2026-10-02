@@ -52,6 +52,12 @@ type ArmResult struct {
 	TokensUsed       int     `json:"tokensUsed"`
 	DurationMs       int64   `json:"durationMs"`
 	EstimatedCostUSD float64 `json:"estimatedCostUSD"`
+	// Convergence is how alike the council seats' final-round answers are (0 = nothing in
+	// common, 1 = identical wording). Council arm only. High values with no new evidence are a
+	// sign of conformity rather than agreement reached by argument.
+	Convergence float64 `json:"convergence,omitempty"`
+	// FirstRoundConvergence is the same measure for round 1, before the seats react to each other.
+	FirstRoundConvergence float64 `json:"firstRoundConvergence,omitempty"`
 }
 
 // MetricScore is a scored metric dimension with critique rationale.
@@ -95,6 +101,8 @@ type BenchmarkRun struct {
 	JudgeFallbackPasses int     `json:"judgeFallbackPasses,omitempty"`
 	// JudgeOverlap is true when the judge shares a model family with an arm (overlap was allowed).
 	JudgeOverlap bool `json:"judgeOverlap,omitempty"`
+	// Independence records how the council saw each other: open, blind, anon or blind+anon.
+	Independence string `json:"independence,omitempty"`
 }
 
 // BenchmarkSummary holds aggregate metrics and scientific statistical hypothesis tests.

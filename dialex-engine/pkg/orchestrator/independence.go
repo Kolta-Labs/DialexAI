@@ -36,3 +36,9 @@ func applyIndependence(views []model.DebateMessage, forAgent model.Agent, round 
 	}
 	return out
 }
+
+// ApplyIndependence is applyIndependence for callers outside the orchestrator, such as the
+// benchmark runner, which plays its own council loop.
+func ApplyIndependence(views []model.DebateMessage, forAgent model.Agent, round int, cfg *model.IndependenceConfig, seats []model.Agent) []model.DebateMessage {
+	return applyIndependence(views, forAgent, round, cfg, seats)
+}

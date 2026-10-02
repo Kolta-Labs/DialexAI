@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"dialex/pkg/model"
+	"dialex/pkg/orchestrator"
 	"dialex/pkg/runner"
 )
 
@@ -18,6 +19,22 @@ type Runner struct {
 	// AllowJudgeOverlap permits a judge from the same family as an arm (e.g. you only have one
 	// API key). The run is then marked JudgeOverlap so its scores are not read as unbiased.
 	AllowJudgeOverlap bool
+	// CouncilIndependence limits what council seats see of each other (blind first round,
+	// anonymized peers). nil = open, the original behaviour.
+	CouncilIndependence *model.IndependenceConfig
+}
+
+// IndependenceLabel names an independence setting for run records.
+func IndependenceLabel(c *model.IndependenceConfig) string {
+	switch {
+	case c == nil, !c.BlindFirstRound && !c.AnonymizeTranscript:
+		return "open"
+	case c.BlindFirstRound && c.AnonymizeTranscript:
+		return "blind+anon"
+	case c.BlindFirstRound:
+		return "blind"
+	}
+	return "anon"
 }
 
 // NewRunner creates a new benchmark runner with the runner resolution factory.
@@ -146,6 +163,7 @@ func (r *Runner) ExecuteRunWithBaseline(
 
 	return &BenchmarkRun{
 		Baseline:            baseline,
+		Independence:        IndependenceLabel(r.CouncilIndependence),
 		TokenRatio:          tokenRatio,
 		JudgeFallbackPasses: fallbacks,
 		JudgeOverlap:        conflict != nil,
@@ -214,6 +232,13 @@ func (r *Runner) runCouncilArm(ctx context.Context, bCase BenchmarkCase, agents 
 		return ArmResult{}, fmt.Errorf("council must contain at least 1 agent")
 	}
 
+	// seats need distinct IDs so several personas on one provider stay distinct
+	agents = append([]model.Agent(nil), agents...)
+	for i := range agents {
+		if agents[i].ID == "" {
+			agents[i].ID = fmt.Sprintf("bench_seat_%d", i)
+		}
+	}
 	var transcript []model.DebateMessage
 	totalTokens := 0
 
@@ -228,7 +253,8 @@ func (r *Runner) runCouncilArm(ctx context.Context, bCase BenchmarkCase, agents 
 			topicContext := fmt.Sprintf("Architectural Dilemma: %s\nConstraints: %s", bCase.Dilemma, strings.Join(bCase.Constraints, "; "))
 			rolePrompt := fmt.Sprintf("Role: %s. Rigorously critique prior claims, expose hidden assumptions, and focus on failure modes.", agent.Role)
 
-			reply, err := rnr.Respond(ctx, agent, bCase.Title, topicContext, rolePrompt, transcript, "")
+			reply, err := rnr.Respond(ctx, agent, bCase.Title, topicContext, rolePrompt,
+				orchestrator.ApplyIndependence(transcript, agent, round, r.CouncilIndependence, agents), "")
 			if err != nil {
 				return ArmResult{}, err
 			}
@@ -240,6 +266,7 @@ func (r *Runner) runCouncilArm(ctx context.Context, bCase BenchmarkCase, agents 
 			}
 
 			transcript = append(transcript, model.DebateMessage{
+				SeatID:            agent.ID,
 				AuthorDisplayName: agent.Label(),
 				Provider:          agent.Provider,
 				AgentID:           agent.Provider,
@@ -278,12 +305,14 @@ Produce a definitive, production-grade Architecture Decision Record (ADR) resolv
 	}
 
 	return ArmResult{
-		ArmType:          ArmCouncil,
-		ModelOrCouncil:   fmt.Sprintf("Council of %d (%s)", len(agents), strings.Join(councilNames, ", ")),
-		Deliverable:      reply.Content,
-		TokensUsed:       totalTokens,
-		DurationMs:       time.Since(start).Milliseconds(),
-		EstimatedCostUSD: cost,
+		ArmType:               ArmCouncil,
+		ModelOrCouncil:        fmt.Sprintf("Council of %d (%s)", len(agents), strings.Join(councilNames, ", ")),
+		Deliverable:           reply.Content,
+		TokensUsed:            totalTokens,
+		DurationMs:            time.Since(start).Milliseconds(),
+		EstimatedCostUSD:      cost,
+		Convergence:           RoundConvergence(transcript, rounds),
+		FirstRoundConvergence: RoundConvergence(transcript, 1),
 	}, nil
 }
 

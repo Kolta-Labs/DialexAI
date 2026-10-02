@@ -93,38 +93,50 @@ func Get(id string) (Mode, bool) {
 	return Mode{}, false
 }
 
+// Seats returns the chair and the arguing seats for a mode, all on one provider and model, each
+// with a stable unique ID. Build uses it, and so can a benchmark that needs the same council.
+func Seats(m Mode, provider model.Provider, modelName string) []model.Agent {
+	if modelName == "" {
+		modelName = provider.DefaultModel()
+	}
+	seat := func(p Persona, n int) model.Agent {
+		a := model.NewAgent(provider, modelName)
+		a.ID = fmt.Sprintf("qs_%s_%d", m.ID, n)
+		a.DisplayName, a.Role, a.SystemPrompt = p.Name, p.Role, p.Prompt
+		a.RunMode = model.RunModeAPI
+		return a
+	}
+	seats := []model.Agent{seat(m.Chair, 0)}
+	for i, p := range m.Council {
+		seats = append(seats, seat(p, i+1))
+	}
+	return seats
+}
+
 // Build makes a runnable config where every seat uses the same provider and model.
 // rounds <= 0 uses the mode's default.
 func Build(m Mode, topic string, provider model.Provider, modelName string, rounds int) (model.DebateConfig, error) {
 	if strings.TrimSpace(topic) == "" {
 		return model.DebateConfig{}, fmt.Errorf("a question or plan is required")
 	}
-	if modelName == "" {
-		modelName = provider.DefaultModel()
-	}
 	if rounds <= 0 {
 		rounds = m.Rounds
 	}
-	seat := func(p Persona, n int) *model.Agent {
-		a := model.NewAgent(provider, modelName)
-		a.ID = fmt.Sprintf("qs_%s_%d", m.ID, n) // stable, unique per seat even on one provider
-		a.DisplayName, a.Role, a.SystemPrompt = p.Name, p.Role, p.Prompt
-		a.RunMode = model.RunModeAPI
-		return &a
-	}
+	seats := Seats(m, provider, modelName)
 	cfg := model.DebateConfig{
 		Topic:        m.Question + strings.TrimSpace(topic),
-		Primary:      *seat(m.Chair, 0),
+		Primary:      seats[0],
 		RoundMode:    model.RoundModeFixed,
 		MaxRounds:    rounds,
 		Independence: &model.IndependenceConfig{BlindFirstRound: true, AnonymizeTranscript: true},
 	}
 	slots := []**model.Agent{&cfg.Secondary, &cfg.Tertiary, &cfg.Quaternary, &cfg.Quinary, &cfg.Senary}
-	if len(m.Council) > len(slots) {
+	if len(seats)-1 > len(slots) {
 		return model.DebateConfig{}, fmt.Errorf("mode %s has too many seats", m.ID)
 	}
-	for i, p := range m.Council {
-		*slots[i] = seat(p, i+1)
+	for i := 1; i < len(seats); i++ {
+		a := seats[i]
+		*slots[i-1] = &a
 	}
 	if m.KeepDissent {
 		cfg.Consensus = &model.ConsensusConfig{Mode: model.ConsensusModeDisabled}

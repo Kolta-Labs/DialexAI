@@ -11,6 +11,7 @@ import (
 
 	"dialex/pkg/benchmark"
 	"dialex/pkg/model"
+	"dialex/pkg/quickstart"
 	"dialex/pkg/runner"
 	"dialex/pkg/store"
 )
@@ -26,6 +27,8 @@ func main() {
 		runList()
 	case "run":
 		runBenchmark(os.Args[2:])
+	case "compare":
+		runCompare(os.Args[2:])
 	case "-h", "--help", "help":
 		printUsage()
 	default:
@@ -41,10 +44,16 @@ func printUsage() {
 Usage:
   dialexbench list                 List all 10 canonical DialexBench dilemmas
   dialexbench run [flags]          Execute a dual-arm benchmark evaluation
+  dialexbench compare [--dir d]    Table of stored runs grouped by baseline and independence
 
 Flags:
   --case string      Case ID to evaluate (e.g. DB01, DB02, or "all", default: "DB01")
   --rounds int       Deliberation rounds for Council arm (default: 2)
+  --baseline string  solo (default) or self_consistency: same number of model calls as the council
+  --council string   mixed (default) or onekey: personas on --provider only (one API key)
+  --provider, --model, --onekey-mode   settings for --council onekey
+  --independence     open (default), blind, anon or blind+anon: what council seats see of each other
+  --allow-judge-overlap   permit a judge from the same provider as an arm (flagged in the results)
   --format string    Output format: text, markdown, json (default: "text")
   --dir string       Dialex config directory (default: platform-standard)`)
 }
@@ -64,6 +73,11 @@ func runBenchmark(args []string) {
 	rounds := fs.Int("rounds", 2, "Council debate rounds")
 	baseline := fs.String("baseline", benchmark.BaselineSolo, "Baseline arm: solo, or self_consistency (same number of model calls as the council)")
 	allowOverlap := fs.Bool("allow-judge-overlap", false, "Allow a judge from the same provider as an arm (biased; the run is flagged)")
+	councilKind := fs.String("council", "mixed", "mixed (Claude, ChatGPT, Gemini seats) or onekey (personas on --provider only)")
+	provFlag := fs.String("provider", "", "provider for --council onekey (its key must be in settings or the environment)")
+	modelFlag := fs.String("model", "", "model for --council onekey (default: the provider's balanced default)")
+	onekeyMode := fs.String("onekey-mode", "redteam", "persona set for --council onekey: premortem, redteam or tenthman")
+	indep := fs.String("independence", "open", "what council seats see of each other: open, blind, anon or blind+anon")
 	format := fs.String("format", "text", "Output format (text, markdown, json)")
 	dir := fs.String("dir", "", "Dialex config directory")
 	_ = fs.Parse(args)
@@ -94,11 +108,18 @@ func runBenchmark(args []string) {
 		state = model.NewAppState()
 	}
 
+	// keys: the settings store first, then the environment (so a bare API key is enough).
+	keys := state.ApiKeys.AsMap()
+	for p, env := range quickstart.KeyEnv {
+		if keys[p] == "" && env != "" {
+			keys[p] = os.Getenv(env)
+		}
+	}
 	runnerFor := func(agent model.Agent) runner.AgentRunner {
 		if agent.RunMode == model.RunModeCLI {
 			return runner.NewCliAgentRunner(state.CliCommands)
 		}
-		return runner.NewApiAgentRunner(state.ApiKeys.AsMap())
+		return runner.NewApiAgentRunner(keys)
 	}
 
 	benchRunner := benchmark.NewRunner(runnerFor)
@@ -129,8 +150,41 @@ func runBenchmark(args []string) {
 		{DisplayName: "Gemini (Pragmatist)", Role: "Pragmatist", Provider: model.ProviderGemini, Model: "gemini-2.5-pro", RunMode: model.RunModeCLI},
 	}
 
+	if *councilKind == "onekey" {
+		prov, err := quickstart.ParseProvider(*provFlag)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "--council onekey needs --provider: %v\n", err)
+			os.Exit(1)
+		}
+		mode, found := quickstart.Get(*onekeyMode)
+		if !found {
+			fmt.Fprintf(os.Stderr, "unknown --onekey-mode %q\n", *onekeyMode)
+			os.Exit(1)
+		}
+		councilAgents = quickstart.Seats(mode, prov, *modelFlag)
+		soloAgent = model.NewAgent(prov, councilAgents[0].Model)
+		soloAgent.DisplayName, soloAgent.Role, soloAgent.RunMode = "Solo "+prov.BrandName(), "Principal Systems Architect", model.RunModeAPI
+	}
+	switch *indep {
+	case "open":
+	case "blind":
+		benchRunner.CouncilIndependence = &model.IndependenceConfig{BlindFirstRound: true}
+	case "anon":
+		benchRunner.CouncilIndependence = &model.IndependenceConfig{AnonymizeTranscript: true}
+	case "blind+anon":
+		benchRunner.CouncilIndependence = &model.IndependenceConfig{BlindFirstRound: true, AnonymizeTranscript: true}
+	default:
+		fmt.Fprintf(os.Stderr, "--independence must be open, blind, anon or blind+anon\n")
+		os.Exit(1)
+	}
+
 	judgeAgent, ok := benchmark.PickIndependentJudge(append([]model.Agent{soloAgent}, councilAgents...),
-		func(p model.Provider) bool { return state.ApiKeys.AsMap()[p] != "" })
+		func(p model.Provider) bool { return keys[p] != "" })
+	if *allowOverlap && *councilKind == "onekey" {
+		// one key: the judge is the same model as the arms. The run is flagged judgeOverlap.
+		judgeAgent, ok = soloAgent, true
+		judgeAgent.DisplayName, judgeAgent.Role = "Judge ("+soloAgent.Provider.BrandName()+")", "Chief Systems Architect & Evaluator"
+	}
 	if !ok {
 		fmt.Fprintln(os.Stderr, "no provider is independent of the arms; edit the arms or pass --allow-judge-overlap")
 		os.Exit(1)
@@ -191,4 +245,29 @@ func runBenchmark(args []string) {
 		fmt.Printf("%-6s | %-32s | %-10.1f | %-10.1f | %-+8.2f | %s\n",
 			r.CaseID, title, r.SoloTotalScore, r.CouncilTotalScore, r.DeltaQ, r.Winner)
 	}
+}
+
+func runCompare(args []string) {
+	fs := flag.NewFlagSet("compare", flag.ExitOnError)
+	dir := fs.String("dir", "", "Dialex config directory")
+	_ = fs.Parse(args)
+	cfgDir := *dir
+	if cfgDir == "" {
+		var err error
+		if cfgDir, err = store.DefaultConfigDir(); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to get config dir: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	bs, err := benchmark.NewStore(cfgDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to open benchmark store: %v\n", err)
+		os.Exit(1)
+	}
+	runs := bs.ListRuns()
+	if len(runs) == 0 {
+		fmt.Println("no stored runs yet: run `dialexbench run` first")
+		return
+	}
+	fmt.Print(benchmark.CompareMarkdown(benchmark.GroupRuns(runs)))
 }

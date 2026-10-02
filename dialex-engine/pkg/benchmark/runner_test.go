@@ -311,3 +311,103 @@ func TestPickIndependentJudge(t *testing.T) {
 		t.Fatal("no independent judge should exist when every family is an arm")
 	}
 }
+
+type recordingRunner struct {
+	mu    *sync.Mutex
+	views *[][]model.DebateMessage
+}
+
+func (r *recordingRunner) Respond(ctx context.Context, agent model.Agent, topic, commonContext, commonInstructions string, transcript []model.DebateMessage, modelOverride string) (runner.AgentReply, error) {
+	r.mu.Lock()
+	*r.views = append(*r.views, append([]model.DebateMessage(nil), transcript...))
+	r.mu.Unlock()
+	return runner.AgentReply{Content: "alpha bravo charlie delta"}, nil
+}
+
+func TestCouncilArmHonoursIndependenceAndDistinguishesSameProviderSeats(t *testing.T) {
+	var mu sync.Mutex
+	var views [][]model.DebateMessage
+	r := NewRunner(func(model.Agent) runner.AgentRunner { return &recordingRunner{mu: &mu, views: &views} })
+	r.CouncilIndependence = &model.IndependenceConfig{BlindFirstRound: true, AnonymizeTranscript: true}
+	// three personas, one provider, NO seat IDs (as when decoded from older JSON)
+	agents := []model.Agent{
+		{DisplayName: "Skeptic", Provider: model.ProviderAnthropic},
+		{DisplayName: "Optimist", Provider: model.ProviderAnthropic},
+		{DisplayName: "Pragmatist", Provider: model.ProviderAnthropic},
+	}
+	arm, err := r.runCouncilArm(context.Background(), *GetBundledCaseByID("DB01"), agents, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// calls 0..2 are round 1: nobody sees a peer's turn
+	for i := 0; i < 3; i++ {
+		if len(views[i]) != 0 {
+			t.Fatalf("round-1 call %d saw %d peer turns; blind round broken", i, len(views[i]))
+		}
+	}
+	// a round-2 view shows peers only as Participant X
+	for _, m := range views[3] {
+		if strings.Contains(m.AuthorDisplayName, "Optimist") || strings.Contains(m.AuthorDisplayName, "Pragmatist") {
+			t.Fatalf("peer not anonymized: %q", m.AuthorDisplayName)
+		}
+	}
+	if arm.Convergence != 1 || arm.FirstRoundConvergence != 1 {
+		t.Fatalf("identical replies should have convergence 1, got %v / %v", arm.Convergence, arm.FirstRoundConvergence)
+	}
+}
+
+func TestRoundConvergenceMeasuresWordOverlap(t *testing.T) {
+	mk := func(round int, text string) model.DebateMessage {
+		return model.DebateMessage{Round: round, Content: text}
+	}
+	same := []model.DebateMessage{mk(1, "scale writes quickly"), mk(1, "scale writes quickly")}
+	diff := []model.DebateMessage{mk(1, "scale writes quickly"), mk(1, "audit compliance retention")}
+	if got := RoundConvergence(same, 1); got != 1 {
+		t.Errorf("identical = %v, want 1", got)
+	}
+	if got := RoundConvergence(diff, 1); got != 0 {
+		t.Errorf("disjoint = %v, want 0", got)
+	}
+	if RoundConvergence(same[:1], 1) != 0 || RoundConvergence(same, 2) != 0 {
+		t.Error("fewer than two seats in the round must give 0")
+	}
+}
+
+func TestIndependenceLabel(t *testing.T) {
+	cases := map[string]*model.IndependenceConfig{
+		"open": nil, "blind": {BlindFirstRound: true}, "anon": {AnonymizeTranscript: true},
+		"blind+anon": {BlindFirstRound: true, AnonymizeTranscript: true},
+	}
+	for want, c := range cases {
+		if got := IndependenceLabel(c); got != want {
+			t.Errorf("%v -> %s, want %s", c, got, want)
+		}
+	}
+}
+
+func TestGroupRunsSeparatesSettingsAndAverages(t *testing.T) {
+	mk := func(baseline, ind string, conv, ratio float64, win string, overlap bool) BenchmarkRun {
+		return BenchmarkRun{Baseline: baseline, Independence: ind, Winner: win, TokenRatio: ratio, JudgeOverlap: overlap,
+			CouncilTotalScore: 7, SoloTotalScore: 6, CouncilResult: ArmResult{Convergence: conv, FirstRoundConvergence: conv}}
+	}
+	runs := []BenchmarkRun{
+		mk("", "", 0.8, 1.0, "COUNCIL", true), // legacy run: solo/open
+		mk("solo", "open", 0.6, 1.2, "TIE", true),
+		mk("self_consistency", "blind+anon", 0.3, 1.0, "COUNCIL", false),
+	}
+	g := GroupRuns(runs)
+	if len(g) != 2 {
+		t.Fatalf("want 2 groups (legacy folded into solo/open), got %d: %+v", len(g), g)
+	}
+	open := g[1] // sorted: self_consistency, then solo
+	if g[0].Baseline != "self_consistency" || open.Baseline != "solo" || open.Runs != 2 {
+		t.Fatalf("grouping wrong: %+v", g)
+	}
+	if open.MeanConvergence < 0.69 || open.MeanConvergence > 0.71 || open.JudgeOverlapRuns != 2 {
+		t.Fatalf("averages wrong: %+v", open)
+	}
+	md := CompareMarkdown(g)
+	if !strings.Contains(md, "| solo | open | 2 |") || !strings.Contains(md, "Read with care") {
+		t.Fatalf("markdown missing rows or caveat:\n%s", md)
+	}
+}
