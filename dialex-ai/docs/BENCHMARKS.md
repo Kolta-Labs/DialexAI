@@ -4,7 +4,7 @@
 
 ## What is measured
 
-`dialexbench` runs each case twice:
+`socratixbench` runs each case twice:
 
 - **Arm A, solo baseline:** one model answers the dilemma.
 - **Arm B, council:** several models debate for N rounds and a moderator synthesizes.
@@ -15,8 +15,8 @@ A judge model scores both deliverables on four dimensions: factuality, blind spo
 
 ```bash
 cd socratix-engine
-go run ./cmd/dialexbench list
-go run ./cmd/dialexbench run --case all --rounds 2 --format markdown
+go run ./cmd/socratixbench list
+go run ./cmd/socratixbench run --case all --rounds 2 --format markdown
 ```
 
 It uses the providers and keys configured in your Dialex config directory. A full run costs real API money, and the council arm costs roughly (seats x rounds) times the solo arm.

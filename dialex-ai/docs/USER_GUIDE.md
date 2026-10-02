@@ -316,20 +316,20 @@ Click **`⚔️ Run Benchmark`** on any dilemma:
 - **Paired Student's $t$-test**: Continuously computes the aggregate $p$-value and marks statistical significance ($p < 0.05$) when $H_0$ is formally rejected.
 - **Exporting Reports**: Export complete statistical summaries and head-to-head transcripts to **Markdown**, **CSV**, or **JSON**.
 
-### 9.5 Standalone CLI Tool (`dialexbench`)
+### 9.5 Standalone CLI Tool (`socratixbench`)
 For CI/CD automated regression testing and high-throughput headless evaluations:
 ```bash
 # List all bundled and custom benchmark cases
-./socratix-engine/bin/dialexbench list
+./socratix-engine/bin/socratixbench list
 
 # Run a specific benchmark dilemma
-./socratix-engine/bin/dialexbench run DB01 --rounds 2
+./socratix-engine/bin/socratixbench run DB01 --rounds 2
 
 # Print aggregate Student's t-test summary
-./socratix-engine/bin/dialexbench stats
+./socratix-engine/bin/socratixbench stats
 
 # Export results
-./socratix-engine/bin/dialexbench export --format=markdown > benchmark_report.md
+./socratix-engine/bin/socratixbench export --format=markdown > benchmark_report.md
 ```
 
 ---

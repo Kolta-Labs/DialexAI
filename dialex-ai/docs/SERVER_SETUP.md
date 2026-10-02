@@ -59,10 +59,10 @@ go mod verify
 go test -race -v ./pkg/...
 
 # Build production stripped binary
-go build -ldflags="-s -w" -o dialex ./cmd/dialex
+go build -ldflags="-s -w" -o socratix ./cmd/socratix
 
 # Verify binary
-./dialex --version
+./socratix --version
 ```
 
 ---
@@ -76,16 +76,16 @@ Starts the HTTP REST API, Server-Sent Events (SSE) broadcaster, and turn orchest
 
 ```bash
 # Default: Binds to 127.0.0.1:8080 with data stored in ~/.dialex
-./dialex serve
+./socratix serve
 
 # Run with custom port and custom data directory
-./dialex serve --port 9090 --data-dir /var/lib/dialex
+./socratix serve --port 9090 --data-dir /var/lib/dialex
 
 # Allow connections from local network (LAN)
-./dialex serve --host 0.0.0.0 --allow-insecure-lan
+./socratix serve --host 0.0.0.0 --allow-insecure-lan
 
 # Enable TLS with existing certificates
-./dialex serve --tls --cert /path/to/cert.pem --key /path/to/key.pem
+./socratix serve --tls --cert /path/to/cert.pem --key /path/to/key.pem
 ```
 
 #### Flags Reference:
@@ -104,13 +104,13 @@ Starts the HTTP REST API, Server-Sent Events (SSE) broadcaster, and turn orchest
 
 ### 4.2 User & Account Management (`dialex users`)
 # Reset a user's password
-./dialex users reset-password admin
+./socratix users reset-password admin
 
 # List active users
-./dialex users list
+./socratix users list
 
 # Delete a user
-./dialex users remove username
+./socratix users remove username
 ```
 
 ---
@@ -120,16 +120,16 @@ The engine includes native integration with Linux `systemd` and macOS `launchd` 
 
 ```bash
 # Install and register the background service
-sudo ./dialex service install --data-dir /var/lib/dialex
+sudo ./socratix service install --data-dir /var/lib/dialex
 
 # Start the background service
-sudo ./dialex service start
+sudo ./socratix service start
 
 # Check service status
-sudo ./dialex service status
+sudo ./socratix service status
 
 # Uninstall the service
-sudo ./dialex service uninstall
+sudo ./socratix service uninstall
 ```
 
 ---

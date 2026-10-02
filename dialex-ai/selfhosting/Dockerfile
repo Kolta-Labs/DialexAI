@@ -16,7 +16,7 @@ RUN go mod download
 
 # Copy source code and build statically linked binary
 COPY engine/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/dialex ./cmd/dialex
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/socratix ./cmd/socratix
 
 # Final Production Stage
 FROM alpine:3.20
@@ -26,7 +26,7 @@ RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /root/
 
 # Copy binary from builder
-COPY --from=builder /app/dialex /usr/local/bin/dialex
+COPY --from=builder /app/socratix /usr/local/bin/socratix
 
 # Create config storage directory
 RUN mkdir -p /root/.config/dialex && chmod 700 /root/.config/dialex
@@ -46,4 +46,4 @@ ENV DIALEX_HOST=0.0.0.0:7890 \
 
 VOLUME ["/root/.config/dialex"]
 
-ENTRYPOINT ["dialex", "serve"]
+ENTRYPOINT ["socratix", "serve"]

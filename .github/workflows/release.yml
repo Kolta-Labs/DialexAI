@@ -303,7 +303,7 @@ jobs:
         run: |
           mkdir -p dist
           go build -ldflags="-s -w -X main.Version=v${{ needs.prepare-release.outputs.version }}" \
-            -o dist/dialex-engine${{ matrix.ext }} ./cmd/dialex
+            -o dist/dialex-engine${{ matrix.ext }} ./cmd/socratix
 
       - name: Package Archive
         working-directory: socratix-engine

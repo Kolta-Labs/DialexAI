@@ -18,7 +18,7 @@ Type=simple
 User=dialex
 Group=dialex
 WorkingDirectory=/var/lib/dialex
-ExecStart=/usr/local/bin/dialex serve --host 0.0.0.0:7890 --dir /var/lib/dialex --allow-insecure-lan
+ExecStart=/usr/local/bin/socratix serve --host 0.0.0.0:7890 --dir /var/lib/dialex --allow-insecure-lan
 Restart=always
 RestartSec=5s
 

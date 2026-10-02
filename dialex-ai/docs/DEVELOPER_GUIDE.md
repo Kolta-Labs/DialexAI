@@ -28,7 +28,7 @@ DialexAI/
 ├── androidApp/                     # Thin Android Shell (Dialex AI Mobile)
 │   └── src/androidMain/kotlin/com/dialex/android/MainActivity.kt
 ├── socratix-engine/                        # Go Orchestration Engine
-│   ├── cmd/dialex/                 # CLI entry point (main.go)
+│   ├── cmd/socratix/                 # CLI entry point (main.go)
 │   └── pkg/
 │       ├── api/                    # HTTP REST handlers & SSE streaming hub
 │       ├── orchestrator/           # Deliberation turn loop & state machine
@@ -142,7 +142,7 @@ cd socratix-engine
 go test -v -race ./pkg/...
 
 # Run standalone development server
-go run ./cmd/dialex/main.go --port 8080 --data-dir ~/.dialex
+go run ./cmd/socratix/main.go --port 8080 --data-dir ~/.dialex
 ```
 
 ### 4.4 Running Test Suites

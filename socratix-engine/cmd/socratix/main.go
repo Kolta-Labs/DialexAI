@@ -1,5 +1,5 @@
-// Command dialex is the engine binary — `dialex serve` runs the HTTP daemon;
-// `dialex users add` seeds the multi-user account store.
+// Command socratix is the engine binary — `socratix serve` runs the HTTP daemon;
+// `socratix users add` seeds the multi-user account store.
 package main
 
 import (

@@ -192,7 +192,7 @@ The following advanced capabilities have been implemented or are planned:
    - Live Epistemic Ledger tracking green **Hardened Invariants** vs red strike-through **Surrendered Concessions**, reactive Dialogue Assist Chips, structured **Socratic Digest**, and 1-click **Council Elevation**.
 6. **Null Hypothesis Benchmarking & Quantitative Evaluation Suite (COMPLETED)**:
    - Automated testing framework validating multi-agent debate superiority against single-model baselines across hallucination, blind spot coverage, trade-off depth, and actionability metrics with paired two-tailed Student's $t$-test ($p < 0.05$).
-   - Full-stack execution: Native Desktop KMP UI (Sidebar "⚔️ Arena & Benchmarks" with spider/radar chart and side-by-side deliverable comparison) + Web Admin (`:8080/admin/benchmarks`) + CLI runner (`dialexbench`).
+   - Full-stack execution: Native Desktop KMP UI (Sidebar "⚔️ Arena & Benchmarks" with spider/radar chart and side-by-side deliverable comparison) + Web Admin (`:8080/admin/benchmarks`) + CLI runner (`socratixbench`).
    - Includes embedded **DialexBench-10** canonical dilemma dataset plus custom dilemma authoring and Markdown/CSV/JSON export.
 
 7. **8-Layer DNA Mental & Structured Persona Ingestion (COMPLETED - v1.7)**:

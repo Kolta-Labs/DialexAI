@@ -282,7 +282,7 @@ func runCompare(args []string) {
 	}
 	runs := bs.ListRuns()
 	if len(runs) == 0 {
-		fmt.Println("no stored runs yet: run `dialexbench run` first")
+		fmt.Println("no stored runs yet: run `socratixbench run` first")
 		return
 	}
 	fmt.Print(benchmark.CompareMarkdown(benchmark.GroupRuns(runs)))
