@@ -6,6 +6,7 @@ import com.dialex.model.IndependenceConfig
 import com.dialex.model.Provider
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class IndependenceTest {
     // three personas sharing ONE provider
@@ -46,5 +47,15 @@ class IndependenceTest {
     fun `default config changes nothing`() {
         val views = listOf(msg(a, 1, "x"))
         assertEquals(views, applyIndependence(views, b, 1, IndependenceConfig(), seats))
+    }
+
+    @Test
+    fun `anonymizing also scrubs seat names and roles from the text`() {
+        val b2 = b.copy(role = "Plan Advocate")
+        val m = msg(b2, 1, "As the Optimist and Plan Advocate I disagree with the skeptic, though the Pragmatist is right.")
+        val got = applyIndependence(listOf(m), c, 2, IndependenceConfig(anonymizeTranscript = true), listOf(a, b2, c)).single().content
+        assertTrue("Participant B" in got && "Participant A" in got, got)
+        assertTrue("Optimist" !in got && "Plan Advocate" !in got && !got.contains("skeptic", ignoreCase = true), got)
+        assertTrue("Pragmatist" in got, "the viewer's own name stays: $got")
     }
 }

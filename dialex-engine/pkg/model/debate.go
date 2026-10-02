@@ -392,6 +392,9 @@ type DebateResult struct {
 	IsConsensusReached bool            `json:"isConsensusReached,omitempty"`
 	EarlyExitReason    *string         `json:"earlyExitReason,omitempty"`
 	TensionPairs       []TensionPair   `json:"tensionPairs,omitempty"`
+	// TensionFallbackRounds is how many rounds had their disagreements guessed by a keyword
+	// heuristic because the model analysis failed. When non-zero, TensionPairs is not a model finding.
+	TensionFallbackRounds int `json:"tensionFallbackRounds,omitempty"`
 	RetrievedEvidence  []RoundEvidence `json:"retrievedEvidence,omitempty"`
 	CredenceLedger     *CredenceLedger `json:"credenceLedger,omitempty"`
 }

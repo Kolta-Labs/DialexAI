@@ -183,3 +183,40 @@ func TestTruncateStatementKeepsValidUTF8(t *testing.T) {
 		t.Errorf("should skip heading and blockquote: %q", got)
 	}
 }
+
+type seqRunner struct {
+	replies []string
+	calls   int
+}
+
+func (s *seqRunner) Respond(ctx context.Context, agent model.Agent, topic, cc, ci string, tr []model.DebateMessage, mo string) (runner.AgentReply, error) {
+	i := s.calls
+	s.calls++
+	if i >= len(s.replies) {
+		i = len(s.replies) - 1
+	}
+	return runner.AgentReply{Content: s.replies[i]}, nil
+}
+
+func TestTensionDetectorRetriesBadJSONOnceThenRecordsFallback(t *testing.T) {
+	msgs := []model.DebateMessage{{Content: "use postgres", Round: 1, AgentID: model.ProviderAnthropic}, {Content: "use sqlite", Round: 1, AgentID: model.ProviderOpenAI}}
+	good := `{"newTensions":[],"resolvedTensionUpdates":[]}`
+
+	d := NewTensionDetector()
+	r := &seqRunner{replies: []string{"not json at all", good}}
+	if _, err := d.AnalyzeRound(context.Background(), r, model.Agent{}, "t", 1, msgs, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if r.calls != 2 || d.FallbackRounds != 0 {
+		t.Fatalf("a good retry must not count as fallback: calls=%d fallback=%d", r.calls, d.FallbackRounds)
+	}
+
+	d2 := NewTensionDetector()
+	r2 := &seqRunner{replies: []string{"nope", "still nope"}}
+	if _, err := d2.AnalyzeRound(context.Background(), r2, model.Agent{}, "t", 1, msgs, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if r2.calls != 2 || d2.FallbackRounds != 1 {
+		t.Fatalf("two bad replies must fall back and be recorded: calls=%d fallback=%d", r2.calls, d2.FallbackRounds)
+	}
+}

@@ -17,7 +17,12 @@ import (
 var jsonCodeBlockRegex = regexp.MustCompile("(?s)```(?:json)?\\s*(\\{.*?\\})\\s*```")
 
 // TensionDetector isolates and tracks dialectic contradiction pairs across rounds.
-type TensionDetector struct{}
+type TensionDetector struct {
+	// FallbackRounds counts rounds whose disagreements came from the offline keyword heuristic
+	// because the model analysis failed or returned unusable JSON. Callers surface it so a
+	// heuristic guess is never presented as a model finding.
+	FallbackRounds int
+}
 
 // NewTensionDetector constructs a ready-to-use TensionDetector.
 func NewTensionDetector() *TensionDetector {
@@ -72,6 +77,7 @@ func (d *TensionDetector) AnalyzeRound(
 	}
 
 	if r == nil {
+		d.FallbackRounds++
 		return d.HeuristicAnalyzeRound(topic, currentRound, roundMessages, existingTensions), nil
 	}
 
@@ -79,13 +85,19 @@ func (d *TensionDetector) AnalyzeRound(
 	analysisAgent.SystemPrompt = "You are a Paraconsistent Dialectic Analyzer. Isolate exact technical contradiction pairs (thesis vs antithesis) between agents and evaluate synthesis/trade-off status."
 
 	resp, err := r.Respond(ctx, analysisAgent, prompt, "", "", nil, compactionModel)
-	if err != nil {
-		// Fallback to offline heuristic
-		return d.HeuristicAnalyzeRound(topic, currentRound, roundMessages, existingTensions), nil
+	var parsed *tensionJSONResponse
+	if err == nil {
+		parsed, err = parseTensionResponse(resp.Content)
+		if err != nil {
+			// one retry, naming the failure, before giving up on the model
+			retry := prompt + "\n\nYour previous reply was not valid JSON. Reply with ONLY the JSON object, no prose, no markdown."
+			if resp2, err2 := r.Respond(ctx, analysisAgent, retry, "", "", nil, compactionModel); err2 == nil {
+				parsed, err = parseTensionResponse(resp2.Content)
+			}
+		}
 	}
-
-	parsed, err := parseTensionResponse(resp.Content)
-	if err != nil {
+	if err != nil || parsed == nil {
+		d.FallbackRounds++
 		return d.HeuristicAnalyzeRound(topic, currentRound, roundMessages, existingTensions), nil
 	}
 

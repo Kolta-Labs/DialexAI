@@ -27,8 +27,26 @@ internal fun applyIndependence(
             !m.isModeratorIntervention && !m.isFrom(forAgent)
         when {
             peerTurn && cfg.blindFirstRound && round == 1 && m.round == 1 -> null
-            peerTurn && cfg.anonymizeTranscript -> m.copy(authorDisplayName = "Participant ${'A' + seatIndex!!}")
+            peerTurn && cfg.anonymizeTranscript ->
+                m.copy(authorDisplayName = seatLabel(seatIndex!!), content = scrubIdentity(m.content, forAgent, seats))
+            seatIndex != null && cfg.anonymizeTranscript && !m.isSystem && !m.isUserComment ->
+                m.copy(content = scrubIdentity(m.content, forAgent, seats))
             else -> m
         }
+    }
+}
+
+private fun seatLabel(i: Int) = "Participant ${'A' + i}"
+
+/** Replaces other seats' names and roles inside a message with their anonymous labels, so
+ * "As the Skeptic, I..." cannot undo the anonymization. The viewer's own name is left alone.
+ * Removes the explicit leak only; writing style still carries identity. */
+private fun scrubIdentity(text: String, viewer: Agent, seats: List<Agent>): String {
+    val reps = seats.withIndex()
+        .filter { (_, a) -> a.id != viewer.id }
+        .flatMap { (i, a) -> listOf(a.displayName, a.role).map { it.trim() }.filter { it.length >= 3 }.map { it to seatLabel(i) } }
+        .sortedByDescending { it.first.length } // "Neutral Chair" before "Chair"
+    return reps.fold(text) { acc, (name, label) ->
+        acc.replace(Regex("\\b${Regex.escape(name)}\\b", RegexOption.IGNORE_CASE), label)
     }
 }

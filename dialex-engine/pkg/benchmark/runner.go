@@ -138,6 +138,13 @@ func (r *Runner) ExecuteRunWithBaseline(
 		return nil, fmt.Errorf("double-blind evaluation failed: %w", err)
 	}
 
+	// Second opinions that do not rely on the pairwise grade: a per-item checklist for each arm on
+	// its own, and a classifier-based stance measure for the council.
+	rubricBaseline := EvaluateRubric(ctx, judgeRunner, judgeAgent, bCase, soloRes.Deliverable)
+	rubricCouncil := EvaluateRubric(ctx, judgeRunner, judgeAgent, bCase, councilRes.Deliverable)
+	stance := AnalyzeStance(ctx, judgeRunner, judgeAgent, bCase, councilRes.Transcript, rounds)
+	councilRes.Stance = &stance
+
 	deltaQ := math.Round((councilScore-soloScore)*100) / 100
 	winner := "TIE"
 	if deltaQ >= 0.50 {
@@ -164,6 +171,8 @@ func (r *Runner) ExecuteRunWithBaseline(
 	return &BenchmarkRun{
 		Baseline:            baseline,
 		Independence:        IndependenceLabel(r.CouncilIndependence),
+		RubricBaseline:      rubricBaseline,
+		RubricCouncil:       rubricCouncil,
 		TokenRatio:          tokenRatio,
 		JudgeFallbackPasses: fallbacks,
 		JudgeOverlap:        conflict != nil,
@@ -311,6 +320,8 @@ Produce a definitive, production-grade Architecture Decision Record (ADR) resolv
 		TokensUsed:            totalTokens,
 		DurationMs:            time.Since(start).Milliseconds(),
 		EstimatedCostUSD:      cost,
+		Transcript:            transcript,
+		IdentityLeaks:         orchestrator.CountIdentityLeaks(transcript, agents),
 		Convergence:           RoundConvergence(transcript, rounds),
 		FirstRoundConvergence: RoundConvergence(transcript, 1),
 	}, nil

@@ -97,7 +97,7 @@ type RunOptions struct {
 // else (a turn failing, pausing, a token-budget stop) is reported inside the DebateResult,
 // never as a Go error. Cancellation must propagate so the caller's own context machinery unwinds
 // correctly; a turn failure is just data.
-func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateResult, error) {
+func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (runResult model.DebateResult, runErr error) {
 	config := opts.Config
 	isStopped := opts.IsStopped
 	if isStopped == nil {
@@ -120,6 +120,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (model.DebateRe
 	currentTensions := append([]model.TensionPair{}, opts.InitialTensions...)
 	onTensionsUpdated := opts.OnTensionsUpdated
 	tensionDetector := consensus.NewTensionDetector()
+	defer func() { runResult.TensionFallbackRounds = tensionDetector.FallbackRounds }()
 
 	currentEvidence := append([]model.RoundEvidence{}, opts.InitialEvidence...)
 	onEvidenceRetrieved := opts.OnEvidenceRetrieved

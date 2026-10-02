@@ -58,6 +58,12 @@ type ArmResult struct {
 	Convergence float64 `json:"convergence,omitempty"`
 	// FirstRoundConvergence is the same measure for round 1, before the seats react to each other.
 	FirstRoundConvergence float64 `json:"firstRoundConvergence,omitempty"`
+	// Stance is the classifier-based agreement measure (council arm only).
+	Stance *StanceMetrics `json:"stance,omitempty"`
+	// IdentityLeaks counts council turns that name a seat in their own text.
+	IdentityLeaks int `json:"identityLeaks,omitempty"`
+	// Transcript is kept for council arms so judged pairs can be spot-checked by a human.
+	Transcript []model.DebateMessage `json:"transcript,omitempty"`
 }
 
 // MetricScore is a scored metric dimension with critique rationale.
@@ -103,6 +109,10 @@ type BenchmarkRun struct {
 	JudgeOverlap bool `json:"judgeOverlap,omitempty"`
 	// Independence records how the council saw each other: open, blind, anon or blind+anon.
 	Independence string `json:"independence,omitempty"`
+	// Rubric scores: per-item yes/no checks of each arm on its own (see rubric.go). Unavailable
+	// when the judge failed; there is no keyword fallback.
+	RubricBaseline RubricResult `json:"rubricBaseline"`
+	RubricCouncil  RubricResult `json:"rubricCouncil"`
 }
 
 // BenchmarkSummary holds aggregate metrics and scientific statistical hypothesis tests.

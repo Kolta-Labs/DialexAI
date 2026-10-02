@@ -113,3 +113,46 @@ func TestSingleProviderCouncilRunsBlindAndAnonymous(t *testing.T) {
 		t.Errorf("round-2 view not anonymized: %s", joined)
 	}
 }
+
+func TestAnonymizeScrubsSeatNamesAndRolesFromTheText(t *testing.T) {
+	a, b, c := seat("a", "Skeptic"), seat("b", "Optimist"), seat("c", "Pragmatist")
+	b.Role = "Plan Advocate"
+	seats := []model.Agent{a, b, c}
+	m := msg(b, 1, "As the Optimist and Plan Advocate I disagree with the skeptic, though the Pragmatist is right.")
+	got := applyIndependence([]model.DebateMessage{m}, c, 2, &model.IndependenceConfig{AnonymizeTranscript: true}, seats)[0].Content
+	for _, leak := range []string{"Optimist", "Plan Advocate", "skeptic"} {
+		if strings.Contains(strings.ToLower(got), strings.ToLower(leak)) {
+			t.Errorf("still names %q: %s", leak, got)
+		}
+	}
+	if !strings.Contains(got, "Participant B") || !strings.Contains(got, "Participant A") {
+		t.Errorf("expected anonymous labels, got: %s", got)
+	}
+	if !strings.Contains(got, "Pragmatist") {
+		t.Errorf("the viewer's own name must be left alone: %s", got)
+	}
+	if m.Content == got {
+		t.Error("the persisted message must not be mutated")
+	}
+}
+
+func TestCountIdentityLeaks(t *testing.T) {
+	a, b := seat("a", "Skeptic"), seat("b", "Optimist")
+	tr := []model.DebateMessage{msg(a, 1, "As the Skeptic I object"), msg(b, 1, "a clean answer"), msg(b, 2, "unlike the optimist's view")}
+	if got := CountIdentityLeaks(tr, []model.Agent{a, b}); got != 2 {
+		t.Fatalf("leaks = %d, want 2", got)
+	}
+}
+
+func TestRunReportsWhenTensionAnalysisFellBackToHeuristic(t *testing.T) {
+	// the fake model never returns the JSON the tension detector asks for
+	o := &Orchestrator{RunnerFor: func(model.Agent) runner.AgentRunner { return &fakeRunner{} }}
+	a, b := seat("a", "A"), seat("b", "B")
+	res, err := o.Run(context.Background(), RunOptions{Config: model.DebateConfig{Topic: "t", Primary: a, Secondary: &b, RoundMode: model.RoundModeFixed, MaxRounds: 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.TensionFallbackRounds < 1 {
+		t.Fatalf("heuristic fallback must be reported, got %d", res.TensionFallbackRounds)
+	}
+}

@@ -137,3 +137,16 @@ func TestDetectProviderAndRunner(t *testing.T) {
 	}
 	_ = os.Getenv
 }
+
+func TestMemoNeverPresentsAHeuristicGuessAsNoDisagreements(t *testing.T) {
+	m, _ := Get("redteam")
+	cfg, _ := Build(m, "x", model.ProviderAnthropic, "", 0)
+	res := model.DebateResult{TensionFallbackRounds: 2}
+	memo := Memo(m, "x", cfg, res)
+	if !strings.Contains(memo, "Not reliably assessed") || strings.Contains(memo, "None detected") {
+		t.Fatalf("memo must say disagreements were not assessed:\n%s", memo)
+	}
+	if got := AssessConfidence(res, cfg); got.Level == "High" {
+		t.Fatalf("fallback must cap trust, got %s", got.Level)
+	}
+}

@@ -53,6 +53,7 @@ Flags:
   --council string   mixed (default) or onekey: personas on --provider only (one API key)
   --provider, --model, --onekey-mode   settings for --council onekey
   --independence     open (default), blind, anon or blind+anon: what council seats see of each other
+  --judge-provider, --judge-model   choose the judge (e.g. ollama: free, and a different family)
   --allow-judge-overlap   permit a judge from the same provider as an arm (flagged in the results)
   --format string    Output format: text, markdown, json (default: "text")
   --dir string       Dialex config directory (default: platform-standard)`)
@@ -72,6 +73,8 @@ func runBenchmark(args []string) {
 	caseID := fs.String("case", "DB01", "Case ID to evaluate (e.g. DB01, DB02, or 'all')")
 	rounds := fs.Int("rounds", 2, "Council debate rounds")
 	baseline := fs.String("baseline", benchmark.BaselineSolo, "Baseline arm: solo, or self_consistency (same number of model calls as the council)")
+	judgeProv := fs.String("judge-provider", "", "provider for the judge, e.g. ollama (a free local model) or any provider not used by the arms")
+	judgeModel := fs.String("judge-model", "", "judge model (default: the provider's balanced default)")
 	allowOverlap := fs.Bool("allow-judge-overlap", false, "Allow a judge from the same provider as an arm (biased; the run is flagged)")
 	councilKind := fs.String("council", "mixed", "mixed (Claude, ChatGPT, Gemini seats) or onekey (personas on --provider only)")
 	provFlag := fs.String("provider", "", "provider for --council onekey (its key must be in settings or the environment)")
@@ -184,6 +187,19 @@ func runBenchmark(args []string) {
 		// one key: the judge is the same model as the arms. The run is flagged judgeOverlap.
 		judgeAgent, ok = soloAgent, true
 		judgeAgent.DisplayName, judgeAgent.Role = "Judge ("+soloAgent.Provider.BrandName()+")", "Chief Systems Architect & Evaluator"
+	}
+	if *judgeProv != "" {
+		jp, err := quickstart.ParseProvider(*judgeProv)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "--judge-provider: %v\n", err)
+			os.Exit(1)
+		}
+		judgeAgent = model.NewAgent(jp, *judgeModel)
+		if *judgeModel == "" {
+			judgeAgent.Model = jp.DefaultModel()
+		}
+		judgeAgent.DisplayName, judgeAgent.Role = "Judge ("+jp.BrandName()+")", "Chief Systems Architect & Evaluator"
+		ok = true // the runner still refuses it if it shares a provider with an arm
 	}
 	if !ok {
 		fmt.Fprintln(os.Stderr, "no provider is independent of the arms; edit the arms or pass --allow-judge-overlap")

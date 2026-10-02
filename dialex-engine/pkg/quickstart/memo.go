@@ -47,6 +47,9 @@ func AssessConfidence(res model.DebateResult, cfg model.DebateConfig) Confidence
 	} else if open > 0 {
 		lower("Medium", fmt.Sprintf("%d disagreement(s) are still open", open))
 	}
+	if res.TensionFallbackRounds > 0 {
+		lower("Medium", "disagreement detection fell back to a keyword heuristic")
+	}
 	if sameModel(cfg) {
 		lower("Medium", "all seats are personas on one model, which share its blind spots")
 	}
@@ -97,6 +100,9 @@ func Memo(mode Mode, topic string, cfg model.DebateConfig, res model.DebateResul
 	}
 
 	b.WriteString("## Open disagreements\n\n")
+	if res.TensionFallbackRounds > 0 {
+		fmt.Fprintf(&b, "_Not reliably assessed: in %d round(s) the model analysis failed and a keyword heuristic guessed instead. Read the transcript for real disagreements._\n\n", res.TensionFallbackRounds)
+	}
 	n := 0
 	for _, t := range res.TensionPairs {
 		if t.Status == model.TensionStatusOpen || t.Status == model.TensionStatusExplored {
@@ -104,7 +110,7 @@ func Memo(mode Mode, topic string, cfg model.DebateConfig, res model.DebateResul
 			n++
 		}
 	}
-	if n == 0 {
+	if n == 0 && res.TensionFallbackRounds == 0 {
 		b.WriteString("_None detected. That is not proof there were none: the detector is itself a model._\n")
 	}
 
