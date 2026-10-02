@@ -136,6 +136,11 @@ type Agent struct {
 	MaxTokens *int `json:"maxTokens,omitempty"`
 	// AllowWebSearch: optional per-agent WebSearch permission override.
 	AllowWebSearch *bool `json:"allowWebSearch,omitempty"`
+	// FrequencyPenalty / PresencePenalty: optional per-agent penalties (nil = schedule's value).
+	FrequencyPenalty *float64 `json:"frequencyPenalty,omitempty"`
+	PresencePenalty  *float64 `json:"presencePenalty,omitempty"`
+	// SamplingOverride replaces the debate-wide SamplingConfig for this agent.
+	SamplingOverride *SamplingConfig `json:"samplingOverride,omitempty"`
 }
 
 // Label is what this seat is actually called — the whole reason DisplayName exists instead
@@ -211,6 +216,10 @@ type DebateConfig struct {
 	HumanDialogueMode bool `json:"humanDialogueMode,omitempty"`
 	// HumanDialogueDirective: custom prompt text for human dialogue mode. If empty, engine uses default.
 	HumanDialogueDirective string `json:"humanDialogueDirective,omitempty"`
+	// AntiLoop: repeated-turn guard. nil = Kotlin defaults (see EffectiveAntiLoop).
+	AntiLoop *AntiLoopConfig `json:"antiLoop,omitempty"`
+	// Sampling: temperature/penalty schedule. nil = Kotlin defaults (see EffectiveSampling).
+	Sampling *SamplingConfig `json:"sampling,omitempty"`
 }
 
 // IndependenceConfig guards against conformity, which studies find drives accuracy down in
@@ -225,16 +234,36 @@ type IndependenceConfig struct {
 	AnonymizeTranscript bool `json:"anonymizeTranscript,omitempty"`
 }
 
-// ModeratorConfig controls moderator agent loop-detection and summary behaviour.
+// ModeratorConfig mirrors Kotlin ModerationConfig (typealias ModeratorConfig). Defaults live in
+// DefaultModeratorConfig; UnmarshalJSON seeds them so omitted fields keep the Kotlin default.
 type ModeratorConfig struct {
-	Enabled           bool     `json:"enabled"`
-	ModeratorProvider Provider `json:"moderatorProvider,omitempty"`
+	Style   ModerationStyle  `json:"style"`
+	Persona ModeratorPersona `json:"persona"`
+	// Dedicated model for moderation turns.
+	ModeratorModel string `json:"moderatorModel"`
+	// Rounds between checkpoints in PERIODIC mode.
+	CheckpointFrequencyRounds int `json:"checkpointFrequencyRounds"`
+	// Minimum topical similarity before a drift intervention (0..1).
+	DriftThreshold float64 `json:"driftThreshold"`
+	// Inject the steerage into the agents' next-turn instructions.
+	EnforceSteerageDirectives bool     `json:"enforceSteerageDirectives"`
+	Enabled                   bool     `json:"enabled"`
+	ModeratorProvider         Provider `json:"moderatorProvider,omitempty"`
 	// ModeratorSeatID picks the moderator by seat, so one persona among several on the same
 	// provider can moderate. It wins over ModeratorProvider, which stays for old discussions.
-	ModeratorSeatID     string `json:"moderatorSeatId,omitempty"`
-	Strictness          int    `json:"strictness,omitempty"`
-	DetectTopicDrift    bool   `json:"detectTopicDrift,omitempty"`
-	TopicDriftDirective string `json:"topicDriftDirective,omitempty"`
+	ModeratorSeatID string `json:"moderatorSeatId,omitempty"`
+	// Strictness 1 (passive) .. 5 (ruthless); see orchestrator.ModeratorTriggerTurns.
+	Strictness int `json:"strictness"`
+	// Consecutive no-novelty turns before the moderator steps in.
+	LoopDetectionThreshold int               `json:"loopDetectionThreshold"`
+	InterventionStyle      InterventionStyle `json:"interventionStyle"`
+	MaxInterventions       int               `json:"maxInterventions"`
+	DetectRepetition       bool              `json:"detectRepetition"`
+	DetectTopicDrift       bool              `json:"detectTopicDrift"`
+	TopicDriftDirective    string            `json:"topicDriftDirective,omitempty"`
+	EnforceEvidence        bool              `json:"enforceEvidence"`
+	EnforceCivility        bool              `json:"enforceCivility"`
+	CustomDirectives       string            `json:"customDirectives,omitempty"`
 }
 
 // TokenBudgetAction specifies whether to warn or hard-stop when token budget is reached.
@@ -343,6 +372,10 @@ type DebateMessage struct {
 	IsUserComment bool `json:"isUserComment,omitempty"`
 	// True when this turn was generated as a moderator intervention.
 	IsModeratorIntervention bool `json:"isModeratorIntervention,omitempty"`
+	// True when the turn was regenerated after the anti-loop guard rejected an earlier draft.
+	IsLoopRecovered bool `json:"isLoopRecovered,omitempty"`
+	// True when the anti-loop fallback replaced the turn with a "position maintained" concession.
+	IsStalledConcession bool `json:"isStalledConcession,omitempty"`
 	// True when the engine judged this turn to express agreement (consensus.IsTurnAgreed).
 	Agreed bool `json:"agreed,omitempty"`
 	// Best-effort — only API providers report usage; CLI turns leave these nil.
