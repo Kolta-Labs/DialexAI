@@ -399,6 +399,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (runResult mode
 			AgentID:           agent.Provider,
 			Round:             round,
 			Content:           reply.Content,
+			Agreed:            consensus.IsTurnAgreed(reply.Content),
 			TokensIn:          reply.TokensIn,
 			TokensOut:         reply.TokensOut,
 			TokensCached:      reply.TokensCached,

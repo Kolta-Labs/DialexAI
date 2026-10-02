@@ -343,6 +343,8 @@ type DebateMessage struct {
 	IsUserComment bool `json:"isUserComment,omitempty"`
 	// True when this turn was generated as a moderator intervention.
 	IsModeratorIntervention bool `json:"isModeratorIntervention,omitempty"`
+	// True when the engine judged this turn to express agreement (consensus.IsTurnAgreed).
+	Agreed bool `json:"agreed,omitempty"`
 	// Best-effort — only API providers report usage; CLI turns leave these nil.
 	TokensIn     *int  `json:"tokensIn,omitempty"`
 	TokensOut    *int  `json:"tokensOut,omitempty"`
