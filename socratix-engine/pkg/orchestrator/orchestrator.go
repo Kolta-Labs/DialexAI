@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -16,8 +15,6 @@ import (
 	"socratix/pkg/retrieval"
 	"socratix/pkg/runner"
 )
-
-var consensusPrefixRegex = regexp.MustCompile(`(?mi)^(?:>\s*)*(?:#{1,6}\s*)?(?:\[\s*)?(?:\*{1,2}|_{1,2})?\s*(?:AGREED|CONCUR|CONSENSUS REACHED|UNANIMOUS AGREEMENT|I AGREE)\b\s*(?:\])?\s*[:—\-]?(?:\*{1,2}|_{1,2})?`)
 
 const (
 	consensusDirective = "[DELIBERATION CONVERGENCE RULES]\n" +
@@ -335,7 +332,7 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (runResult mode
 	speak := func(agent model.Agent, round int) (string, error) {
 		isOpeningTurn := len(transcript) == 0 && agent.Provider == config.Primary.Provider
 		effective := agent
-		
+
 		var modifierParts []string
 		if effective.SystemPrompt != "" {
 			modifierParts = append(modifierParts, effective.SystemPrompt)
@@ -454,106 +451,16 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (runResult mode
 		}, nil
 	}
 
-	isTurnInConsensus := func(content string) bool {
-		trimmed := strings.TrimSpace(content)
-		if trimmed == "" {
-			return false
-		}
-		if consensusPrefixRegex.MatchString(trimmed) {
-			return true
-		}
-		lower := strings.ToLower(trimmed)
-		concessionPhrases := []string{
-			"nothing left to contest",
-			"nothing left to audit",
-			"i concede to",
-			"concede to the position",
-			"no further substantive disagreement",
-			"no further disagreement",
-			"fully concur with",
-			"i fully concur",
-			"i align with the council",
-		}
-		for _, phrase := range concessionPhrases {
-			if strings.Contains(lower, phrase) {
-				return true
-			}
-		}
-		return false
-	}
-
 	evaluateConsensus := func(curRound int) (bool, float64) {
-		mode := model.ConsensusModeUnanimous
-		minRounds := 2
-		threshold := 1.0
-		if config.Consensus != nil {
-			if config.Consensus.Mode != "" {
-				mode = config.Consensus.Mode
-			}
-			if config.Consensus.MinRoundsBeforeExit > 0 {
-				minRounds = config.Consensus.MinRoundsBeforeExit
-			}
-			if config.Consensus.ConsensusThreshold > 0 {
-				threshold = config.Consensus.ConsensusThreshold
-			}
-		} else if config.ConsensusTolerance > 0 {
-			threshold = config.ConsensusTolerance
-			if threshold < 1.0 {
-				mode = model.ConsensusModeSupermajority
-			}
+		result := consensus.Evaluate(curRound, transcript, config)
+		if result.NotReady != "" || result.Ongoing {
+			return false, result.Ratio
 		}
-		if mode == model.ConsensusModeDisabled {
-			return false, 0
-		}
-		if curRound < minRounds {
-			return false, 0
-		}
-		agents := config.Agents()
-		if len(agents) == 0 {
-			return false, 0
-		}
-		// Find index of the most recent user comment (if any)
-		lastUserCommentIdx := -1
-		for i := len(transcript) - 1; i >= 0; i-- {
-			if transcript[i].IsUserComment {
-				lastUserCommentIdx = i
-				break
-			}
-		}
-
-		agreedSeats := 0
-		for _, agent := range agents {
-			var latestTurn *model.DebateMessage
-			for i := len(transcript) - 1; i > lastUserCommentIdx; i-- {
-				m := transcript[i]
-				if (m.SeatID == agent.ID || (m.SeatID == "" && m.AgentID == agent.Provider)) && !m.IsError && !m.IsUserComment && !m.IsSystem {
-					latestTurn = &m
-					break
-				}
-			}
-			if latestTurn == nil {
-				return false, 0
-			}
-			if isTurnInConsensus(latestTurn.Content) {
-				agreedSeats++
-			}
-		}
-		ratio := float64(agreedSeats) / float64(len(agents))
-		isConsensus := false
-		switch mode {
-		case model.ConsensusModeUnanimous:
-			isConsensus = agreedSeats == len(agents)
-		case model.ConsensusModeSupermajority:
-			target := threshold
-			if target < 0.5 || target > 0.999 {
-				target = 0.66
-			}
-			isConsensus = ratio >= target
-		case model.ConsensusModeSimpleMajority:
-			isConsensus = ratio > 0.50
+		if !result.Achieved {
+			return false, result.Ratio
 		}
 		// Paraconsistent Invariant: cannot conclude consensus if there are active OPEN or EXPLORED tensions!
-		if isConsensus && model.HasOpenTensions(currentTensions) {
+		if model.HasOpenTensions(currentTensions) {
 			var curRoundMessages []model.DebateMessage
 			for _, m := range transcript {
 				if m.Round == curRound && !m.IsError && !m.IsSystem && !m.IsUserComment {
@@ -564,10 +471,10 @@ func (o *Orchestrator) Run(ctx context.Context, opts RunOptions) (runResult mode
 				currentTensions = tensionDetector.HeuristicAnalyzeRound(config.Topic, curRound, curRoundMessages, currentTensions)
 			}
 			if model.HasOpenTensions(currentTensions) {
-				isConsensus = false
+				return false, result.Ratio
 			}
 		}
-		return isConsensus, ratio
+		return true, result.Ratio
 	}
 
 	// Resume point: which round and which agent within that round to continue from.
@@ -936,7 +843,6 @@ func optimizeAttachmentContent(raw string, maxChars int) string {
 	}
 	return strings.TrimSpace(text)
 }
-
 
 // ownedBySeat reports whether a message came from this agent seat. Seat IDs distinguish
 // several personas on one provider; the provider only matches messages that carry no seat ID.
