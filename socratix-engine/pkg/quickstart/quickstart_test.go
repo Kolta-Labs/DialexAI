@@ -150,3 +150,64 @@ func TestMemoNeverPresentsAHeuristicGuessAsNoDisagreements(t *testing.T) {
 		t.Fatalf("fallback must cap trust, got %s", got.Level)
 	}
 }
+
+func TestApplyTransformsConfigToOneKeyCouncil(t *testing.T) {
+	for _, m := range Modes() {
+		// Start with a config that has some context and files
+		current := model.DebateConfig{
+			Topic:         "original topic",
+			CommonContext: "existing context",
+			Primary:       model.NewAgent(model.ProviderAnthropic, "claude-sonnet-5"),
+		}
+
+		// Apply the mode
+		result := Apply(current, m)
+
+		// Verify topic wasn't lost, but mode framing was added
+		if !strings.Contains(result.CommonContext, "existing context") {
+			t.Errorf("%s: existing context lost", m.ID)
+		}
+		if !strings.Contains(result.CommonContext, m.Question) {
+			t.Errorf("%s: mode framing not merged into commonContext", m.ID)
+		}
+
+		// Verify seats structure
+		agents := result.Agents()
+		if len(agents) < 2 {
+			t.Errorf("%s: expected at least 2 seats, got %d", m.ID, len(agents))
+		}
+		if agents[0].DisplayName != "Chair" {
+			t.Errorf("%s: primary should be Chair, got %s", m.ID, agents[0].DisplayName)
+		}
+
+		// Verify persona prompts are assigned
+		for _, a := range agents {
+			if a.SystemPrompt == "" {
+				t.Errorf("%s: seat %s has empty SystemPrompt", m.ID, a.DisplayName)
+			}
+		}
+
+		// Verify independence and roundMode
+		if result.RoundMode != model.RoundModeFixed {
+			t.Errorf("%s: expected RoundMode FIXED, got %s", m.ID, result.RoundMode)
+		}
+		if result.MaxRounds != m.Rounds {
+			t.Errorf("%s: expected MaxRounds %d, got %d", m.ID, m.Rounds, result.MaxRounds)
+		}
+		if result.Independence == nil || !result.Independence.BlindFirstRound || !result.Independence.AnonymizeTranscript {
+			t.Errorf("%s: expected independence guards enabled", m.ID)
+		}
+
+		// Verify quinary/senary are cleared
+		if result.Quinary != nil || result.Senary != nil {
+			t.Errorf("%s: quinary/senary should be cleared", m.ID)
+		}
+
+		// Verify dissent handling
+		if m.KeepDissent {
+			if result.Consensus == nil || result.Consensus.Mode != model.ConsensusModeDisabled {
+				t.Errorf("%s: KeepDissent modes must disable consensus", m.ID)
+			}
+		}
+	}
+}

@@ -114,7 +114,7 @@ func Seats(m Mode, provider model.Provider, modelName string) []model.Agent {
 }
 
 // Build makes a runnable config where every seat uses the same provider and model.
-// rounds <= 0 uses the mode's default.
+// rounds <= 0 uses the mode's default. The mode's framing goes in the topic.
 func Build(m Mode, topic string, provider model.Provider, modelName string, rounds int) (model.DebateConfig, error) {
 	if strings.TrimSpace(topic) == "" {
 		return model.DebateConfig{}, fmt.Errorf("a question or plan is required")
@@ -122,24 +122,46 @@ func Build(m Mode, topic string, provider model.Provider, modelName string, roun
 	if rounds <= 0 {
 		rounds = m.Rounds
 	}
-	seats := Seats(m, provider, modelName)
-	cfg := model.DebateConfig{
-		Topic:        m.Question + strings.TrimSpace(topic),
-		Primary:      seats[0],
-		RoundMode:    model.RoundModeFixed,
-		MaxRounds:    rounds,
-		Independence: &model.IndependenceConfig{BlindFirstRound: true, AnonymizeTranscript: true},
+	base := model.DebateConfig{Primary: model.Agent{Provider: provider, Model: modelName, RunMode: model.RunModeAPI}}
+	cfg := Apply(base, m)
+	cfg.Topic = m.Question + strings.TrimSpace(topic)
+	cfg.CommonContext = ""
+	cfg.MaxRounds = rounds
+	return cfg, nil
+}
+
+// Apply turns an existing config into a one-provider council, keeping its topic, files and
+// other settings. The chair replaces Primary, the mode's seats fill Secondary..Quaternary
+// (Quinary/Senary are cleared), and the framing is appended to CommonContext. Mirrors the
+// Kotlin OneKeyCouncil.apply it replaces.
+func Apply(current model.DebateConfig, m Mode) model.DebateConfig {
+	seats := Seats(m, current.Primary.Provider, current.Primary.Model)
+	for i := range seats {
+		seats[i].RunMode = current.Primary.RunMode
 	}
-	slots := []**model.Agent{&cfg.Secondary, &cfg.Tertiary, &cfg.Quaternary, &cfg.Quinary, &cfg.Senary}
-	if len(seats)-1 > len(slots) {
-		return model.DebateConfig{}, fmt.Errorf("mode %s has too many seats", m.ID)
+	out := current
+	out.Primary = seats[0]
+	out.Secondary, out.Tertiary, out.Quaternary, out.Quinary, out.Senary = nil, nil, nil, nil, nil
+	for i, slot := range []**model.Agent{&out.Secondary, &out.Tertiary, &out.Quaternary} {
+		if i+1 < len(seats) {
+			*slot = &seats[i+1]
+		}
 	}
-	for i := 1; i < len(seats); i++ {
-		a := seats[i]
-		*slots[i-1] = &a
+	out.RoundMode = model.RoundModeFixed
+	out.MaxRounds = m.Rounds
+	out.Independence = &model.IndependenceConfig{BlindFirstRound: true, AnonymizeTranscript: true}
+	if ctx := strings.TrimSpace(current.CommonContext); ctx != "" {
+		out.CommonContext = ctx + "\n\n" + m.Question
+	} else {
+		out.CommonContext = m.Question
 	}
 	if m.KeepDissent {
-		cfg.Consensus = &model.ConsensusConfig{Mode: model.ConsensusModeDisabled}
+		c := model.ConsensusConfig{}
+		if current.Consensus != nil {
+			c = *current.Consensus
+		}
+		c.Mode = model.ConsensusModeDisabled
+		out.Consensus = &c
 	}
-	return cfg, nil
+	return out
 }

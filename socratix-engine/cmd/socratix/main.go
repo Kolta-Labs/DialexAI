@@ -30,6 +30,8 @@ func main() {
 		runService(os.Args[2:])
 	case "ask":
 		runAsk(os.Args[2:])
+	case "consensus":
+		runConsensus(os.Args[2:])
 	case "-h", "--help", "help":
 		printUsage()
 	default:
@@ -50,6 +52,9 @@ Usage:
                               One-shot council on a single API key: a few personas on one
                               model stress-test your plan and print a decision memo. See
                               "socratix ask --list" for modes (pre-mortem, red team, tenth man).
+  socratix consensus <transcript.json> [flags]
+                              Evaluate consensus on a debate transcript; derives agents from
+                              the transcript if --config is omitted.
   socratix service install      Register the engine to start at login (launchd on macOS,
                               systemd --user on Linux; not yet supported on Windows)
   socratix service uninstall    Remove that login-time registration

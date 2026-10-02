@@ -103,7 +103,6 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("POST /api/v1/personas/dna/import", s.requireAuth(s.handleImportPersonaDNA))
 	mux.HandleFunc("GET /api/v1/personas/{id}/dna/export", s.requireAuth(s.handleExportPersonaDNA))
 
-
 	// File attachments
 
 	// Usage
@@ -136,6 +135,13 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/benchmarks/runs/{id}", s.requireAuth(s.handleGetBenchmarkRun))
 	mux.HandleFunc("GET /api/v1/benchmarks/summary", s.requireAuth(s.handleGetBenchmarkSummary))
 	mux.HandleFunc("GET /api/v1/benchmarks/export", s.requireAuth(s.handleExportBenchmarks))
+
+	// Consensus evaluation APIs
+	mux.HandleFunc("POST /api/v1/consensus/evaluate", s.requireAuth(s.handleEvaluateConsensus))
+
+	// Quickstart mode APIs
+	mux.HandleFunc("GET /api/v1/quickstart/modes", s.requireAuth(s.handleListQuickstartModes))
+	mux.HandleFunc("POST /api/v1/quickstart/apply", s.requireAuth(s.handleApplyQuickstartMode))
 
 	return s.auditMutations(mux)
 }
@@ -280,4 +286,3 @@ func (s *Server) handleServeWeb(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
 }
-

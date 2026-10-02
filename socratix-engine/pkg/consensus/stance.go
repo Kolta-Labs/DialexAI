@@ -18,13 +18,13 @@ const (
 
 // Result is the outcome of evaluating consensus across all agents.
 type Result struct {
-	Achieved    bool
-	Ongoing     bool   // if not Achieved, is it still going (agents haven't all spoken yet)?
-	NotReady    string // if neither Achieved nor Ongoing, why not (disabled, minRounds, etc)?
-	AgreedSeats []string
-	AgreedCount int
-	TotalCount  int
-	Ratio       float64
+	Achieved    bool     `json:"achieved"`
+	Ongoing     bool     `json:"ongoing"`  // if not Achieved, is it still going (agents haven't all spoken yet)?
+	NotReady    string   `json:"notReady"` // if neither Achieved nor Ongoing, why not (disabled, minRounds, etc)?
+	AgreedSeats []string `json:"agreedSeats"`
+	AgreedCount int      `json:"agreedCount"`
+	TotalCount  int      `json:"totalCount"`
+	Ratio       float64  `json:"ratio"`
 }
 
 var (
