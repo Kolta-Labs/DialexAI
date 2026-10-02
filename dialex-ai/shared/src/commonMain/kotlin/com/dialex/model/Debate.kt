@@ -98,6 +98,12 @@ data class Agent(
     val temperature: Double? = null,
     /** Model nucleus sampling top_p (e.g. 0.0 to 1.0). Null = inherits global provider default. */
     val topP: Double? = null,
+    /** Model frequency penalty (-2.0 to 2.0). Null = inherits global config. */
+    val frequencyPenalty: Double? = null,
+    /** Model presence penalty (-2.0 to 2.0). Null = inherits global config. */
+    val presencePenalty: Double? = null,
+    /** Per-agent sampling overrides across deliberation rounds. */
+    val samplingOverride: SamplingConfig? = null,
     /** Maximum completion tokens generated per turn. Null = inherits global provider default. */
     val maxTokens: Int? = null,
     /** Unique immutable seat identifier within this debate (e.g., "seat_0", "seat_1", "seat_moderator"). */
@@ -274,6 +280,8 @@ data class DebatePolicy(
     val output: OutputConfig = OutputConfig(),
     val permissions: PermissionConfig = PermissionConfig(),
     val costEfficiency: CostEfficiencyConfig = CostEfficiencyConfig(),
+    val antiLoop: AntiLoopConfig = AntiLoopConfig(),
+    val sampling: SamplingConfig = SamplingConfig(),
 )
 
 @Serializable
@@ -375,6 +383,22 @@ enum class InterventionStyle {
 }
 
 @Serializable
+enum class ModerationStyle {
+    PASSIVE_WRAPUP_ONLY,
+    PERIODIC_CHECKPOINT,
+    DYNAMIC_ACTIVE_STEERAGE,
+    STRICT_ARBITRATION;
+
+    val label: String
+        get() = when (this) {
+            PASSIVE_WRAPUP_ONLY -> "Passive Wrap-Up Only"
+            PERIODIC_CHECKPOINT -> "Periodic Checkpoint (Every N Rounds)"
+            DYNAMIC_ACTIVE_STEERAGE -> "Dynamic Active Steerage (Recommended)"
+            STRICT_ARBITRATION -> "Strict Parliamentary Arbitration"
+        }
+}
+
+@Serializable
 enum class ModeratorPersona {
     DELIBERATION_CHAIR,      // Neutral, structured, parliamentary
     EXECUTIVE_ARBITER,       // Pragmatic, ROI-driven, cuts through fluff
@@ -396,9 +420,16 @@ enum class ModeratorPersona {
  */
 @Serializable
 data class ModerationConfig(
+    val style: ModerationStyle = ModerationStyle.DYNAMIC_ACTIVE_STEERAGE,
     val persona: ModeratorPersona = ModeratorPersona.EXECUTIVE_ARBITER,
     /** Dedicated model used for moderation turns (defaults to cheap/fast tier-2 model). */
     val moderatorModel: String = "claude-haiku-4-5-20251001",
+    /** Number of rounds between interventions in PERIODIC mode (default: 2). */
+    val checkpointFrequencyRounds: Int = 2,
+    /** Minimum topical similarity score before triggering a drift intervention (0.0 to 1.0). */
+    val driftThreshold: Double = 0.45,
+    /** Injects the moderator's steerage directive directly into the agents' next-turn instructions. */
+    val enforceSteerageDirectives: Boolean = true,
     val enabled: Boolean = false,
     /** Which provider acts as moderator. null = primary agent. Kept for old discussions. */
     val moderatorProvider: Provider? = null,
@@ -562,6 +593,10 @@ data class DebateConfig(
     val humanDialogueDirective: String = "",
     /** Cost efficiency & dynamic context compaction configuration. */
     val costEfficiency: CostEfficiencyConfig = CostEfficiencyConfig(),
+    /** Anti-looping and content deduplication guards configuration. */
+    val antiLoop: AntiLoopConfig = AntiLoopConfig(),
+    /** Granular temperature and sampling controls configuration. */
+    val sampling: SamplingConfig = SamplingConfig(),
 ) {
     /** Speaking order — primary first always, then whichever others are included, in the
      * order they were added. */
