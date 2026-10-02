@@ -112,6 +112,7 @@ sealed interface SetupIntent {
     data class DiscussionChanged(val discussion: Discussion) : SetupIntent
     data class ConfigChanged(val config: DebateConfig) : SetupIntent
     data class SelectArchetype(val archetype: PresetArchetype) : SetupIntent
+    data class SelectOneKeyMode(val mode: com.dialex.model.OneKeyMode) : SetupIntent
     data object ToggleAdvancedDrawer : SetupIntent
     data class SelectTemplate(val template: CouncilTemplate) : SetupIntent
     data object SelectBlankConfig : SetupIntent

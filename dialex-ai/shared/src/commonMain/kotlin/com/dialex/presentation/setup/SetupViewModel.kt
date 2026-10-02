@@ -458,6 +458,20 @@ class SetupViewModel(
                 }
                 validateConfig(newConfig)
             }
+            is SetupIntent.SelectOneKeyMode -> {
+                val currentDisc = state.value.discussion ?: return
+                val newConfig = com.dialex.model.OneKeyCouncil.apply(currentDisc.config, intent.mode)
+                val estimate = DeliberationEstimator.estimate(newConfig)
+                setState {
+                    copy(
+                        discussion = currentDisc.copy(config = newConfig),
+                        step = SetupStep.ConfigForm,
+                        activeArchetype = PresetArchetype.CUSTOM,
+                        runEstimate = estimate
+                    )
+                }
+                validateConfig(newConfig)
+            }
             is SetupIntent.ToggleAdvancedDrawer -> {
                 setState { copy(advancedExpanded = !advancedExpanded) }
             }

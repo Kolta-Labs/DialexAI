@@ -225,6 +225,28 @@ fun SetupFrontPage(
                                     }
                                 }
 
+                                // One API key? A council of personas on a single model.
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        "One API key? Councils of personas on one model",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                                        color = cc.textMuted
+                                    )
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        com.dialex.model.OneKeyMode.entries.forEach { mode ->
+                                            OutlinedButton(
+                                                onClick = { onIntent(SetupIntent.SelectOneKeyMode(mode)) },
+                                                shape = RoundedCornerShape(8.dp),
+                                                border = BorderStroke(0.75.dp, cc.border),
+                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                            ) {
+                                                Text(mode.title, style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium), color = cc.textPrimary)
+                                            }
+                                        }
+                                    }
+                                }
+
                                 // 4 Preset Archetype Cards
                                 val presets = DiscussionPresets.all
                                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
