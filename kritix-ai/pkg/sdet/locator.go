@@ -42,14 +42,17 @@ const (
 
 // ElementFingerprint holds a multi-anchor signature for resilient locator resolution.
 type ElementFingerprint struct {
-	ID      string      `json:"id"`
-	TestID  string      `json:"test_id,omitempty"`
-	Role    string      `json:"role,omitempty"`
-	Text    string      `json:"text,omitempty"`
-	Tag     string      `json:"tag"`
-	XPath   string      `json:"xpath,omitempty"`
-	BBox    driver.Rect `json:"bbox"`
-	PageURL string      `json:"page_url"`
+	ID            string      `json:"id"`
+	TestID        string      `json:"test_id,omitempty"`
+	Role          string      `json:"role,omitempty"`
+	Text          string      `json:"text,omitempty"`
+	Tag           string      `json:"tag"`
+	XPath         string      `json:"xpath,omitempty"`
+	ContainerID   string      `json:"container_id,omitempty"`
+	ContainerRole string      `json:"container_role,omitempty"`
+	ActionIntent  string      `json:"action_intent,omitempty"`
+	BBox          driver.Rect `json:"bbox"`
+	PageURL       string      `json:"page_url"`
 }
 
 // RiskLevel categorizes the likelihood of masking a semantic regression.
@@ -82,21 +85,25 @@ type FallbackAttempt struct {
 	FailureCause string      `json:"failure_cause,omitempty"`
 }
 
-// SemanticDiffValidator verifies that locator fallbacks do not mask functional regressions or role shifts.
+// SemanticDiffValidator verifies that locator fallbacks do not mask functional regressions, role shifts, or semantic swaps.
 type SemanticDiffValidator struct {
 	EnforceRoleStrictness bool    `json:"enforce_role_strictness"` // Disallows role mutations (e.g. button -> link)
+	EnforceAncestryCheck  bool    `json:"enforce_ancestry_check"`  // Disallows container/ancestry mismatch
+	EnforceIntentCheck    bool    `json:"enforce_intent_check"`    // Disallows same-role different-action swaps
 	MaxPositionDriftPx    float64 `json:"max_position_drift_px"`   // Max allowed geometric reflow drift (default 150px)
 }
 
-// DefaultSemanticDiffValidator constructs a validator enforcing strict role stability.
+// DefaultSemanticDiffValidator constructs a validator enforcing strict role, ancestry, and intent stability.
 func DefaultSemanticDiffValidator() *SemanticDiffValidator {
 	return &SemanticDiffValidator{
 		EnforceRoleStrictness: true,
+		EnforceAncestryCheck:  true,
+		EnforceIntentCheck:    true,
 		MaxPositionDriftPx:    150.0,
 	}
 }
 
-// ValidateDiff verifies that candidate element does not exhibit dangerous semantic or layout drift.
+// ValidateDiff verifies that candidate element does not exhibit dangerous semantic, ancestry, or layout drift.
 func (v *SemanticDiffValidator) ValidateDiff(fp ElementFingerprint, candidate *driver.Element) (bool, string) {
 	if candidate == nil {
 		return false, "candidate element is nil"
@@ -107,7 +114,17 @@ func (v *SemanticDiffValidator) ValidateDiff(fp ElementFingerprint, candidate *d
 		return false, fmt.Sprintf("SEMANTIC DRIFT DETECTED: Element ARIA role mutated from %q to %q. Self-healing aborted to prevent false-positive pass.", fp.Role, candidate.Role)
 	}
 
-	// 2. Severe Position Drift Check: if candidate moved > MaxPositionDriftPx without matching text
+	// 2. Action Intent Check: prevents dangerous same-role-different-action semantic swaps
+	if v.EnforceIntentCheck && fp.ActionIntent != "" && candidate.ActionIntent != "" && !strings.EqualFold(fp.ActionIntent, candidate.ActionIntent) {
+		return false, fmt.Sprintf("ACTION INTENT MISMATCH DETECTED: Target action intent is %q, but candidate has action intent %q. Self-healing aborted to prevent dangerous semantic swap.", fp.ActionIntent, candidate.ActionIntent)
+	}
+
+	// 3. Container / Ancestry Anchor Check: prevents cross-container semantic swaps
+	if v.EnforceAncestryCheck && fp.ContainerID != "" && candidate.ContainerID != "" && !strings.EqualFold(fp.ContainerID, candidate.ContainerID) {
+		return false, fmt.Sprintf("ANCESTRY / CONTAINER MISMATCH: Element moved from container %q to container %q. Self-healing aborted.", fp.ContainerID, candidate.ContainerID)
+	}
+
+	// 4. Severe Position Drift Check: if candidate moved > MaxPositionDriftPx without matching text
 	if fp.BBox.Width > 0 && candidate.BoundingBox.Width > 0 {
 		dist := math.Hypot(candidate.BoundingBox.X-fp.BBox.X, candidate.BoundingBox.Y-fp.BBox.Y)
 		if dist > v.MaxPositionDriftPx && !strings.EqualFold(strings.TrimSpace(fp.Text), strings.TrimSpace(candidate.Text)) {

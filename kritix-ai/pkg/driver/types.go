@@ -32,18 +32,21 @@ type Rect struct {
 
 // Element models an interactive element on the page.
 type Element struct {
-	Tag         string            `json:"tag"`
-	ID          string            `json:"id,omitempty"`
-	Classes     []string          `json:"classes,omitempty"`
-	Role        string            `json:"role,omitempty"`
-	Text        string            `json:"text,omitempty"`
-	Value       string            `json:"value,omitempty"`
-	Placeholder string            `json:"placeholder,omitempty"`
-	XPath       string            `json:"xpath,omitempty"`
-	TestID      string            `json:"test_id,omitempty"`
-	BoundingBox Rect              `json:"bounding_box"`
-	Attributes  map[string]string `json:"attributes,omitempty"`
-	Disabled    bool              `json:"disabled"`
+	Tag           string            `json:"tag"`
+	ID            string            `json:"id,omitempty"`
+	Classes       []string          `json:"classes,omitempty"`
+	Role          string            `json:"role,omitempty"`
+	Text          string            `json:"text,omitempty"`
+	Value         string            `json:"value,omitempty"`
+	Placeholder   string            `json:"placeholder,omitempty"`
+	XPath         string            `json:"xpath,omitempty"`
+	TestID        string            `json:"test_id,omitempty"`
+	ContainerID   string            `json:"container_id,omitempty"`
+	ContainerRole string            `json:"container_role,omitempty"`
+	ActionIntent  string            `json:"action_intent,omitempty"`
+	BoundingBox   Rect              `json:"bounding_box"`
+	Attributes    map[string]string `json:"attributes,omitempty"`
+	Disabled      bool              `json:"disabled"`
 }
 
 // AXNode models an Accessibility Tree node.

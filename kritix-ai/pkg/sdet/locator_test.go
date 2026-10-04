@@ -309,3 +309,96 @@ func TestBlocksPRGateLowRankFallback(t *testing.T) {
 	}
 }
 
+func TestSemanticSwapCases_30Scenarios_ZeroFalsePass(t *testing.T) {
+	registry := NewSelfHealingLocatorRegistry()
+
+	swaps := []struct {
+		id            string
+		origRole      string
+		origText      string
+		origContainer string
+		origIntent    string
+		candRole      string
+		candText      string
+		candContainer string
+		candIntent    string
+	}{
+		{"swap_01", "button", "Delete", "modal-danger-zone", "delete-account", "button", "Delete", "table-row-cart", "delete-cart-item"},
+		{"swap_02", "button", "Cancel", "form-checkout", "cancel-order", "button", "Cancel", "modal-dialog", "dismiss-modal"},
+		{"swap_03", "button", "Save", "draft-editor", "save-draft", "button", "Save", "publish-bar", "publish-live"},
+		{"swap_04", "button", "Submit", "search-header", "search-query", "button", "Submit", "checkout-payment", "pay-now"},
+		{"swap_05", "button", "Next", "pagination-footer", "next-page", "button", "Next", "wizard-stepper", "advance-step"},
+		{"swap_06", "button", "Apply", "coupon-section", "apply-coupon", "button", "Apply", "filter-sidebar", "apply-filter"},
+		{"swap_07", "button", "Select", "shipping-options", "choose-shipping", "button", "Select", "payment-methods", "choose-payment"},
+		{"swap_08", "button", "Confirm", "auth-mfa", "verify-totp", "button", "Confirm", "newsletter-box", "confirm-newsletter"},
+		{"swap_09", "button", "Add", "wishlist-panel", "add-to-wishlist", "button", "Add", "product-cart", "add-to-cart"},
+		{"swap_10", "button", "Remove", "member-roster", "remove-user", "button", "Remove", "tag-list", "remove-tag"},
+		{"swap_11", "button", "Edit", "user-profile", "edit-profile", "button", "Edit", "billing-card", "edit-billing"},
+		{"swap_12", "button", "Download", "invoice-tab", "download-invoice", "button", "Download", "export-logs", "download-logs"},
+		{"swap_13", "button", "Export", "analytics-dashboard", "export-sarif", "button", "Export", "settings-backup", "export-secrets"},
+		{"swap_14", "button", "Verify", "domain-settings", "verify-dns", "button", "Verify", "identity-badge", "verify-id"},
+		{"swap_15", "button", "Upgrade", "subscription-tier", "upgrade-enterprise", "button", "Upgrade", "plugin-marketplace", "upgrade-plugin"},
+		{"swap_16", "button", "Enable", "security-2fa", "enable-mfa", "button", "Enable", "beta-features", "enable-dark-mode"},
+		{"swap_17", "button", "Accept", "cookie-consent", "accept-cookies", "button", "Accept", "terms-modal", "accept-legal-terms"},
+		{"swap_18", "button", "Subscribe", "newsletter-footer", "newsletter-sub", "button", "Subscribe", "saas-pricing", "saas-subscription"},
+		{"swap_19", "button", "Clear", "shopping-cart", "clear-cart-items", "button", "Clear", "search-filter", "clear-filters"},
+		{"swap_20", "button", "Close", "preview-tab", "close-tab", "button", "Close", "account-session", "terminate-session"},
+		{"swap_21", "button", "Back", "product-detail", "back-to-catalog", "button", "Back", "onboarding-wizard", "back-to-step-1"},
+		{"swap_22", "button", "Continue", "guest-flow", "guest-checkout", "button", "Continue", "sso-auth", "sso-login"},
+		{"swap_23", "button", "Pay", "credit-card-form", "pay-with-card", "button", "Pay", "paypal-frame", "pay-with-paypal"},
+		{"swap_24", "button", "Pause", "subscription-settings", "pause-plan", "button", "Pause", "billing-autopay", "disable-autopay"},
+		{"swap_25", "button", "Transfer", "wallet-send", "send-money", "button", "Transfer", "wallet-receive", "request-money"},
+		{"swap_26", "button", "Copy", "share-url-box", "copy-public-link", "button", "Copy", "secret-token-box", "copy-api-key"},
+		{"swap_27", "button", "Pin", "dashboard-widgets", "pin-chart", "button", "Pin", "message-thread", "pin-announcement"},
+		{"swap_28", "button", "Mute", "notification-center", "mute-thread", "button", "Mute", "security-alerts", "disable-security-alarms"},
+		{"swap_29", "button", "Archive", "project-workspace", "archive-project", "button", "Archive", "database-records", "delete-database"},
+		{"swap_30", "button", "Refresh", "feed-stream", "refresh-timeline", "button", "Refresh", "oauth-credentials", "rotate-refresh-token"},
+	}
+
+	falsePasses := 0
+
+	for _, s := range swaps {
+		fp := ElementFingerprint{
+			ID:            s.id,
+			Role:          s.origRole,
+			Text:          s.origText,
+			Tag:           "button",
+			ContainerID:   s.origContainer,
+			ActionIntent:  s.origIntent,
+			BBox:          driver.Rect{X: 100, Y: 100, Width: 120, Height: 40},
+		}
+		registry.RegisterFingerprint(fp)
+
+		candidateElement := driver.Element{
+			ID:            "cand-" + s.id,
+			Role:          s.candRole,
+			Text:          s.candText,
+			Tag:           "button",
+			ContainerID:   s.candContainer,
+			ActionIntent:  s.candIntent,
+			BoundingBox:   driver.Rect{X: 102, Y: 101, Width: 120, Height: 40},
+		}
+
+		res := registry.ResolveWithMode(HealModeStrict, s.id, []driver.Element{candidateElement})
+		if res == nil {
+			t.Errorf("[%s] expected resolution outcome, got nil", s.id)
+			continue
+		}
+
+		// INVARIANT: Every semantic swap MUST fail (0% false pass rate!)
+		if res.Status == StatusExactPass || res.Status == StatusHealed {
+			falsePasses++
+			t.Errorf("[%s] CRITICAL SAFETY BREACH: Semantic swap was falsely healed or passed! Original: %s (%s in %s) -> Candidate: %s (%s in %s)",
+				s.id, s.origText, s.origIntent, s.origContainer, s.candText, s.candIntent, s.candContainer)
+		}
+		if !res.RegressionDetected || res.Status != StatusRegressionFail {
+			t.Errorf("[%s] expected StatusRegressionFail and RegressionDetected=true, got status=%s, reg=%v",
+				s.id, res.Status, res.RegressionDetected)
+		}
+	}
+
+	if falsePasses > 0 {
+		t.Fatalf("Semantic swap false-pass rate: %d/30 (FAILED strict safety bound of 0.0%%)", falsePasses)
+	}
+}
+
