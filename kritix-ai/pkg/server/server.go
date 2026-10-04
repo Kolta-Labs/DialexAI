@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	"kritix/pkg/agent"
+	"kritix/pkg/auth"
 	"kritix/pkg/driver"
 	"kritix/pkg/model"
 	"kritix/pkg/optimizer"
@@ -28,6 +31,12 @@ import (
 //go:embed web/*
 var webFS embed.FS
 
+type contextKey string
+
+const (
+	userContextKey contextKey = "kritix_user"
+)
+
 // EventMessage represents a real-time event sent to the Web UI via SSE.
 type EventMessage struct {
 	ID        string    `json:"id"`
@@ -37,50 +46,139 @@ type EventMessage struct {
 	Data      any       `json:"data,omitempty"`
 }
 
-// Server provides the HTTP API and embedded Web UI for Kritix AI.
-type Server struct {
-	port           int
-	httpServer     *http.Server
-	clientsMutex   sync.Mutex
-	eventClients   map[chan EventMessage]bool
-	currentSession *studio.StudioSession
-	sessionMutex   sync.Mutex
-	router         *model.Router
+// ServerConfig configures the HTTP server parameters, authentication, and security boundaries.
+type ServerConfig struct {
+	Host               string
+	Port               int
+	AllowedOrigins     []string
+	AuthManager        *auth.EnterpriseAuthManager
+	MaxRequestBodyBytes int64
+	ReadTimeout        time.Duration
+	WriteTimeout       time.Duration
 }
 
-// NewServer initializes the Kritix AI Web Studio server.
+// Server provides the HTTP API and embedded Web UI for Kritix AI with strict RBAC,
+// tenant isolation, explicit CORS, and audit chaining.
+type Server struct {
+	cfg          ServerConfig
+	httpServer   *http.Server
+	clientsMutex sync.Mutex
+	eventClients map[chan EventMessage]bool
+	sessions     map[string]map[string]*studio.StudioSession // [tenantID][sessionID]
+	sessionMutex sync.Mutex
+	router       *model.Router
+	authManager  *auth.EnterpriseAuthManager
+}
+
+func defaultSigningSecret() string {
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// NewServer initializes the Kritix AI Web Studio server on 127.0.0.1 by default.
 func NewServer(port int) *Server {
 	if port <= 0 {
 		port = 9090
 	}
-	cfg := model.DefaultRouterConfig()
-	r := model.NewRouter(cfg)
-
-	return &Server{
-		port:         port,
-		eventClients: make(map[chan EventMessage]bool),
-		router:       r,
-		currentSession: studio.NewStudioSession("session-1", "Default Journey", "http://localhost:3000"),
-	}
+	am, _ := auth.NewEnterpriseAuthManager(defaultSigningSecret())
+	return NewServerWithConfig(ServerConfig{
+		Host:                "127.0.0.1",
+		Port:                port,
+		AllowedOrigins:      []string{"http://localhost:9090", "http://127.0.0.1:9090", "http://localhost:3000", "http://127.0.0.1:3000"},
+		AuthManager:         am,
+		MaxRequestBodyBytes: 10 * 1024 * 1024,
+		ReadTimeout:         15 * time.Second,
+		WriteTimeout:        60 * time.Second,
+	})
 }
 
-// Start begins listening on the configured port.
+// NewServerWithConfig initializes the server with explicit enterprise configuration.
+func NewServerWithConfig(cfg ServerConfig) *Server {
+	if cfg.Host == "" {
+		cfg.Host = "127.0.0.1"
+	}
+	if cfg.Port <= 0 {
+		cfg.Port = 9090
+	}
+	if len(cfg.AllowedOrigins) == 0 {
+		cfg.AllowedOrigins = []string{"http://localhost:9090", "http://127.0.0.1:9090", "http://localhost:3000", "http://127.0.0.1:3000"}
+	}
+	if cfg.MaxRequestBodyBytes <= 0 {
+		cfg.MaxRequestBodyBytes = 10 * 1024 * 1024 // 10MB
+	}
+	if cfg.ReadTimeout <= 0 {
+		cfg.ReadTimeout = 15 * time.Second
+	}
+	if cfg.WriteTimeout <= 0 {
+		cfg.WriteTimeout = 60 * time.Second
+	}
+	if cfg.AuthManager == nil {
+		cfg.AuthManager, _ = auth.NewEnterpriseAuthManager(defaultSigningSecret())
+	}
+
+	routerCfg := model.DefaultRouterConfig()
+	r := model.NewRouter(routerCfg)
+
+	s := &Server{
+		cfg:          cfg,
+		eventClients: make(map[chan EventMessage]bool),
+		sessions:     make(map[string]map[string]*studio.StudioSession),
+		router:       r,
+		authManager:  cfg.AuthManager,
+	}
+
+	return s
+}
+
+// AuthManager returns the configured enterprise auth manager for token minting in tests/CLI.
+func (s *Server) AuthManager() *auth.EnterpriseAuthManager {
+	return s.authManager
+}
+
+// getSession returns the studio session isolated to the requesting tenant.
+func (s *Server) getSession(tenantID, sessionID string) *studio.StudioSession {
+	s.sessionMutex.Lock()
+	defer s.sessionMutex.Unlock()
+
+	if tenantID == "" {
+		tenantID = "default-squad"
+	}
+	if sessionID == "" {
+		sessionID = "session-1"
+	}
+
+	if s.sessions[tenantID] == nil {
+		s.sessions[tenantID] = make(map[string]*studio.StudioSession)
+	}
+
+	sess, exists := s.sessions[tenantID][sessionID]
+	if !exists {
+		sess = studio.NewStudioSession(sessionID, "Default Journey", "http://localhost:3000")
+		s.sessions[tenantID][sessionID] = sess
+	}
+	return sess
+}
+
+// Start begins listening on the configured host and port.
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
 
-	// REST APIs
+	// Public Health Check
 	mux.HandleFunc("/api/v1/health", s.handleHealth)
-	mux.HandleFunc("/api/v1/blueprints", s.handleBlueprints)
-	mux.HandleFunc("/api/v1/blueprints/run", s.handleRunBlueprint)
-	mux.HandleFunc("/api/v1/test/run", s.handleRunTest)
-	mux.HandleFunc("/api/v1/fuzz/run", s.handleRunFuzz)
-	mux.HandleFunc("/api/v1/perf/run", s.handleRunPerf)
-	mux.HandleFunc("/api/v1/spec/generate", s.handleSpecGenerate)
-	mux.HandleFunc("/api/v1/studio/session", s.handleStudioSession)
-	mux.HandleFunc("/api/v1/studio/action", s.handleStudioAction)
-	mux.HandleFunc("/api/v1/studio/synthesize", s.handleStudioSynthesize)
-	mux.HandleFunc("/api/v1/metrics/roi", s.handleMetricsROI)
-	mux.HandleFunc("/api/v1/events", s.handleSSE)
+
+	// Authenticated & Authorized REST APIs
+	mux.Handle("/api/v1/blueprints", s.withAuth(auth.PermViewReports, http.HandlerFunc(s.handleBlueprints)))
+	mux.Handle("/api/v1/blueprints/run", s.withAuth(auth.PermExecuteWorkflows, http.HandlerFunc(s.handleRunBlueprint)))
+	mux.Handle("/api/v1/test/run", s.withAuth(auth.PermExecuteWorkflows, http.HandlerFunc(s.handleRunTest)))
+	mux.Handle("/api/v1/fuzz/run", s.withAuth(auth.PermExecuteWorkflows, http.HandlerFunc(s.handleRunFuzz)))
+	mux.Handle("/api/v1/perf/run", s.withAuth(auth.PermExecuteWorkflows, http.HandlerFunc(s.handleRunPerf)))
+	mux.Handle("/api/v1/spec/generate", s.withAuth(auth.PermManageWorkflows, http.HandlerFunc(s.handleSpecGenerate)))
+	mux.Handle("/api/v1/studio/session", s.withAuth(auth.PermRecordJourneys, http.HandlerFunc(s.handleStudioSession)))
+	mux.Handle("/api/v1/studio/action", s.withAuth(auth.PermRecordJourneys, http.HandlerFunc(s.handleStudioAction)))
+	mux.Handle("/api/v1/studio/synthesize", s.withAuth(auth.PermRecordJourneys, http.HandlerFunc(s.handleStudioSynthesize)))
+	mux.Handle("/api/v1/metrics/roi", s.withAuth(auth.PermViewReports, http.HandlerFunc(s.handleMetricsROI)))
+	mux.Handle("/api/v1/events", s.withAuth(auth.PermViewReports, http.HandlerFunc(s.handleSSE)))
 
 	// Embedded Static Assets
 	subFS, err := fs.Sub(webFS, "web")
@@ -90,20 +188,20 @@ func (s *Server) Start() error {
 	fileServer := http.FileServer(http.FS(subFS))
 	mux.Handle("/", fileServer)
 
-	// Wrap with CORS & Logging
-	handler := s.withCORS(mux)
+	// Wrap with strict CORS & Body Limits
+	handler := s.withCORS(s.withBodyLimit(mux))
 
-	addr := fmt.Sprintf(":%d", s.port)
+	addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
 	s.httpServer = &http.Server{
 		Addr:         addr,
 		Handler:      handler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 60 * time.Second,
+		ReadTimeout:  s.cfg.ReadTimeout,
+		WriteTimeout: s.cfg.WriteTimeout,
 	}
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("unable to bind to port %d: %w", s.port, err)
+		return fmt.Errorf("unable to bind to %s: %w", addr, err)
 	}
 
 	go func() {
@@ -123,7 +221,7 @@ func (s *Server) Stop(ctx context.Context) error {
 
 // Port returns the assigned listening port.
 func (s *Server) Port() int {
-	return s.port
+	return s.cfg.Port
 }
 
 // Broadcast sends an event to all connected web clients via SSE.
@@ -148,11 +246,37 @@ func (s *Server) Broadcast(eventType, message string, data any) {
 	}
 }
 
+// withBodyLimit enforces max payload size limits.
+func (s *Server) withBodyLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, s.cfg.MaxRequestBodyBytes)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// withCORS validates origins against the explicit allowlist and rejects wildcards.
 func (s *Server) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			allowed := false
+			for _, ao := range s.cfg.AllowedOrigins {
+				if strings.EqualFold(ao, origin) {
+					allowed = true
+					break
+				}
+			}
+
+			if allowed {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Tenant-ID, X-Session-ID")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Vary", "Origin")
+			}
+		}
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -161,6 +285,73 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// withAuth verifies Bearer tokens, performs RBAC permission checks, and maintains audit chains.
+func (s *Server) withAuth(requiredPerm auth.Permission, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			// Unauthenticated access attempt
+			_ = s.authManager.Authorize(nil, requiredPerm, r.URL.Path)
+			http.Error(w, `{"error":"unauthorized: missing or invalid Bearer token"}`, http.StatusUnauthorized)
+			return
+		}
+
+		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+		user, err := s.authManager.ValidateToken(tokenStr)
+		if err != nil {
+			_ = s.authManager.Authorize(nil, requiredPerm, r.URL.Path)
+			http.Error(w, fmt.Sprintf(`{"error":"unauthorized: %s"}`, err.Error()), http.StatusUnauthorized)
+			return
+		}
+
+		// Perform RBAC authorization check with audit logging
+		if err := s.authManager.Authorize(user, requiredPerm, r.URL.Path); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"forbidden: %s"}`, err.Error()), http.StatusForbidden)
+			return
+		}
+
+		// Inject authenticated user into context
+		ctx := context.WithValue(r.Context(), userContextKey, user)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func getUserFromContext(r *http.Request) *auth.UserIdentity {
+	if val := r.Context().Value(userContextKey); val != nil {
+		if u, ok := val.(*auth.UserIdentity); ok {
+			return u
+		}
+	}
+	return nil
+}
+
+func getTenantAndSession(r *http.Request) (string, string) {
+	tenantID := r.Header.Get("X-Tenant-ID")
+	user := getUserFromContext(r)
+	if user != nil && user.Squad != "" {
+		if tenantID != "" && tenantID != user.Squad && user.Role != auth.RoleAdmin {
+			// Cross-tenant violation: non-admin cannot access another squad
+			return "__DENIED__", ""
+		}
+		if tenantID == "" {
+			tenantID = user.Squad
+		}
+	}
+	if tenantID == "" {
+		tenantID = "default-tenant"
+	}
+
+	sessionID := r.Header.Get("X-Session-ID")
+	if sessionID == "" {
+		sessionID = r.URL.Query().Get("session_id")
+	}
+	if sessionID == "" {
+		sessionID = "session-1"
+	}
+
+	return tenantID, sessionID
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -418,12 +609,12 @@ func (s *Server) handleRunPerf(w http.ResponseWriter, r *http.Request) {
 	script := perf.GenerateK6Script(cfg)
 
 	resp := map[string]any{
-		"target_url":     req.TargetURL,
-		"vus":            cfg.VirtualUsers,
-		"duration":       cfg.Duration.String(),
-		"p95_sla_ms":     cfg.P95Threshold.Milliseconds(),
-		"script":         script,
-		"status":         "ready",
+		"target_url": req.TargetURL,
+		"vus":        cfg.VirtualUsers,
+		"duration":   cfg.Duration.String(),
+		"p95_sla_ms": cfg.P95Threshold.Milliseconds(),
+		"script":     script,
+		"status":     "ready",
 	}
 
 	s.Broadcast("info", fmt.Sprintf("Generated k6 performance scenario for %s (50 VUs, P95 SLA 250ms)", req.TargetURL), resp)
@@ -478,11 +669,15 @@ func (s *Server) handleSpecGenerate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStudioSession(w http.ResponseWriter, r *http.Request) {
-	s.sessionMutex.Lock()
-	defer s.sessionMutex.Unlock()
+	tenantID, sessionID := getTenantAndSession(r)
+	if tenantID == "__DENIED__" {
+		http.Error(w, `{"error":"forbidden: cross-tenant session access denied"}`, http.StatusForbidden)
+		return
+	}
 
+	sess := s.getSession(tenantID, sessionID)
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(s.currentSession)
+	_ = json.NewEncoder(w).Encode(sess)
 }
 
 type AddActionRequest struct {
@@ -501,13 +696,19 @@ func (s *Server) handleStudioAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tenantID, sessionID := getTenantAndSession(r)
+	if tenantID == "__DENIED__" {
+		http.Error(w, `{"error":"forbidden: cross-tenant action recording denied"}`, http.StatusForbidden)
+		return
+	}
+
 	var req AddActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid payload", http.StatusBadRequest)
 		return
 	}
 
-	s.sessionMutex.Lock()
+	sess := s.getSession(tenantID, sessionID)
 	action := studio.HumanAction{
 		Type:            driver.ActionType(req.Type),
 		TargetID:        req.TargetID,
@@ -518,40 +719,45 @@ func (s *Server) handleStudioAction(w http.ResponseWriter, r *http.Request) {
 		ExpectedOutcome: req.ExpectedOutcome,
 		Timestamp:       time.Now(),
 	}
-	s.currentSession.RecordInteraction(action)
-	s.sessionMutex.Unlock()
+	sess.RecordInteraction(action)
 
 	s.Broadcast("action", fmt.Sprintf("Recorded step: %s (%s)", req.StepIntent, req.Type), action)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"status":  "recorded",
-		"action":  action,
-		"actions": len(s.currentSession.Actions),
+		"status":     "recorded",
+		"tenant_id":  tenantID,
+		"session_id": sessionID,
+		"action":     action,
+		"actions":    len(sess.Actions),
 	})
 }
 
 func (s *Server) handleStudioSynthesize(w http.ResponseWriter, r *http.Request) {
-	s.sessionMutex.Lock()
-	defer s.sessionMutex.Unlock()
-
-	if s.currentSession.BusinessIntent == "" {
-		s.currentSession.BusinessIntent = "Verify primary checkout and authentication flow with zero unhandled errors"
-	}
-	if s.currentSession.AuthorSDET == "" {
-		s.currentSession.AuthorSDET = "engineer@enterprise.internal"
+	tenantID, sessionID := getTenantAndSession(r)
+	if tenantID == "__DENIED__" {
+		http.Error(w, `{"error":"forbidden: cross-tenant synthesis denied"}`, http.StatusForbidden)
+		return
 	}
 
-	scenario := s.currentSession.SynthesizeAutonomousScenario()
+	sess := s.getSession(tenantID, sessionID)
+	if sess.BusinessIntent == "" {
+		sess.BusinessIntent = "Verify primary checkout and authentication flow with zero unhandled errors"
+	}
+	if sess.AuthorSDET == "" {
+		sess.AuthorSDET = "engineer@enterprise.internal"
+	}
+
+	scenario := sess.SynthesizeAutonomousScenario()
 	gherkin := spec.GenerateGherkin(scenario)
 
-	// Also generate standalone Playwright spec
+	// Generate standalone Playwright spec
 	var playwrightCode strings.Builder
 	playwrightCode.WriteString("import { test, expect } from '@playwright/test';\n\n")
-	playwrightCode.WriteString(fmt.Sprintf("test('Recorded Journey: %s', async ({ page }) => {\n", s.currentSession.JourneyName))
-	playwrightCode.WriteString(fmt.Sprintf("  await page.goto('%s');\n", s.currentSession.TargetURL))
+	playwrightCode.WriteString(fmt.Sprintf("test('Recorded Journey: %s', async ({ page }) => {\n", sess.JourneyName))
+	playwrightCode.WriteString(fmt.Sprintf("  await page.goto('%s');\n", sess.TargetURL))
 
-	for _, a := range s.currentSession.Actions {
+	for _, a := range sess.Actions {
 		if a.StepIntent != "" {
 			playwrightCode.WriteString(fmt.Sprintf("  // Step: %s\n", a.StepIntent))
 		}
@@ -573,11 +779,13 @@ func (s *Server) handleStudioSynthesize(w http.ResponseWriter, r *http.Request) 
 	playwrightCode.WriteString("});\n")
 
 	resp := map[string]any{
-		"journey_name":    s.currentSession.JourneyName,
-		"target_url":      s.currentSession.TargetURL,
+		"tenant_id":       tenantID,
+		"session_id":      sessionID,
+		"journey_name":    sess.JourneyName,
+		"target_url":      sess.TargetURL,
 		"gherkin":         gherkin,
 		"playwright_code": playwrightCode.String(),
-		"total_steps":     len(s.currentSession.Actions),
+		"total_steps":     len(sess.Actions),
 	}
 
 	s.Broadcast("success", "Synthesized Playwright & BDD specifications from demonstration session.", resp)
@@ -588,7 +796,6 @@ func (s *Server) handleStudioSynthesize(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleMetricsROI(w http.ResponseWriter, r *http.Request) {
 	opt := optimizer.NewTokenCostOptimizer()
-	// Seed realistic cumulative baseline metrics for demonstration and ROI inspection
 	opt.RecordDeterministicBypass(1420000)
 	rep := opt.GetSavingsReport()
 
@@ -633,7 +840,6 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		s.clientsMutex.Unlock()
 	}()
 
-	// Send initial connection event
 	initialMsg := EventMessage{
 		ID:        "init",
 		Timestamp: time.Now(),
@@ -671,7 +877,7 @@ func OpenBrowser(url string) error {
 	case "darwin":
 		cmd = "open"
 		args = []string{url}
-	default: // "linux", "freebsd", "openbsd", "netbsd"
+	default:
 		cmd = "xdg-open"
 		args = []string{url}
 	}
