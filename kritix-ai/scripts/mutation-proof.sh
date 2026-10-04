@@ -17,7 +17,7 @@ MUTATIONS=(
   "kritix-ai/scripts/mutations/egress_leak.patch|go test -tags integration -count=1 ./pkg/security/... -run TestIntegration_ZeroEgressProof"
   "kritix-ai/scripts/mutations/sql_tenant_leak.patch|go test -tags integration -count=1 ./pkg/server/... -run TestSQLStateStore_CrossTenantIsolation"
   "kritix-ai/scripts/mutations/vault_plaintext.patch|go test -tags integration -count=1 ./pkg/auth/... -run TestIntegration_VaultTransitAndKVSessionStore"
-  "kritix-ai/scripts/mutations/healing_same_role.patch|go test -count=1 ./pkg/sdet/... -run TestHealDeveloperUnitCases_SemanticSwaps"
+  "kritix-ai/scripts/mutations/healing_same_role.patch|go test -count=1 ./pkg/sdet/... -run TestHealCorpus_FrozenIntegrityAndEvaluation"
   "kritix-ai/scripts/mutations/tracker_no_dedupe.patch|go test -tags integration -count=1 ./pkg/tracker/... -run TestIntegration_TrackerMockProtocolAndRateLimiting"
 )
 

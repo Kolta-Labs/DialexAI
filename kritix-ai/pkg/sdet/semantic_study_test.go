@@ -1,11 +1,18 @@
 package sdet
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
+	"kritix/pkg/auth"
 	"kritix/pkg/driver"
 )
 
@@ -280,9 +287,179 @@ func TestHealDeveloperUnitCases_SemanticSwaps(t *testing.T) {
 	}
 }
 
+// TestHealCorpus_FrozenIntegrityAndEvaluation validates the independent frozen corpus:
+// 1. Verifies frozen corpus file integrity via SHA256.
+// 2. Asserts n_effective >= 300 distinct semantic bug trials.
+// 3. Evaluates all cases against the self-healing resolver.
+// 4. Asserts 0 false passes and Clopper-Pearson 95% upper bound <= 1.00%.
+func TestHealCorpus_FrozenIntegrityAndEvaluation(t *testing.T) {
+	corpusPath := findCorpusPath(t, "testdata/corpus/independent_heal_corpus.json")
+	data, err := os.ReadFile(corpusPath)
+	if err != nil {
+		t.Fatalf("Failed to read frozen corpus: %v", err)
+	}
+
+	type CorpusMetadata struct {
+		Generator     string    `json:"generator"`
+		Version       string    `json:"version"`
+		Seed          int64     `json:"seed"`
+		Prompt        string    `json:"prompt"`
+		PromptSHA256  string    `json:"prompt_sha256"`
+		CreatedAt     time.Time `json:"created_at"`
+		TotalCases    int       `json:"total_cases"`
+		SemanticSwaps int       `json:"semantic_swaps"`
+		BenignRenames int       `json:"benign_renames"`
+		CorpusSHA256  string    `json:"corpus_sha256"`
+	}
+
+	type HealTestCase struct {
+		ID             string           `json:"id"`
+		Category       string           `json:"category"`
+		IsSemanticBug  bool             `json:"is_semantic_bug"`
+		Original       driver.Element   `json:"original"`
+		LiveCandidates []driver.Element `json:"live_candidates"`
+		ExpectedTarget string           `json:"expected_target"`
+		Description    string           `json:"description"`
+	}
+
+	type IndependentHealCorpus struct {
+		Metadata CorpusMetadata `json:"metadata"`
+		Cases    []HealTestCase `json:"cases"`
+	}
+
+	var corpus IndependentHealCorpus
+	if err := json.Unmarshal(data, &corpus); err != nil {
+		t.Fatalf("Corpus JSON unmarshal error: %v", err)
+	}
+
+	// 1. Verify frozen corpus integrity
+	casesBytes, _ := json.MarshalIndent(corpus.Cases, "", "  ")
+	calcHash := sha256.Sum256(casesBytes)
+	calcHashStr := hex.EncodeToString(calcHash[:])
+	if calcHashStr != corpus.Metadata.CorpusSHA256 {
+		t.Fatalf("FROZEN CORPUS TAMPERING DETECTED: expected SHA256 %s, calculated %s",
+			corpus.Metadata.CorpusSHA256, calcHashStr)
+	}
+
+	if corpus.Metadata.TotalCases < 400 {
+		t.Fatalf("Corpus total cases %d < 400 requirement", corpus.Metadata.TotalCases)
+	}
+	if corpus.Metadata.SemanticSwaps < 300 {
+		t.Fatalf("Corpus semantic swaps %d < 300 requirement (n_effective insufficient)", corpus.Metadata.SemanticSwaps)
+	}
+
+	// 2. Evaluate all cases across the registry
+	registry := NewSelfHealingLocatorRegistry()
+	var totalSemanticBugs int
+	var falsePasses int
+	var falseHeals int
+	var benignTotal int
+	var benignHealed int
+
+	for _, tc := range corpus.Cases {
+		fp := ExtractFingerprintFromElement(tc.Original)
+		registry.RegisterFingerprint(fp)
+
+		// Strict / CI Mode: Must NOT return StatusExactPass or silently heal
+		strictRes := registry.ResolveWithMode(HealModeStrict, fp.ID, tc.LiveCandidates)
+		if strictRes != nil && strictRes.Status == StatusExactPass {
+			t.Fatalf("[%s] Invariant violation: mutated element returned StatusExactPass in CI mode", tc.ID)
+		}
+
+		// Advisory Mode
+		advRes := registry.ResolveWithMode(HealModeAdvisory, fp.ID, tc.LiveCandidates)
+		if tc.IsSemanticBug {
+			totalSemanticBugs++
+			if advRes != nil && (advRes.Status == StatusExactPass || (advRes.Status == StatusHealed && advRes.ConfidenceScore >= 0.70)) {
+				falsePasses++
+				falseHeals++
+				t.Fatalf("CRITICAL FALSE-PASS in frozen study [%s]: Semantic bug %q healed onto %q (conf=%.2f)",
+					tc.ID, tc.Description, advRes.HealedSelector, advRes.ConfidenceScore)
+			}
+		} else {
+			benignTotal++
+			if advRes != nil && advRes.Status == StatusHealed && advRes.ConfidenceScore >= 0.70 {
+				benignHealed++
+			}
+		}
+	}
+
+	if falsePasses > 0 {
+		t.Fatalf("Observed %d false passes on independent corpus", falsePasses)
+	}
+
+	// 3. Statistical bound validation
+	cpBound, err := ClopperPearsonUpper95(falsePasses, totalSemanticBugs)
+	if err != nil {
+		t.Fatalf("Clopper-Pearson computation failed: %v", err)
+	}
+
+	if cpBound > 0.0100001 {
+		t.Fatalf("SAFETY THRESHOLD EXCEEDED: Clopper-Pearson 95%% upper bound is %.4f%% (> 1.0%%) with n=%d",
+			cpBound*100.0, totalSemanticBugs)
+	}
+
+	t.Logf("Independent Frozen Corpus Study Results:")
+	t.Logf("  Total Cases:          %d", len(corpus.Cases))
+	t.Logf("  Semantic Swap Trials: %d (n_effective)", totalSemanticBugs)
+	t.Logf("  False Passes:         %d", falsePasses)
+	t.Logf("  Clopper-Pearson 95%%:  %.4f%% (≤ 1.00%% SAFETY GATE GREEN)", cpBound*100.0)
+	t.Logf("  Benign Healed Rate:   %.1f%% (%d/%d)", float64(benignHealed)*100.0/float64(benignTotal), benignHealed, benignTotal)
+}
+
+// TestHealCLI_CIExitCodeNonZero asserts that self-healing resolution NEVER exits 0 in CI mode.
+func TestHealCLI_CIExitCodeNonZero(t *testing.T) {
+	binPath := filepath.Join(t.TempDir(), "kritix")
+	repoRoot := findRepoRoot(t)
+
+	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/kritix")
+	buildCmd.Dir = repoRoot
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("Failed to build kritix CLI: %v\nOutput: %s", err, string(out))
+	}
+
+	authSecret := "01234567890123456789012345678901"
+	authMgr, err := auth.NewEnterpriseAuthManager(authSecret)
+	if err != nil {
+		t.Fatalf("failed to create auth manager: %v", err)
+	}
+	adminToken, err := authMgr.GenerateToken(auth.UserIdentity{
+		ID:    "usr-admin",
+		Email: "admin@enterprise.internal",
+		Role:  auth.RoleAdmin,
+		Squad: "qa",
+	}, time.Hour)
+	if err != nil {
+		t.Fatalf("failed to generate admin token: %v", err)
+	}
+
+	cmd := exec.Command(binPath, "run", "self-healing-maintenance", "--tier", "nightly")
+	cmd.Dir = repoRoot
+	cmd.Env = append(os.Environ(),
+		"KRITIX_AUTH_SECRET="+authSecret,
+		"KRITIX_TOKEN="+adminToken,
+		"KRITIX_CI=true",
+	)
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err = cmd.Run()
+
+	// In CI mode without --allow-healed-override, the command must fail (exit code 1)
+	if err == nil {
+		t.Fatalf("SAFETY DEFECT: kritix run self-healing-maintenance exited 0 in CI mode without override!\nSTDOUT:\n%s", stdout.String())
+	}
+
+	combined := stdout.String() + "\n" + stderr.String()
+	if !strings.Contains(combined, "PR Merge Gate") && !strings.Contains(combined, "human review required") && !strings.Contains(combined, "healed") {
+		t.Fatalf("Expected PR Merge Gate error message about healed locators, got:\n%s", combined)
+	}
+}
+
 // TestHealFalsePassStudy_LiveDOM strictly enforces the live-DOM study protocol:
 // real headless Chrome via CDP and an independently generated, frozen corpus (n_effective >= 300).
-// In the absence of real headless Chrome or frozen corpus, it skips with PREREQUISITE_MISSING.
+// In the absence of real headless Chrome or frozen corpus, it skips (or fails if KRITIX_HARNESS=1).
 func TestHealFalsePassStudy_LiveDOM(t *testing.T) {
 	hasChrome := false
 	if _, err := exec.LookPath("google-chrome"); err == nil {
@@ -294,12 +471,53 @@ func TestHealFalsePassStudy_LiveDOM(t *testing.T) {
 	}
 
 	if !hasChrome {
+		if os.Getenv("KRITIX_HARNESS") == "1" {
+			t.Fatalf("PREREQUISITE_MISSING: chrome (headless Chrome/Chromium required for live-DOM study)")
+		}
 		t.Skip("PREREQUISITE_MISSING: chrome (headless Chrome/Chromium required for live-DOM study)")
 	}
 
-	corpusPath := "testdata/independent_heal_corpus.json"
+	corpusPath := findCorpusPath(t, "testdata/corpus/independent_heal_corpus.json")
 	if _, err := os.Stat(corpusPath); err != nil {
+		if os.Getenv("KRITIX_HARNESS") == "1" {
+			t.Fatalf("PREREQUISITE_MISSING: independent frozen heal study corpus file not present")
+		}
 		t.Skip("PREREQUISITE_MISSING: independent frozen heal study corpus file not present")
+	}
+}
+
+func findCorpusPath(t *testing.T, rel string) string {
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("os.Getwd error: %v", err)
+	}
+	for {
+		candidate := filepath.Join(dir, rel)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatalf("could not locate %s starting from %s", rel, dir)
+		}
+		dir = parent
+	}
+}
+
+func findRepoRoot(t *testing.T) string {
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("os.Getwd error: %v", err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatalf("could not locate repo root with go.mod starting from %s", dir)
+		}
+		dir = parent
 	}
 }
 
