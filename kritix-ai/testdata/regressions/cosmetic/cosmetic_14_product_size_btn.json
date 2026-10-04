@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_14_product_size_btn",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on button element \"Size L\"",
+  "original": {
+    "id": "size-large",
+    "test_id": "size-large",
+    "role": "button",
+    "text": "Size L",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 490,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "size-opt-l",
+      "classes": [
+        "pill-size-l"
+      ],
+      "role": "button",
+      "text": "Size L",
+      "bounding_box": {
+        "x": 102,
+        "y": 490,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003cbutton id=\"size-opt-l\" class=\"pill-size-l\"\u003eSize L\u003c/button\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

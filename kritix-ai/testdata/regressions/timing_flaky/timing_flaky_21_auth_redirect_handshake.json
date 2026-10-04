@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_21_auth_redirect_handshake",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on div \"Authenticating single sign-on...\"",
+  "original": {
+    "id": "timing-auth_redirect_handshake",
+    "test_id": "timing-auth_redirect_handshake",
+    "role": "status",
+    "text": "Authenticating single sign-on...",
+    "tag": "div",
+    "bbox": {
+      "x": 150,
+      "y": 600,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "timing-resolved-auth_redirect_handshake",
+      "role": "status",
+      "text": "Authenticating single sign-on...",
+      "bounding_box": {
+        "x": 150,
+        "y": 600,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003cdiv id=\"timing-resolved-auth_redirect_handshake\" class=\"animated fadeIn\"\u003eAuthenticating single sign-on...\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

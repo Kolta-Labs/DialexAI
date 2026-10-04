@@ -1,0 +1,48 @@
+{
+  "id": "third_party_21_launchdarkly_toggle_tag",
+  "category": "third_party",
+  "description": "Third-party widget injection from app.launchdarkly.com (Feature Flagging Client)",
+  "original": {
+    "id": "host-target-launchdarkly_toggle_tag",
+    "test_id": "host-target-launchdarkly_toggle_tag",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 500,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "script",
+      "id": "injected-widget-launchdarkly_toggle_tag",
+      "bounding_box": {
+        "x": 800,
+        "y": 500,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-launchdarkly_toggle_tag",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 500,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-launchdarkly_toggle_tag\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"app.launchdarkly.com\"\u003e\u003cscript role=\"\"\u003e\u003c/script\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

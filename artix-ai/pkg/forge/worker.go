@@ -25,6 +25,7 @@ type RemoteWorkerTask struct {
 	Auth         ForgeAuth                               `json:"auth"`
 	Prompt       string                                  `json:"prompt"`
 	Domain       string                                  `json:"domain"`
+	Critic       reviewer.Critic                         `json:"-"`
 	MockPatchGen func(round int, feedback string) string // for tests
 }
 
@@ -60,7 +61,15 @@ func (w *RemoteWorker) Execute(ctx context.Context, task *RemoteWorkerTask) *Rem
 	}
 
 	taskID := fmt.Sprintf("job-%d", time.Now().Unix())
-	cloneDir := filepath.Join(w.workRoot, taskID)
+	tenant := task.Target.Owner
+	if tenant == "" {
+		tenant = "default"
+	}
+	repoName := task.Target.Repo
+	if repoName == "" {
+		repoName = "repo"
+	}
+	cloneDir := filepath.Join(w.workRoot, tenant, repoName, taskID)
 	_ = os.MkdirAll(cloneDir, 0755)
 	defer os.RemoveAll(cloneDir)
 
@@ -102,10 +111,10 @@ func (w *RemoteWorker) Execute(ctx context.Context, task *RemoteWorkerTask) *Rem
 	}
 	res.Spec = storySpec
 
-	// Write spec to repo
+	// Write spec and provenance to repo
 	specsDir := filepath.Join(cloneDir, "docs", "specs")
-	_ = os.MkdirAll(specsDir, 0755)
-	_ = os.WriteFile(filepath.Join(specsDir, fmt.Sprintf("%s.md", storySpec.ID)), []byte(storySpec.RawMarkdown), 0644)
+	prov := spec.BuildStoryProvenance(storySpec, pCtx, "", "", council.Members())
+	_, _, _ = spec.WriteSpecWithProvenance(specsDir, storySpec, prov)
 
 	// 4. Code: Domain Coder & Reviewer loop
 	domainCoder, err := coder.NewDomainCoder(task.Domain, w.registry)
@@ -115,6 +124,14 @@ func (w *RemoteWorker) Execute(ctx context.Context, task *RemoteWorkerTask) *Rem
 	}
 
 	rev := reviewer.NewAdversarialReviewer(w.registry)
+	if task.Critic != nil {
+		rev.SetCritic(task.Critic)
+	} else if task.MockPatchGen != nil {
+		// In simulated/mock test runs, attach a mock critic that approves when mock checks pass
+		rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+			return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+		})
+	}
 	box := sandbox.NewSandbox(cloneDir)
 	coord := coder.NewCoordinator(domainCoder, rev, driver, box)
 

@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_09_tab_crossfade_delay",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on div \"Customer Reviews (128)\"",
+  "original": {
+    "id": "timing-tab_crossfade_delay",
+    "test_id": "timing-tab_crossfade_delay",
+    "role": "tabpanel",
+    "text": "Customer Reviews (128)",
+    "tag": "div",
+    "bbox": {
+      "x": 150,
+      "y": 300,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "timing-resolved-tab_crossfade_delay",
+      "role": "tabpanel",
+      "text": "Customer Reviews (128)",
+      "bounding_box": {
+        "x": 150,
+        "y": 300,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003cdiv id=\"timing-resolved-tab_crossfade_delay\" class=\"animated fadeIn\"\u003eCustomer Reviews (128)\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

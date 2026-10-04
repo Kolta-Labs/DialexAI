@@ -1,0 +1,8 @@
+bin/
+dist/
+.kritix/
+*.test
+*.out
+screenshots/
+videos/
+har/

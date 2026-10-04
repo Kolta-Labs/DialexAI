@@ -1,0 +1,50 @@
+{
+  "id": "third_party_02_intercom_chat_bubble",
+  "category": "third_party",
+  "description": "Third-party widget injection from widget.intercom.io (Support Chat Bubble)",
+  "original": {
+    "id": "host-target-intercom_chat_bubble",
+    "test_id": "host-target-intercom_chat_bubble",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 120,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "iframe",
+      "id": "injected-widget-intercom_chat_bubble",
+      "role": "complementary",
+      "text": "Chat with Support",
+      "bounding_box": {
+        "x": 800,
+        "y": 120,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-intercom_chat_bubble",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 120,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-intercom_chat_bubble\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"widget.intercom.io\"\u003e\u003ciframe role=\"complementary\"\u003eChat with Support\u003c/iframe\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

@@ -144,3 +144,113 @@ func TestSteeringManager_BindAndUnbind(t *testing.T) {
 		t.Errorf("unexpected bindings after unbind: %+v", cfg.Bindings)
 	}
 }
+
+func TestSteeringConfigValidation(t *testing.T) {
+	tempDir := t.TempDir()
+	mgr := NewManager(tempDir)
+
+	// Valid config saves cleanly
+	validCfg := &SteeringConfig{
+		GlobalRules: []string{"rule_1"},
+		Bindings: map[string][]string{
+			"backend_engineer": {"rule_1", "rule_2"},
+		},
+		ExternalSources: []ExternalSource{
+			{ID: "src_local", Type: SourceLocalSibling, Path: "/path/to/standards"},
+			{ID: "src_remote", Type: SourceRemoteHTTP, URL: "https://example.com/rules.md"},
+		},
+	}
+	if err := mgr.SaveConfig(validCfg); err != nil {
+		t.Fatalf("expected valid config to save, got: %v", err)
+	}
+
+	// Invalid external source (invalid URL scheme)
+	invalidHTTP := &SteeringConfig{
+		ExternalSources: []ExternalSource{
+			{ID: "bad_http", Type: SourceRemoteHTTP, URL: "ftp://example.com/rules.md"},
+		},
+	}
+	if err := mgr.SaveConfig(invalidHTTP); err == nil {
+		t.Error("expected error for invalid ftp URL scheme in SourceRemoteHTTP")
+	}
+
+	// Invalid persona ID
+	invalidPersona := &SteeringConfig{
+		Bindings: map[string][]string{
+			"bad persona with spaces!": {"rule_1"},
+		},
+	}
+	if err := mgr.SaveConfig(invalidPersona); err == nil {
+		t.Error("expected error for invalid persona ID with spaces and special chars")
+	}
+}
+
+func TestSteeringPendingReviewQueueAndApproval(t *testing.T) {
+	tempDir := t.TempDir()
+	mgr := NewManager(tempDir)
+
+	// 1. Queue a synthesized rule
+	pr, err := mgr.QueuePendingRule(
+		"rule-no-raw-sql",
+		"No Raw SQL In Handlers",
+		"Never execute raw SQL queries inside HTTP handlers.",
+		"Encapsulate queries inside repository layer.",
+		true,
+		[]string{"backend_engineer", "adversarial_code_reviewer"},
+		"sdet_reviewer",
+	)
+	if err != nil {
+		t.Fatalf("QueuePendingRule failed: %v", err)
+	}
+
+	if pr.Hash == "" || pr.RuleID != "rule-no-raw-sql" {
+		t.Errorf("unexpected pending rule: %+v", pr)
+	}
+
+	// 2. List pending rules
+	pendingList, err := mgr.ListPendingRules()
+	if err != nil {
+		t.Fatalf("ListPendingRules failed: %v", err)
+	}
+	if len(pendingList) != 1 || pendingList[0].Hash != pr.Hash {
+		t.Fatalf("expected 1 pending rule with hash %s, got %+v", pr.Hash, pendingList)
+	}
+
+	// 3. Approval requires designated role
+	if _, err := mgr.ApproveRule(pr.Hash, ""); err == nil {
+		t.Error("expected error when approving without approver role")
+	}
+
+	// 4. Successful approval by senior architect
+	ruleFile, err := mgr.ApproveRule(pr.Hash, "senior_architect")
+	if err != nil {
+		t.Fatalf("ApproveRule failed: %v", err)
+	}
+	if ruleFile.ID != "rule-no-raw-sql" {
+		t.Errorf("expected approved rule ID rule-no-raw-sql, got %s", ruleFile.ID)
+	}
+
+	// 5. Verify pending queue is now empty
+	pendingAfter, err := mgr.ListPendingRules()
+	if err != nil || len(pendingAfter) != 0 {
+		t.Errorf("expected empty pending list after approval, got %d items", len(pendingAfter))
+	}
+
+	// 6. Verify rule was bound in steering.json
+	cfg, err := mgr.LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	backendBindings := cfg.Bindings["backend_engineer"]
+	found := false
+	for _, b := range backendBindings {
+		if b == "rule-no-raw-sql" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected rule-no-raw-sql bound to backend_engineer in steering.json: %+v", cfg.Bindings)
+	}
+}
+

@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_18_newsletter_input",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on input element \"Enter your email\"",
+  "original": {
+    "id": "news-email",
+    "test_id": "news-email",
+    "role": "textbox",
+    "text": "Enter your email",
+    "tag": "input",
+    "bbox": {
+      "x": 100,
+      "y": 610,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "input",
+      "id": "newsletter-field",
+      "classes": [
+        "footer-newsletter-email"
+      ],
+      "role": "textbox",
+      "text": "Enter your email",
+      "bounding_box": {
+        "x": 102,
+        "y": 610,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003cinput id=\"newsletter-field\" class=\"footer-newsletter-email\"\u003eEnter your email\u003c/input\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

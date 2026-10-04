@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_16_role_mutated_link_to_checkbox",
+  "category": "semantic_bug",
+  "description": "Navigation link mutated to standalone checkbox",
+  "original": {
+    "id": "orig-sem-role_mutated_link_to_checkbox",
+    "test_id": "orig-sem-role_mutated_link_to_checkbox",
+    "role": "link",
+    "text": "Track Package",
+    "tag": "a",
+    "bbox": {
+      "x": 100,
+      "y": 500,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "input",
+      "id": "buggy-role_mutated_link_to_checkbox",
+      "role": "checkbox",
+      "text": "Track Package",
+      "bounding_box": {
+        "x": 100,
+        "y": 500,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003eTrack Package\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

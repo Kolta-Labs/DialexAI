@@ -1,0 +1,37 @@
+{
+  "id": "layout_04_price_card_flexbox",
+  "category": "layout_dom",
+  "description": "Layout refactor moving div element \"$49.99\"",
+  "original": {
+    "id": "orig-price_card_flexbox",
+    "test_id": "orig-price_card_flexbox",
+    "role": "region",
+    "text": "$49.99",
+    "tag": "div",
+    "bbox": {
+      "x": 200,
+      "y": 150,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "refactored-price_card_flexbox",
+      "role": "region",
+      "text": "$49.99",
+      "bounding_box": {
+        "x": 215,
+        "y": 160,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003cdiv id=\"refactored-price_card_flexbox\" role=\"region\"\u003e$49.99\u003c/div\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

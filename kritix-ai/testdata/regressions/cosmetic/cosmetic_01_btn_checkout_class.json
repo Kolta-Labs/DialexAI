@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_01_btn_checkout_class",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on button element \"Checkout\"",
+  "original": {
+    "id": "checkout-btn",
+    "test_id": "checkout-btn",
+    "role": "button",
+    "text": "Checkout",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 100,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "checkout-btn",
+      "classes": [
+        "btn-primary-v2"
+      ],
+      "role": "button",
+      "text": "Checkout",
+      "bounding_box": {
+        "x": 102,
+        "y": 100,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003cbutton id=\"checkout-btn\" class=\"btn-primary-v2\"\u003eCheckout\u003c/button\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

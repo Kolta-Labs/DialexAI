@@ -16,18 +16,41 @@ const (
 	IsolationProcessGroup = "process-group" // no filesystem/network restriction
 )
 
+// BuildBwrapArgs builds the bubblewrap execution arguments for Linux environments.
+func BuildBwrapArgs(writable []string, net bool, cmdStr string) []string {
+	args := []string{"--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--die-with-parent"}
+	for _, w := range writable {
+		if _, err := os.Stat(w); err == nil {
+			args = append(args, "--bind", w, w)
+		}
+	}
+	if !net {
+		args = append(args, "--unshare-net")
+	}
+	args = append(args, "sh", "-c", cmdStr)
+	return args
+}
+
 // Confinement: writes are limited to the workspace, temp dirs and common tool caches; network
-// is denied unless ARTIX_SANDBOX_NETWORK=1. Reads are unrestricted. ARTIX_SANDBOX=off disables
-// it. If no confinement tool exists the command still runs, flagged IsolationProcessGroup.
+// is denied unless ARTIX_SANDBOX_NETWORK=1. Reads are unrestricted.
 //
-// ponytail: macOS sandbox-exec is deprecated by Apple but still ships; the Linux bwrap path is
-// untested in CI. Not a defence against a determined attacker (reads are open, same user).
-// Upgrade path: container/VM per task.
+// In Enterprise Mode (ARTIX_ENTERPRISE=1), ARTIX_SANDBOX=off is strictly disallowed and ignored.
+// If no confinement tool exists the command still runs, flagged IsolationProcessGroup.
+//
+// Deprecation & Architectural Roadmap:
+// macOS sandbox-exec is deprecated by Apple.
+// Enterprise Roadmap Item ARTIX-SEC-01: Container/microVM-based confinement (gVisor/Firecracker)
+// scheduled to replace kernel sandbox hooks for universal, unbypassable isolation in CI/CD.
 func confine(cwd, cmdStr string) (*exec.Cmd, string) {
 	plain := func() (*exec.Cmd, string) { return exec.Command("sh", "-c", cmdStr), IsolationProcessGroup }
-	if os.Getenv("ARTIX_SANDBOX") == "off" || os.Getenv("KRITIX_SANDBOX") == "off" {
+
+	isEnterprise := os.Getenv("ARTIX_ENTERPRISE") == "1" || os.Getenv("KRITIX_ENTERPRISE") == "1"
+	sandboxOff := os.Getenv("ARTIX_SANDBOX") == "off" || os.Getenv("KRITIX_SANDBOX") == "off"
+
+	if sandboxOff && !isEnterprise {
 		return plain()
 	}
+
 	net := os.Getenv("ARTIX_SANDBOX_NETWORK") == "1" || os.Getenv("KRITIX_SANDBOX_NETWORK") == "1"
 	home, _ := os.UserHomeDir()
 	real := func(p string) string {
@@ -62,16 +85,8 @@ func confine(cwd, cmdStr string) (*exec.Cmd, string) {
 		if err != nil {
 			return plain()
 		}
-		args := []string{"--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--die-with-parent"}
-		for _, w := range writable {
-			if _, err := os.Stat(w); err == nil {
-				args = append(args, "--bind", w, w)
-			}
-		}
-		if !net {
-			args = append(args, "--unshare-net")
-		}
-		return exec.Command(bwrap, append(args, "sh", "-c", cmdStr)...), IsolationOSSandbox
+		args := BuildBwrapArgs(writable, net, cmdStr)
+		return exec.Command(bwrap, args...), IsolationOSSandbox
 	}
 	return plain()
 }

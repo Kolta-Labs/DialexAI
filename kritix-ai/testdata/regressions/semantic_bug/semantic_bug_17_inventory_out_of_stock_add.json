@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_17_inventory_out_of_stock_add",
+  "category": "semantic_bug",
+  "description": "Out of stock item rendered as in stock Add to Cart",
+  "original": {
+    "id": "orig-sem-inventory_out_of_stock_add",
+    "test_id": "orig-sem-inventory_out_of_stock_add",
+    "role": "status",
+    "text": "Out of Stock",
+    "tag": "span",
+    "bbox": {
+      "x": 100,
+      "y": 520,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "buggy-inventory_out_of_stock_add",
+      "role": "button",
+      "text": "Add to Cart",
+      "bounding_box": {
+        "x": 100,
+        "y": 520,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003eAdd to Cart\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

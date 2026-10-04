@@ -1,0 +1,37 @@
+{
+  "id": "layout_13_stepper_horizontal",
+  "category": "layout_dom",
+  "description": "Layout refactor moving div element \"Step 2: Shipping\"",
+  "original": {
+    "id": "orig-stepper_horizontal",
+    "test_id": "orig-stepper_horizontal",
+    "role": "region",
+    "text": "Step 2: Shipping",
+    "tag": "div",
+    "bbox": {
+      "x": 100,
+      "y": 150,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "refactored-stepper_horizontal",
+      "role": "region",
+      "text": "Step 2: Shipping",
+      "bounding_box": {
+        "x": 100,
+        "y": 155,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003cdiv id=\"refactored-stepper_horizontal\" role=\"region\"\u003eStep 2: Shipping\u003c/div\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_03_nav_home_link",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on a element \"Home\"",
+  "original": {
+    "id": "nav-home",
+    "test_id": "nav-home",
+    "role": "link",
+    "text": "Home",
+    "tag": "a",
+    "bbox": {
+      "x": 100,
+      "y": 160,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "a",
+      "id": "nav-home-v2",
+      "classes": [
+        "header-link"
+      ],
+      "role": "link",
+      "text": "Home",
+      "bounding_box": {
+        "x": 102,
+        "y": 160,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003ca id=\"nav-home-v2\" class=\"header-link\"\u003eHome\u003c/a\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

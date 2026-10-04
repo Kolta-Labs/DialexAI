@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_19_address_map_render_delay",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on div \"Store Location Map\"",
+  "original": {
+    "id": "timing-address_map_render_delay",
+    "test_id": "timing-address_map_render_delay",
+    "role": "region",
+    "text": "Store Location Map",
+    "tag": "div",
+    "bbox": {
+      "x": 150,
+      "y": 550,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "timing-resolved-address_map_render_delay",
+      "role": "region",
+      "text": "Store Location Map",
+      "bounding_box": {
+        "x": 150,
+        "y": 550,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003cdiv id=\"timing-resolved-address_map_render_delay\" class=\"animated fadeIn\"\u003eStore Location Map\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

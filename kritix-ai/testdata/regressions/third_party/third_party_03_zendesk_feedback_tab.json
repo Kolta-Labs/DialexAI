@@ -1,0 +1,50 @@
+{
+  "id": "third_party_03_zendesk_feedback_tab",
+  "category": "third_party",
+  "description": "Third-party widget injection from static.zdassets.com (Customer Feedback Tab)",
+  "original": {
+    "id": "host-target-zendesk_feedback_tab",
+    "test_id": "host-target-zendesk_feedback_tab",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 140,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "injected-widget-zendesk_feedback_tab",
+      "role": "button",
+      "text": "Feedback",
+      "bounding_box": {
+        "x": 800,
+        "y": 140,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-zendesk_feedback_tab",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 140,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-zendesk_feedback_tab\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"static.zdassets.com\"\u003e\u003cbutton role=\"button\"\u003eFeedback\u003c/button\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_08_empty_cart_zero_state",
+  "category": "semantic_bug",
+  "description": "Cart cleared spontaneously on checkout page load",
+  "original": {
+    "id": "orig-sem-empty_cart_zero_state",
+    "test_id": "orig-sem-empty_cart_zero_state",
+    "role": "status",
+    "text": "Items (3)",
+    "tag": "span",
+    "bbox": {
+      "x": 100,
+      "y": 340,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "span",
+      "id": "buggy-empty_cart_zero_state",
+      "role": "status",
+      "text": "Items (0)",
+      "bounding_box": {
+        "x": 100,
+        "y": 340,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003eItems (0)\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

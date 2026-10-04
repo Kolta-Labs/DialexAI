@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_10_shipping_method_unselectable",
+  "category": "semantic_bug",
+  "description": "Shipping option radio buttons disabled",
+  "original": {
+    "id": "orig-sem-shipping_method_unselectable",
+    "test_id": "orig-sem-shipping_method_unselectable",
+    "role": "radio",
+    "text": "Express Shipping",
+    "tag": "input",
+    "bbox": {
+      "x": 100,
+      "y": 380,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "input",
+      "id": "buggy-shipping_method_unselectable",
+      "role": "radio",
+      "text": "Express Shipping",
+      "bounding_box": {
+        "x": 100,
+        "y": 380,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": true
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003eExpress Shipping\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

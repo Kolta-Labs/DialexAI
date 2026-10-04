@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -12,7 +13,10 @@ import (
 
 func TestConfinementBlocksNetworkAndOutsideWrites(t *testing.T) {
 	if runtime.GOOS != "darwin" {
-		if _, err := os.Stat("/usr/bin/bwrap"); err != nil {
+		if _, err := exec.LookPath("bwrap"); err != nil {
+			if os.Getenv("CI") != "" || os.Getenv("ARTIX_ENTERPRISE") != "" {
+				t.Fatalf("bwrap OS sandbox is required in CI / Enterprise environments, but was not found: %v", err)
+			}
 			t.Skip("no OS sandbox available")
 		}
 	}
@@ -41,3 +45,47 @@ func TestConfinementBlocksNetworkAndOutsideWrites(t *testing.T) {
 		t.Fatalf("network opt-in must work: %+v", r)
 	}
 }
+
+func TestBuildBwrapArgs(t *testing.T) {
+	writable := []string{"/tmp", "/var/tmp"}
+	argsNoNet := BuildBwrapArgs(writable, false, "echo hello")
+	
+	hasRoBind := false
+	hasUnshareNet := false
+	for _, a := range argsNoNet {
+		if a == "--ro-bind" {
+			hasRoBind = true
+		}
+		if a == "--unshare-net" {
+			hasUnshareNet = true
+		}
+	}
+	if !hasRoBind {
+		t.Errorf("expected --ro-bind in bwrap args: %v", argsNoNet)
+	}
+	if !hasUnshareNet {
+		t.Errorf("expected --unshare-net when network disabled: %v", argsNoNet)
+	}
+
+	argsWithNet := BuildBwrapArgs(writable, true, "echo hello")
+	for _, a := range argsWithNet {
+		if a == "--unshare-net" {
+			t.Errorf("did not expect --unshare-net when network allowed: %v", argsWithNet)
+		}
+	}
+}
+
+func TestEnterpriseModeBlocksSandboxEscape(t *testing.T) {
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+	t.Setenv("ARTIX_SANDBOX", "off")
+
+	// Even with ARTIX_SANDBOX=off, enterprise mode must prevent plain unconfined fallback
+	// on platforms where os sandbox exists
+	_, iso := confine(t.TempDir(), "echo hi")
+	if runtime.GOOS == "darwin" {
+		if iso != IsolationOSSandbox {
+			t.Errorf("enterprise mode must ignore ARTIX_SANDBOX=off on darwin, got isolation: %s", iso)
+		}
+	}
+}
+

@@ -123,3 +123,130 @@ func TestRuleSynthesizer_FromReviewComment(t *testing.T) {
 		t.Errorf("expected non-taboo heuristic rule")
 	}
 }
+
+func TestKnowledgeStore_EnterpriseIsolationAndSchemaEvolution(t *testing.T) {
+	tempProject := t.TempDir()
+
+	// 1. Enterprise mode disables global store contamination
+	store := NewStore(tempProject)
+	store.SetEnterpriseMode(true)
+
+	if !store.IsEnterpriseMode() {
+		t.Fatal("expected enterprise mode to be active")
+	}
+
+	ki1 := &KnowledgeItem{
+		ID:           "ki-ent-01",
+		Title:        "Enterprise Isolation Rule",
+		Category:     CategoryArchitecture,
+		Context:      "Tenant data separation",
+		Breakthrough: "Strict project-level scoping",
+	}
+
+	if err := store.Save(ki1); err != nil {
+		t.Fatalf("failed to save in enterprise mode: %v", err)
+	}
+
+	retrieved, err := store.Get("ki-ent-01")
+	if err != nil {
+		t.Fatalf("failed to get item: %v", err)
+	}
+	if retrieved.SchemaVersion != CurrentSchemaVersion {
+		t.Errorf("expected schema version %d, got %d", CurrentSchemaVersion, retrieved.SchemaVersion)
+	}
+	if retrieved.ContentHash == "" {
+		t.Errorf("expected computed content hash, got empty")
+	}
+
+	// 2. Deduplication check
+	kiDuplicate := &KnowledgeItem{
+		ID:           "ki-ent-02",
+		Title:        "Enterprise Isolation Rule",
+		Category:     CategoryArchitecture,
+		Context:      "Tenant data separation",
+		Breakthrough: "Strict project-level scoping",
+	}
+	if err := store.Save(kiDuplicate); err != nil {
+		t.Fatalf("failed to save duplicate: %v", err)
+	}
+
+	list, err := store.List()
+	if err != nil {
+		t.Fatalf("failed to list items: %v", err)
+	}
+	// Content duplicate is deduplicated in list
+	if len(list) != 1 {
+		t.Errorf("expected 1 deduplicated item, got %d", len(list))
+	}
+}
+
+func TestKnowledgeStore_PruneTTL(t *testing.T) {
+	tempProject := t.TempDir()
+	store := NewStore(tempProject)
+
+	oldItem := &KnowledgeItem{
+		ID:           "ki-old-01",
+		Title:        "Old Outdated Knowledge",
+		Category:     CategoryDebugging,
+		Context:      "Legacy JDK 8 quirk",
+		Breakthrough: "Upgrade compiler",
+		CreatedAt:    time.Now().Add(-48 * time.Hour),
+	}
+	newItem := &KnowledgeItem{
+		ID:           "ki-new-01",
+		Title:        "Recent Architecture Learning",
+		Category:     CategoryArchitecture,
+		Context:      "KMP memory model",
+		Breakthrough: "Use atomic references",
+		CreatedAt:    time.Now(),
+	}
+
+	if err := store.Save(oldItem); err != nil {
+		t.Fatalf("failed to save old item: %v", err)
+	}
+	if err := store.Save(newItem); err != nil {
+		t.Fatalf("failed to save new item: %v", err)
+	}
+
+	pruned, err := store.Prune(24 * time.Hour)
+	if err != nil {
+		t.Fatalf("Prune failed: %v", err)
+	}
+	if pruned != 1 {
+		t.Errorf("expected 1 item pruned, got %d", pruned)
+	}
+
+	list, err := store.List()
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != "ki-new-01" {
+		t.Errorf("expected only new item to remain, got %+v", list)
+	}
+}
+
+func TestComputeHash_NoDelimiterCollision(t *testing.T) {
+	// Item A: Category="auth|jwt", Title="fix"
+	itemA := &KnowledgeItem{
+		Category:     KnowledgeCategory("auth|jwt"),
+		Title:        "fix",
+		Context:      "c",
+		Breakthrough: "b",
+	}
+
+	// Item B: Category="auth", Title="jwt|fix"
+	itemB := &KnowledgeItem{
+		Category:     KnowledgeCategory("auth"),
+		Title:        "jwt|fix",
+		Context:      "c",
+		Breakthrough: "b",
+	}
+
+	hashA := computeHash(itemA)
+	hashB := computeHash(itemB)
+
+	if hashA == hashB {
+		t.Fatalf("hash collision detected across pipe delimiter: hashA=%s, hashB=%s", hashA, hashB)
+	}
+}
+

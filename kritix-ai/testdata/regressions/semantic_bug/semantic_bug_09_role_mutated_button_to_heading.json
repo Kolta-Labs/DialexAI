@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_09_role_mutated_button_to_heading",
+  "category": "semantic_bug",
+  "description": "Interactive checkout button mutated to static non-clickable heading",
+  "original": {
+    "id": "orig-sem-role_mutated_button_to_heading",
+    "test_id": "orig-sem-role_mutated_button_to_heading",
+    "role": "button",
+    "text": "Complete Purchase",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 360,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "h2",
+      "id": "buggy-role_mutated_button_to_heading",
+      "role": "heading",
+      "text": "Complete Purchase",
+      "bounding_box": {
+        "x": 100,
+        "y": 360,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003eComplete Purchase\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

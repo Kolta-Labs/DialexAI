@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_20_dynamic_tax_recalculation",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on span \"Calculating estimated tax...\"",
+  "original": {
+    "id": "timing-dynamic_tax_recalculation",
+    "test_id": "timing-dynamic_tax_recalculation",
+    "role": "status",
+    "text": "Calculating estimated tax...",
+    "tag": "span",
+    "bbox": {
+      "x": 150,
+      "y": 575,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "span",
+      "id": "timing-resolved-dynamic_tax_recalculation",
+      "role": "status",
+      "text": "Calculating estimated tax...",
+      "bounding_box": {
+        "x": 150,
+        "y": 575,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003cspan id=\"timing-resolved-dynamic_tax_recalculation\" class=\"animated fadeIn\"\u003eCalculating estimated tax...\u003c/span\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

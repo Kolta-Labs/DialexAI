@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_06_dropdown_accordion_sliding",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on div \"Payment Options\"",
+  "original": {
+    "id": "timing-dropdown_accordion_sliding",
+    "test_id": "timing-dropdown_accordion_sliding",
+    "role": "region",
+    "text": "Payment Options",
+    "tag": "div",
+    "bbox": {
+      "x": 150,
+      "y": 225,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "timing-resolved-dropdown_accordion_sliding",
+      "role": "region",
+      "text": "Payment Options",
+      "bounding_box": {
+        "x": 150,
+        "y": 225,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003cdiv id=\"timing-resolved-dropdown_accordion_sliding\" class=\"animated fadeIn\"\u003ePayment Options\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

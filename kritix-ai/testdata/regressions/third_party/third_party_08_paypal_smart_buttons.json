@@ -1,0 +1,50 @@
+{
+  "id": "third_party_08_paypal_smart_buttons",
+  "category": "third_party",
+  "description": "Third-party widget injection from www.paypal.com/sdk (PayPal Express Checkout)",
+  "original": {
+    "id": "host-target-paypal_smart_buttons",
+    "test_id": "host-target-paypal_smart_buttons",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 240,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "iframe",
+      "id": "injected-widget-paypal_smart_buttons",
+      "role": "button",
+      "text": "PayPal Checkout Frame",
+      "bounding_box": {
+        "x": 800,
+        "y": 240,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-paypal_smart_buttons",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 240,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-paypal_smart_buttons\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"www.paypal.com/sdk\"\u003e\u003ciframe role=\"button\"\u003ePayPal Checkout Frame\u003c/iframe\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

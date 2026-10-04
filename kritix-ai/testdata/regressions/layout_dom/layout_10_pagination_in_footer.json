@@ -1,0 +1,37 @@
+{
+  "id": "layout_10_pagination_in_footer",
+  "category": "layout_dom",
+  "description": "Layout refactor moving ul element \"Page 1 of 10\"",
+  "original": {
+    "id": "orig-pagination_in_footer",
+    "test_id": "orig-pagination_in_footer",
+    "role": "list",
+    "text": "Page 1 of 10",
+    "tag": "ul",
+    "bbox": {
+      "x": 200,
+      "y": 800,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "ul",
+      "id": "refactored-pagination_in_footer",
+      "role": "list",
+      "text": "Page 1 of 10",
+      "bounding_box": {
+        "x": 200,
+        "y": 820,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003cul id=\"refactored-pagination_in_footer\" role=\"list\"\u003ePage 1 of 10\u003c/ul\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

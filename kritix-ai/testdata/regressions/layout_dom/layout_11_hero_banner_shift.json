@@ -1,0 +1,37 @@
+{
+  "id": "layout_11_hero_banner_shift",
+  "category": "layout_dom",
+  "description": "Layout refactor moving div element \"Summer Sale 50% Off\"",
+  "original": {
+    "id": "orig-hero_banner_shift",
+    "test_id": "orig-hero_banner_shift",
+    "role": "banner",
+    "text": "Summer Sale 50% Off",
+    "tag": "div",
+    "bbox": {
+      "x": 0,
+      "y": 100,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "refactored-hero_banner_shift",
+      "role": "banner",
+      "text": "Summer Sale 50% Off",
+      "bounding_box": {
+        "x": 0,
+        "y": 110,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003cdiv id=\"refactored-hero_banner_shift\" role=\"banner\"\u003eSummer Sale 50% Off\u003c/div\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

@@ -1,0 +1,50 @@
+{
+  "id": "third_party_09_trustpilot_review_badge",
+  "category": "third_party",
+  "description": "Third-party widget injection from widget.trustpilot.com (Trustpilot Rating Star)",
+  "original": {
+    "id": "host-target-trustpilot_review_badge",
+    "test_id": "host-target-trustpilot_review_badge",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 260,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "injected-widget-trustpilot_review_badge",
+      "role": "status",
+      "text": "Trustpilot 4.8 / 5.0",
+      "bounding_box": {
+        "x": 800,
+        "y": 260,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-trustpilot_review_badge",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 260,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-trustpilot_review_badge\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"widget.trustpilot.com\"\u003e\u003cdiv role=\"status\"\u003eTrustpilot 4.8 / 5.0\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

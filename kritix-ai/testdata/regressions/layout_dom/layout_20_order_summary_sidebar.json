@@ -1,0 +1,37 @@
+{
+  "id": "layout_20_order_summary_sidebar",
+  "category": "layout_dom",
+  "description": "Layout refactor moving div element \"Order Total: $142.50\"",
+  "original": {
+    "id": "orig-order_summary_sidebar",
+    "test_id": "orig-order_summary_sidebar",
+    "role": "region",
+    "text": "Order Total: $142.50",
+    "tag": "div",
+    "bbox": {
+      "x": 650,
+      "y": 250,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "refactored-order_summary_sidebar",
+      "role": "region",
+      "text": "Order Total: $142.50",
+      "bounding_box": {
+        "x": 660,
+        "y": 260,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003cdiv id=\"refactored-order_summary_sidebar\" role=\"region\"\u003eOrder Total: $142.50\u003c/div\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

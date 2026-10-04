@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_04_lazy_load_product_image",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on img \"Wireless Noise-Canceling Headphones\"",
+  "original": {
+    "id": "timing-lazy_load_product_image",
+    "test_id": "timing-lazy_load_product_image",
+    "role": "img",
+    "text": "Wireless Noise-Canceling Headphones",
+    "tag": "img",
+    "bbox": {
+      "x": 150,
+      "y": 175,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "img",
+      "id": "timing-resolved-lazy_load_product_image",
+      "role": "img",
+      "text": "Wireless Noise-Canceling Headphones",
+      "bounding_box": {
+        "x": 150,
+        "y": 175,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003cimg id=\"timing-resolved-lazy_load_product_image\" class=\"animated fadeIn\"\u003eWireless Noise-Canceling Headphones\u003c/img\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

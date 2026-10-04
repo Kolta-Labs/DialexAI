@@ -45,21 +45,29 @@ type PromptContext struct {
 
 // CompilePrompt builds the comprehensive system and task instructions for the coder.
 func (c *DomainCoder) CompilePrompt(ctx *PromptContext) (systemPrompt, userPrompt string) {
+	return c.CompilePromptForTask(ctx, TaskCodeGeneration)
+}
+
+// CompilePromptForTask builds task-specific system and task instructions for the coder.
+func (c *DomainCoder) CompilePromptForTask(ctx *PromptContext, task TaskType) (systemPrompt, userPrompt string) {
 	var sys strings.Builder
 
 	fmt.Fprintf(&sys, "You are %s, an elite %s.\n", c.persona.Name, c.persona.Role)
 	if c.persona.DNA != nil {
-		fmt.Fprintf(&sys, "Domain Authority: %s\n", c.persona.DNA.CoreIdentity.DomainAuthority)
-		if len(c.persona.DNA.TabooSpace.ForbiddenArguments) > 0 {
-			sys.WriteString("\nSTRICT ARCHITECTURAL TABOOS (DO NOT VIOLATE):\n")
-			for _, taboo := range c.persona.DNA.TabooSpace.ForbiddenArguments {
-				fmt.Fprintf(&sys, "- %s\n", taboo)
-			}
+		dnaCompiled := CompileDNALayers(c.persona.DNA, task)
+		if dnaCompiled != "" {
+			sys.WriteString(dnaCompiled)
 		}
 	}
 
 	// Injected dynamic steering rules
 	if ctx.SteeringContext != nil {
+		if len(ctx.SteeringContext.GlobalTaboos.ForbiddenArguments) > 0 {
+			sys.WriteString("\nGLOBAL ARCHITECTURAL TABOOS (PERSONA-INDEPENDENT):\n")
+			for _, gt := range ctx.SteeringContext.GlobalTaboos.ForbiddenArguments {
+				fmt.Fprintf(&sys, "- %s\n", gt)
+			}
+		}
 		if len(ctx.SteeringContext.Taboos.ForbiddenArguments) > 0 {
 			sys.WriteString("\nPROJECT STEERING TABOOS:\n")
 			for _, t := range ctx.SteeringContext.Taboos.ForbiddenArguments {

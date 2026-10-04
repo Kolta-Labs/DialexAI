@@ -66,6 +66,16 @@ func FormatToMarkdown(s *StorySpec) string {
 	}
 	sb.WriteString("```\n")
 
+	if len(s.DeliberationRounds) > 0 {
+		sb.WriteString("\n---\n\n## 6. Stakeholder Council Deliberation\n\n")
+		for _, dr := range s.DeliberationRounds {
+			fmt.Fprintf(&sb, "### Round %d: %s (%s)\n", dr.Round, dr.Topic, dr.Role)
+			if dr.Transcript != "" {
+				sb.WriteString(strings.TrimSpace(dr.Transcript) + "\n\n")
+			}
+		}
+	}
+
 	return sb.String()
 }
 

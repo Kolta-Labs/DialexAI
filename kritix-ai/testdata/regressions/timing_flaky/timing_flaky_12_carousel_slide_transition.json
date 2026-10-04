@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_12_carousel_slide_transition",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on div \"Slide 2 of 5: Summer Deals\"",
+  "original": {
+    "id": "timing-carousel_slide_transition",
+    "test_id": "timing-carousel_slide_transition",
+    "role": "group",
+    "text": "Slide 2 of 5: Summer Deals",
+    "tag": "div",
+    "bbox": {
+      "x": 150,
+      "y": 375,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "timing-resolved-carousel_slide_transition",
+      "role": "group",
+      "text": "Slide 2 of 5: Summer Deals",
+      "bounding_box": {
+        "x": 150,
+        "y": 375,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003cdiv id=\"timing-resolved-carousel_slide_transition\" class=\"animated fadeIn\"\u003eSlide 2 of 5: Summer Deals\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

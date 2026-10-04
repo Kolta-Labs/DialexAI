@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_20_age_gate_inverted",
+  "category": "semantic_bug",
+  "description": "Age gate allows under 18 and blocks adult users",
+  "original": {
+    "id": "orig-sem-age_gate_inverted",
+    "test_id": "orig-sem-age_gate_inverted",
+    "role": "button",
+    "text": "I am 18 or older",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 580,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "buggy-age_gate_inverted",
+      "role": "button",
+      "text": "I am under 18",
+      "bounding_box": {
+        "x": 100,
+        "y": 580,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003eI am under 18\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

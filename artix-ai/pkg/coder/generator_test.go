@@ -70,7 +70,11 @@ func liveFixture(t *testing.T) (*ConvergenceCoordinator, *DomainCoder, *spec.Sto
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	reg := persona.NewRegistry("")
 	dc, _ := NewDomainCoder("backend_engineer", reg)
-	coord := NewCoordinator(dc, reviewer.NewAdversarialReviewer(reg), driver, sandbox.NewSandbox(dir))
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	coord := NewCoordinator(dc, rev, driver, sandbox.NewSandbox(dir))
 	s := &spec.StorySpec{ID: "S-1", Title: "Set counter to 2", TestCommands: []string{"grep -q '^2$' counter.txt"}}
 	return coord, dc, s, &repo.RepositoryContext{RootDir: dir}, dir
 }

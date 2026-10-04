@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_16_form_submitting_spinner",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on button \"Authorizing Card...\"",
+  "original": {
+    "id": "timing-form_submitting_spinner",
+    "test_id": "timing-form_submitting_spinner",
+    "role": "button",
+    "text": "Authorizing Card...",
+    "tag": "button",
+    "bbox": {
+      "x": 150,
+      "y": 475,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "timing-resolved-form_submitting_spinner",
+      "role": "button",
+      "text": "Authorizing Card...",
+      "bounding_box": {
+        "x": 150,
+        "y": 475,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003cbutton id=\"timing-resolved-form_submitting_spinner\" class=\"animated fadeIn\"\u003eAuthorizing Card...\u003c/button\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

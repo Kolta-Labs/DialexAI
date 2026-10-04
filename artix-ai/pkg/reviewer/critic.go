@@ -11,6 +11,9 @@ import (
 	"socratix/pkg/runner"
 )
 
+// DefaultMaxCriticDiffBytes is the default maximum unified diff size submitted for model review (500 KB).
+const DefaultMaxCriticDiffBytes = 500_000
+
 // Critic asks a model one question and returns its raw reply. Any engine AgentRunner can back it.
 type Critic func(ctx context.Context, prompt string) (string, error)
 
@@ -28,7 +31,12 @@ func RunnerCritic(r runner.AgentRunner, agent model.Agent) Critic {
 // SetCritic adds a model-backed review pass on top of the rule-based checks.
 func (r *AdversarialReviewer) SetCritic(c Critic) { r.critic = c }
 
-const maxCriticDiffBytes = 60_000
+// SetMaxCriticDiffBytes configures the maximum diff size in bytes accepted for model review.
+func (r *AdversarialReviewer) SetMaxCriticDiffBytes(n int) {
+	if n > 0 {
+		r.maxCriticDiffBytes = n
+	}
+}
 
 type criticReply struct {
 	Approved bool     `json:"approved"`
@@ -36,56 +44,98 @@ type criticReply struct {
 	Warnings []string `json:"warnings"`
 }
 
-// applyCritic runs the model pass. It fails closed: a critic error or an unparsable reply
-// rejects the change, because "the reviewer was unavailable" must never read as "approved".
+// applyCritic runs the model pass. It fails closed:
+// 1. If the diff exceeds maxCriticDiffBytes, it HARD REJECTS immediately with DIFF_TRUNCATED.
+// 2. A critic error or unparsable reply marks the verdict as StatusUnreviewed and not approved.
 func (r *AdversarialReviewer) applyCritic(ctx context.Context, rc *ReviewContext, v *ReviewVerdict) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
+	maxLimit := r.maxCriticDiffBytes
+	if maxLimit <= 0 {
+		maxLimit = DefaultMaxCriticDiffBytes
+	}
+
+	// Hard rejection on diff truncation: model review cannot be authoritative on an incomplete diff
+	if len(rc.Diff) > maxLimit {
+		v.Approved = false
+		v.Status = StatusRejected
+		v.BlockingIssues = append(v.BlockingIssues, fmt.Sprintf("DIFF_TRUNCATED: model review cannot be authoritative on an incomplete diff (diff size %d bytes exceeds maximum review limit %d bytes)", len(rc.Diff), maxLimit))
+		return
+	}
+
 	raw, err := r.critic(ctx, buildCriticPrompt(rc))
 	if err != nil {
 		v.Approved = false
-		v.BlockingIssues = append(v.BlockingIssues, fmt.Sprintf("Model review failed (%v); change not approved.", err))
+		v.Status = StatusUnreviewed
+		v.BlockingIssues = append(v.BlockingIssues, fmt.Sprintf("Model review failed or unreachable (%v); change marked as unreviewed.", err))
 		return
 	}
 	parsed, err := parseCriticReply(raw)
 	if err != nil {
 		v.Approved = false
-		v.BlockingIssues = append(v.BlockingIssues, "Model review returned an unparsable reply; change not approved.")
+		v.Status = StatusUnreviewed
+		v.BlockingIssues = append(v.BlockingIssues, fmt.Sprintf("Model review returned an unparsable reply (%v); change marked as unreviewed.", err))
 		return
 	}
 	v.Warnings = append(v.Warnings, parsed.Warnings...)
 	if !parsed.Approved || len(parsed.Blocking) > 0 {
 		v.Approved = false
+		v.Status = StatusRejected
 		if len(parsed.Blocking) == 0 {
 			parsed.Blocking = []string{"Model review rejected the change without giving a reason."}
 		}
 		for _, b := range parsed.Blocking {
 			v.BlockingIssues = append(v.BlockingIssues, "Model review: "+b)
 		}
+	} else {
+		v.Approved = true
+		v.Status = StatusApproved
 	}
 }
 
 func buildCriticPrompt(rc *ReviewContext) string {
 	var sb strings.Builder
-	sb.WriteString("Review this diff against the acceptance criteria. Look for unmet criteria, bugs, missing edge cases and tests that would pass without proving the behaviour.\n\n")
-	sb.WriteString("ACCEPTANCE CRITERIA:\n")
-	if len(rc.Criteria) == 0 {
-		sb.WriteString("(none provided; review for defects only)\n")
+	sb.WriteString(`You are an Adversarial Code Reviewer and Security Auditor. Evaluate the provided diff against the following mandatory security and correctness rubric:
+
+### 1. SECURITY RUBRIC (Zero Tolerance)
+- Injection & Memory Safety: No SQL/command injection, path traversal, buffer overflows, or unchecked allocations.
+- Concurrency & Race Conditions: No data races, deadlocks, goroutine leaks, or unconfined thread blocking.
+- Auth & Secrets: No hardcoded credentials, plain-text tokens, or bypass of authentication/authorization gates.
+- Sandbox & Resource Confinement: Respect process boundaries and resource limits.
+
+### 2. CORRECTNESS & SPEC ALIGNMENT RUBRIC
+- Acceptance Criteria: Satisfies all specified Given/When/Then scenarios.
+- Regression Risk: Does not break existing interfaces, invariants, or edge cases.
+- Invariants & Standards: Adheres strictly to project coding invariants and architectural constraints.
+`)
+
+	if len(rc.Criteria) > 0 {
+		sb.WriteString("\nACCEPTANCE CRITERIA:\n")
+		for i, c := range rc.Criteria {
+			fmt.Fprintf(&sb, "%d. %s\n", i+1, c)
+		}
+	} else {
+		sb.WriteString("\nACCEPTANCE CRITERIA:\n(none provided; review for defects and security issues only)\n")
 	}
-	for i, c := range rc.Criteria {
-		fmt.Fprintf(&sb, "%d. %s\n", i+1, c)
+
+	if len(rc.AnalyzerFindings) > 0 {
+		sb.WriteString("\nSTATIC ANALYZER FINDINGS (Mandatory Evidence from Konsist/Detekt/Semgrep/Vet):\n")
+		for _, f := range rc.AnalyzerFindings {
+			fmt.Fprintf(&sb, "- [%s] (%s): %s\n", f.Tool, f.Severity, f.Message)
+		}
 	}
-	sb.WriteString("\nTEST RESULTS:\n")
-	for _, t := range rc.TestResults {
-		fmt.Fprintf(&sb, "- %q exit=%d timedOut=%v\n", t.Command, t.ExitCode, t.TimedOut)
+
+	if len(rc.TestResults) > 0 {
+		sb.WriteString("\nTEST RESULTS:\n")
+		for _, t := range rc.TestResults {
+			fmt.Fprintf(&sb, "- %q exit=%d timedOut=%v\n", t.Command, t.ExitCode, t.TimedOut)
+		}
 	}
-	diff := rc.Diff
-	if len(diff) > maxCriticDiffBytes {
-		diff = strings.ToValidUTF8(diff[:maxCriticDiffBytes], "") + "\n...[diff truncated]"
-	}
-	sb.WriteString("\nDIFF:\n" + diff + "\n\n")
-	sb.WriteString(`Reply with ONLY this JSON: {"approved": bool, "blocking": ["..."], "warnings": ["..."]}. Set approved=false and list blocking issues if any criterion is unmet or a real defect exists.`)
+
+	sb.WriteString("\nUNIFIED PATCH DIFF:\n" + rc.Diff + "\n\n")
+	sb.WriteString(`Reply with ONLY this JSON: {"approved": bool, "blocking": ["..."], "warnings": ["..."]}. Set approved=false and list blocking issues if any criterion is unmet or a security/correctness defect exists.`)
 	return sb.String()
 }
 

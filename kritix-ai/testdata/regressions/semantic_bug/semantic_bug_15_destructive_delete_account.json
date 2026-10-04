@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_15_destructive_delete_account",
+  "category": "semantic_bug",
+  "description": "Save Profile button swapped with Delete Account",
+  "original": {
+    "id": "orig-sem-destructive_delete_account",
+    "test_id": "orig-sem-destructive_delete_account",
+    "role": "button",
+    "text": "Save Changes",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 480,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "buggy-destructive_delete_account",
+      "role": "button",
+      "text": "Delete Account",
+      "bounding_box": {
+        "x": 100,
+        "y": 480,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003eDelete Account\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

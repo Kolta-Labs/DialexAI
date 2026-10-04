@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_21_clear_filters_btn",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on button element \"Clear All\"",
+  "original": {
+    "id": "btn-reset-filter",
+    "test_id": "btn-reset-filter",
+    "role": "button",
+    "text": "Clear All",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 700,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "reset-filters-btn",
+      "classes": [
+        "filter-reset-action"
+      ],
+      "role": "button",
+      "text": "Clear All",
+      "bounding_box": {
+        "x": 102,
+        "y": 700,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003cbutton id=\"reset-filters-btn\" class=\"filter-reset-action\"\u003eClear All\u003c/button\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

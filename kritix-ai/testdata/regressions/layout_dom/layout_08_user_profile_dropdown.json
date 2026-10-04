@@ -1,0 +1,37 @@
+{
+  "id": "layout_08_user_profile_dropdown",
+  "category": "layout_dom",
+  "description": "Layout refactor moving div element \"Account Settings\"",
+  "original": {
+    "id": "orig-user_profile_dropdown",
+    "test_id": "orig-user_profile_dropdown",
+    "role": "menu",
+    "text": "Account Settings",
+    "tag": "div",
+    "bbox": {
+      "x": 600,
+      "y": 30,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "refactored-user_profile_dropdown",
+      "role": "menu",
+      "text": "Account Settings",
+      "bounding_box": {
+        "x": 610,
+        "y": 35,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003cdiv id=\"refactored-user_profile_dropdown\" role=\"menu\"\u003eAccount Settings\u003c/div\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

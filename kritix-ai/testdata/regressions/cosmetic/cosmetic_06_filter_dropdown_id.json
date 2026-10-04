@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_06_filter_dropdown_id",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on select element \"Sort By\"",
+  "original": {
+    "id": "sort-select",
+    "test_id": "sort-select",
+    "role": "combobox",
+    "text": "Sort By",
+    "tag": "select",
+    "bbox": {
+      "x": 100,
+      "y": 250,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "select",
+      "id": "product-sort",
+      "classes": [
+        "dropdown-filter"
+      ],
+      "role": "combobox",
+      "text": "Sort By",
+      "bounding_box": {
+        "x": 102,
+        "y": 250,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003cselect id=\"product-sort\" class=\"dropdown-filter\"\u003eSort By\u003c/select\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

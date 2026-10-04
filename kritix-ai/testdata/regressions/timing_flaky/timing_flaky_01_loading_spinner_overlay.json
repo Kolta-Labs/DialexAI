@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_01_loading_spinner_overlay",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on button \"Place Order\"",
+  "original": {
+    "id": "timing-loading_spinner_overlay",
+    "test_id": "timing-loading_spinner_overlay",
+    "role": "button",
+    "text": "Place Order",
+    "tag": "button",
+    "bbox": {
+      "x": 150,
+      "y": 100,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "timing-resolved-loading_spinner_overlay",
+      "role": "button",
+      "text": "Place Order",
+      "bounding_box": {
+        "x": 150,
+        "y": 100,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003cbutton id=\"timing-resolved-loading_spinner_overlay\" class=\"animated fadeIn\"\u003ePlace Order\u003c/button\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

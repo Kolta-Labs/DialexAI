@@ -1,6 +1,7 @@
 go 1.27.0
 
 use (
-	./socratix-engine
 	./artix-ai
+	./kritix-ai
+	./socratix-engine
 )

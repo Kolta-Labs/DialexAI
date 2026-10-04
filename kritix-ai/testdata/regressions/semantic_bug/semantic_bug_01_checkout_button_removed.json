@@ -1,0 +1,23 @@
+{
+  "id": "semantic_bug_01_checkout_button_removed",
+  "category": "semantic_bug",
+  "description": "Checkout button completely removed from DOM",
+  "original": {
+    "id": "orig-sem-checkout_button_removed",
+    "test_id": "orig-sem-checkout_button_removed",
+    "role": "button",
+    "text": "Pay Now",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 200,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": null,
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

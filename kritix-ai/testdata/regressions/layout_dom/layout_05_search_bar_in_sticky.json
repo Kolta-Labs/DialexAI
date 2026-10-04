@@ -1,0 +1,37 @@
+{
+  "id": "layout_05_search_bar_in_sticky",
+  "category": "layout_dom",
+  "description": "Layout refactor moving input element \"Search Catalog\"",
+  "original": {
+    "id": "orig-search_bar_in_sticky",
+    "test_id": "orig-search_bar_in_sticky",
+    "role": "textbox",
+    "text": "Search Catalog",
+    "tag": "input",
+    "bbox": {
+      "x": 300,
+      "y": 20,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "input",
+      "id": "refactored-search_bar_in_sticky",
+      "role": "textbox",
+      "text": "Search Catalog",
+      "bounding_box": {
+        "x": 310,
+        "y": 25,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003cinput id=\"refactored-search_bar_in_sticky\" role=\"textbox\"\u003eSearch Catalog\u003c/input\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

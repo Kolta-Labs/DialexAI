@@ -1,0 +1,50 @@
+{
+  "id": "third_party_01_onetrust_cookie_banner",
+  "category": "third_party",
+  "description": "Third-party widget injection from cdn.cookielaw.org (Cookie Consent Banner)",
+  "original": {
+    "id": "host-target-onetrust_cookie_banner",
+    "test_id": "host-target-onetrust_cookie_banner",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 100,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "injected-widget-onetrust_cookie_banner",
+      "role": "dialog",
+      "text": "Accept All Cookies",
+      "bounding_box": {
+        "x": 800,
+        "y": 100,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-onetrust_cookie_banner",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 100,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-onetrust_cookie_banner\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"cdn.cookielaw.org\"\u003e\u003cdiv role=\"dialog\"\u003eAccept All Cookies\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

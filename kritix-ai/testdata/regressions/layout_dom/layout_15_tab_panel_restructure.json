@@ -1,0 +1,37 @@
+{
+  "id": "layout_15_tab_panel_restructure",
+  "category": "layout_dom",
+  "description": "Layout refactor moving div element \"Warranty Information\"",
+  "original": {
+    "id": "orig-tab_panel_restructure",
+    "test_id": "orig-tab_panel_restructure",
+    "role": "tabpanel",
+    "text": "Warranty Information",
+    "tag": "div",
+    "bbox": {
+      "x": 150,
+      "y": 500,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "refactored-tab_panel_restructure",
+      "role": "tabpanel",
+      "text": "Warranty Information",
+      "bounding_box": {
+        "x": 150,
+        "y": 510,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003cdiv id=\"refactored-tab_panel_restructure\" role=\"tabpanel\"\u003eWarranty Information\u003c/div\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

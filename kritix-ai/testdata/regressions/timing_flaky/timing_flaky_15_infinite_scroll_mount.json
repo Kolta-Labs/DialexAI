@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_15_infinite_scroll_mount",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on div \"Loading next 20 products...\"",
+  "original": {
+    "id": "timing-infinite_scroll_mount",
+    "test_id": "timing-infinite_scroll_mount",
+    "role": "status",
+    "text": "Loading next 20 products...",
+    "tag": "div",
+    "bbox": {
+      "x": 150,
+      "y": 450,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "timing-resolved-infinite_scroll_mount",
+      "role": "status",
+      "text": "Loading next 20 products...",
+      "bounding_box": {
+        "x": 150,
+        "y": 450,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003cdiv id=\"timing-resolved-infinite_scroll_mount\" class=\"animated fadeIn\"\u003eLoading next 20 products...\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

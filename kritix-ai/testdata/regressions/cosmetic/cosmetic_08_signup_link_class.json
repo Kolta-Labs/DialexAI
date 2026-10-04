@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_08_signup_link_class",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on a element \"Create Account\"",
+  "original": {
+    "id": "register-link",
+    "test_id": "register-link",
+    "role": "link",
+    "text": "Create Account",
+    "tag": "a",
+    "bbox": {
+      "x": 100,
+      "y": 310,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "a",
+      "id": "register-link",
+      "classes": [
+        "auth-register-link"
+      ],
+      "role": "link",
+      "text": "Create Account",
+      "bounding_box": {
+        "x": 102,
+        "y": 310,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003ca id=\"register-link\" class=\"auth-register-link\"\u003eCreate Account\u003c/a\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

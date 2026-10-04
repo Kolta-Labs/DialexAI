@@ -1,0 +1,48 @@
+{
+  "id": "third_party_12_tiktok_pixel_beacon",
+  "category": "third_party",
+  "description": "Third-party widget injection from analytics.tiktok.com (TikTok Analytics Beacon)",
+  "original": {
+    "id": "host-target-tiktok_pixel_beacon",
+    "test_id": "host-target-tiktok_pixel_beacon",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 320,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "script",
+      "id": "injected-widget-tiktok_pixel_beacon",
+      "bounding_box": {
+        "x": 800,
+        "y": 320,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-tiktok_pixel_beacon",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 320,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-tiktok_pixel_beacon\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"analytics.tiktok.com\"\u003e\u003cscript role=\"\"\u003e\u003c/script\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

@@ -39,6 +39,11 @@ jobs:
         working-directory: artix-ai
         run: go vet ./pkg/... ./cli/... ./cmd/...
 
+      - name: Install Bubblewrap (Linux OS Sandbox)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+
       - name: Run Unit Tests with Race Detector & Coverage
         working-directory: artix-ai
         run: go test -v -race -cover ./pkg/...

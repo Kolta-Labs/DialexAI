@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -24,6 +25,7 @@ type ShadowWorktree struct {
 	TaskID      string            `json:"taskId"`
 	Branch      string            `json:"branch"`
 	BaseBranch  string            `json:"baseBranch"`
+	BaseCommit  string            `json:"baseCommit"`
 	Path        string            `json:"path"`
 	Checkpoints []RoundCheckpoint `json:"checkpoints"`
 	repoRoot    string
@@ -46,10 +48,18 @@ func NewWorktreeManager(repoRoot string) *WorktreeManager {
 	}
 }
 
-// CreateShadow creates a detached git worktree on a new branch.
+// CreateShadow creates a detached git worktree on a new branch and records the base commit hash.
 func (m *WorktreeManager) CreateShadow(taskID, baseBranch string) (*ShadowWorktree, error) {
 	if baseBranch == "" {
 		baseBranch = "HEAD"
+	}
+
+	// Resolve the exact base commit hash for collision detection
+	baseCommit := ""
+	revCmd := exec.Command("git", "rev-parse", baseBranch)
+	revCmd.Dir = m.repoRoot
+	if out, err := revCmd.Output(); err == nil {
+		baseCommit = strings.TrimSpace(string(out))
 	}
 
 	branchName := fmt.Sprintf("artix/shadow-%s-%d", taskID, time.Now().Unix())
@@ -76,6 +86,7 @@ func (m *WorktreeManager) CreateShadow(taskID, baseBranch string) (*ShadowWorktr
 		TaskID:      taskID,
 		Branch:      branchName,
 		BaseBranch:  baseBranch,
+		BaseCommit:  baseCommit,
 		Path:        targetPath,
 		Checkpoints: make([]RoundCheckpoint, 0),
 		repoRoot:    m.repoRoot,
@@ -106,8 +117,40 @@ func (sw *ShadowWorktree) RecordCheckpoint(round int, feedback string, approved 
 	return &cp, nil
 }
 
-// MergeInto merges the shadow worktree branch into the target branch.
+// MergeInto merges the shadow worktree branch into the target branch, performing pre-merge collision checks.
 func (m *WorktreeManager) MergeInto(sw *ShadowWorktree, targetBranch string, squash bool) (string, error) {
+	if targetBranch == "" {
+		targetBranch = "HEAD"
+	}
+
+	// File-lock coordination to prevent concurrent collision between multiple artix processes
+	lockPath := filepath.Join(m.repoRoot, ".artix", "merge.lock")
+	_ = os.MkdirAll(filepath.Dir(lockPath), 0755)
+	if lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600); err == nil {
+		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX)
+		defer func() {
+			_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+			_ = lockFile.Close()
+		}()
+	}
+
+	// Re-verification: Check if target branch has advanced since worktree was branched
+	if sw.BaseCommit != "" {
+		revCmd := exec.Command("git", "rev-parse", targetBranch)
+		revCmd.Dir = m.repoRoot
+		if currentOut, err := revCmd.Output(); err == nil {
+			currentHead := strings.TrimSpace(string(currentOut))
+			if currentHead != sw.BaseCommit {
+				// Base has advanced; verify if it is an ancestor or divergent
+				ancCmd := exec.Command("git", "merge-base", "--is-ancestor", sw.BaseCommit, currentHead)
+				ancCmd.Dir = m.repoRoot
+				if err := ancCmd.Run(); err != nil {
+					return "", fmt.Errorf("concurrent worktree collision detected: target branch %s has divergent history from base commit %s; rebase required", targetBranch, sw.BaseCommit)
+				}
+			}
+		}
+	}
+
 	args := []string{"merge"}
 	if squash {
 		args = append(args, "--squash")
@@ -123,7 +166,7 @@ func (m *WorktreeManager) MergeInto(sw *ShadowWorktree, targetBranch string, squ
 
 	if squash {
 		commitCmd := exec.Command("git", "commit", "-m", fmt.Sprintf("feat: merge shadow worktree %s", sw.TaskID))
-		cmd.Dir = m.repoRoot
+		commitCmd.Dir = m.repoRoot
 		_ = commitCmd.Run()
 	}
 
@@ -132,6 +175,40 @@ func (m *WorktreeManager) MergeInto(sw *ShadowWorktree, targetBranch string, squ
 	revCmd.Dir = m.repoRoot
 	hashBytes, _ := revCmd.Output()
 	return strings.TrimSpace(string(hashBytes)), nil
+}
+
+// MergeIntoWithVerification merges the shadow branch, executes verifyCmds against the post-merge
+// state, and if any test fails, automatically rolls back the merge and returns a collision error.
+func (m *WorktreeManager) MergeIntoWithVerification(sw *ShadowWorktree, targetBranch string, squash bool, verifyCmds []string, runner func(cmdStr string) error) (string, error) {
+	// Remember pre-merge commit hash for rollback if tests fail
+	revCmd := exec.Command("git", "rev-parse", "HEAD")
+	revCmd.Dir = m.repoRoot
+	preOut, err := revCmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to determine HEAD commit before merge: %w", err)
+	}
+	preCommit := strings.TrimSpace(string(preOut))
+
+	// Perform merge with file-lock coordination and pre-merge collision checks
+	mergedHash, err := m.MergeInto(sw, targetBranch, squash)
+	if err != nil {
+		return "", err
+	}
+
+	// Execute post-merge verification suite
+	if runner != nil && len(verifyCmds) > 0 {
+		for _, cmdStr := range verifyCmds {
+			if vErr := runner(cmdStr); vErr != nil {
+				// Post-merge tests failed: rollback to preCommit
+				resetCmd := exec.Command("git", "reset", "--hard", preCommit)
+				resetCmd.Dir = m.repoRoot
+				_ = resetCmd.Run()
+				return "", fmt.Errorf("post-merge test verification failed for %q: %w (merge rolled back to %s)", cmdStr, vErr, preCommit)
+			}
+		}
+	}
+
+	return mergedHash, nil
 }
 
 // Remove cleans up the shadow worktree and removes its directory.
@@ -145,6 +222,40 @@ func (m *WorktreeManager) Remove(sw *ShadowWorktree) error {
 	pruneCmd := exec.Command("git", "worktree", "prune")
 	pruneCmd.Dir = m.repoRoot
 	return pruneCmd.Run()
+}
+
+// GarbageCollect removes orphaned or stale worktrees older than maxAge.
+func (m *WorktreeManager) GarbageCollect(maxAge time.Duration) (int, error) {
+	entries, err := os.ReadDir(m.worktreeDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("failed to read worktrees directory: %w", err)
+	}
+
+	prunedCount := 0
+	now := time.Now()
+
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		wtPath := filepath.Join(m.worktreeDir, e.Name())
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+
+		if maxAge <= 0 || now.Sub(info.ModTime()) > maxAge {
+			_ = m.runGit("worktree", "remove", "--force", wtPath)
+			_ = os.RemoveAll(wtPath)
+			prunedCount++
+		}
+	}
+
+	_ = m.runGit("worktree", "prune")
+	return prunedCount, nil
 }
 
 func (m *WorktreeManager) runGit(args ...string) error {

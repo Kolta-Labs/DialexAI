@@ -38,6 +38,16 @@ type FileMutation struct {
 	Rationale string `json:"rationale"`
 }
 
+// DeliberationRound captures the structured output and debate transcript of one council round.
+type DeliberationRound struct {
+	Round      int      `json:"round"`
+	Role       string   `json:"role"`
+	PersonaID  string   `json:"personaId"`
+	Topic      string   `json:"topic"`
+	Transcript string   `json:"transcript"`
+	Decisions  []string `json:"decisions,omitempty"`
+}
+
 // StorySpec represents a complete, verified technical specification for a feature or story.
 type StorySpec struct {
 	ID                 string                 `json:"id"`
@@ -50,6 +60,7 @@ type StorySpec struct {
 	FileManifest       []FileMutation         `json:"fileManifest"`
 	TestCommands       []string               `json:"testCommands"`
 	Style              StyleVector            `json:"style"`
+	DeliberationRounds []DeliberationRound    `json:"deliberationRounds,omitempty"`
 	RawMarkdown        string                 `json:"rawMarkdown,omitempty"`
 }
 

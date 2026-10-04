@@ -1,0 +1,50 @@
+{
+  "id": "third_party_18_bazaarvoice_rating_pill",
+  "category": "third_party",
+  "description": "Third-party widget injection from display.ugc.bazaarvoice.com (Bazaarvoice Rating Widget)",
+  "original": {
+    "id": "host-target-bazaarvoice_rating_pill",
+    "test_id": "host-target-bazaarvoice_rating_pill",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 440,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "injected-widget-bazaarvoice_rating_pill",
+      "role": "status",
+      "text": "4.9 Stars (450 Reviews)",
+      "bounding_box": {
+        "x": 800,
+        "y": 440,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-bazaarvoice_rating_pill",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 440,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-bazaarvoice_rating_pill\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"display.ugc.bazaarvoice.com\"\u003e\u003cdiv role=\"status\"\u003e4.9 Stars (450 Reviews)\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

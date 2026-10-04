@@ -1,0 +1,50 @@
+{
+  "id": "third_party_10_yotpo_ugc_gallery",
+  "category": "third_party",
+  "description": "Third-party widget injection from staticw2.yotpo.com (Customer Photo Carousel)",
+  "original": {
+    "id": "host-target-yotpo_ugc_gallery",
+    "test_id": "host-target-yotpo_ugc_gallery",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 280,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "injected-widget-yotpo_ugc_gallery",
+      "role": "region",
+      "text": "Community Photos",
+      "bounding_box": {
+        "x": 800,
+        "y": 280,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-yotpo_ugc_gallery",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 280,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-yotpo_ugc_gallery\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"staticw2.yotpo.com\"\u003e\u003cdiv role=\"region\"\u003eCommunity Photos\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_11_cart_badge_pulse_anim",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on span \"3\"",
+  "original": {
+    "id": "timing-cart_badge_pulse_anim",
+    "test_id": "timing-cart_badge_pulse_anim",
+    "role": "status",
+    "text": "3",
+    "tag": "span",
+    "bbox": {
+      "x": 150,
+      "y": 350,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "span",
+      "id": "timing-resolved-cart_badge_pulse_anim",
+      "role": "status",
+      "text": "3",
+      "bounding_box": {
+        "x": 150,
+        "y": 350,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003cspan id=\"timing-resolved-cart_badge_pulse_anim\" class=\"animated fadeIn\"\u003e3\u003c/span\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

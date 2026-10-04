@@ -313,3 +313,60 @@ func TestRemoteWorker_Execute_LocalSimulated(t *testing.T) {
 		t.Errorf("expected branch name to be set")
 	}
 }
+
+func TestWebhookServer_ConcurrencyAndQueueCap(t *testing.T) {
+	cfg := WebhookServerConfig{
+		DefaultDomain:     "backend_engineer",
+		MaxConcurrentJobs: 1,
+		MaxQueuedJobs:     1,
+		// Worker is nil so jobs stay in queued status
+	}
+	server := NewWebhookServer(cfg)
+	handler := server.Handler()
+
+	sendIssueWebhook := func() *httptest.ResponseRecorder {
+		payload := []byte(`{
+			"action": "opened",
+			"issue": {
+				"title": "Fix memory leak",
+				"body": "Profile traces show unbounded slice growth"
+			},
+			"repository": {
+				"clone_url": "https://github.com/myorg/myrepo.git",
+				"name": "myrepo",
+				"owner": {"login": "myorg"},
+				"default_branch": "main"
+			}
+		}`)
+		req := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(payload))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-GitHub-Event", "issues")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// 1st request: capacity 2 -> 1 accepted
+	rec1 := sendIssueWebhook()
+	if rec1.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 Accepted on job 1, got %d: %s", rec1.Code, rec1.Body.String())
+	}
+
+	// 2nd request: capacity 2 -> 2 accepted
+	rec2 := sendIssueWebhook()
+	if rec2.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 Accepted on job 2, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+
+	// 3rd request: capacity 2 exceeded -> 429 Too Many Requests
+	rec3 := sendIssueWebhook()
+	if rec3.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 Too Many Requests on job 3 exceeding limit, got %d: %s", rec3.Code, rec3.Body.String())
+	}
+
+	var errBody map[string]string
+	if err := json.Unmarshal(rec3.Body.Bytes(), &errBody); err != nil || errBody["status"] != "rate_limited" {
+		t.Errorf("expected rate_limited status in 429 response, got: %s", rec3.Body.String())
+	}
+}
+

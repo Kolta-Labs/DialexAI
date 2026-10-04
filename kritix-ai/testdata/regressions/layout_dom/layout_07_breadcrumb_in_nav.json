@@ -1,0 +1,37 @@
+{
+  "id": "layout_07_breadcrumb_in_nav",
+  "category": "layout_dom",
+  "description": "Layout refactor moving ol element \"Home / Electronics / Audio\"",
+  "original": {
+    "id": "orig-breadcrumb_in_nav",
+    "test_id": "orig-breadcrumb_in_nav",
+    "role": "list",
+    "text": "Home / Electronics / Audio",
+    "tag": "ol",
+    "bbox": {
+      "x": 50,
+      "y": 80,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "ol",
+      "id": "refactored-breadcrumb_in_nav",
+      "role": "list",
+      "text": "Home / Electronics / Audio",
+      "bounding_box": {
+        "x": 50,
+        "y": 85,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003col id=\"refactored-breadcrumb_in_nav\" role=\"list\"\u003eHome / Electronics / Audio\u003c/ol\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

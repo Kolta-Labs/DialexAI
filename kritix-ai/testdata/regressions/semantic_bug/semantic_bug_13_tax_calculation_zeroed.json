@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_13_tax_calculation_zeroed",
+  "category": "semantic_bug",
+  "description": "Tax calculation omitted resulting in tax evasion compliance flaw",
+  "original": {
+    "id": "orig-sem-tax_calculation_zeroed",
+    "test_id": "orig-sem-tax_calculation_zeroed",
+    "role": "status",
+    "text": "Tax: $8.50",
+    "tag": "span",
+    "bbox": {
+      "x": 100,
+      "y": 440,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "span",
+      "id": "buggy-tax_calculation_zeroed",
+      "role": "status",
+      "text": "Tax: $0.00",
+      "bounding_box": {
+        "x": 100,
+        "y": 440,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003eTax: $0.00\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_12_quantity_inc_btn",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on button element \"+\"",
+  "original": {
+    "id": "qty-inc",
+    "test_id": "qty-inc",
+    "role": "button",
+    "text": "+",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 430,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "qty-add-btn",
+      "classes": [
+        "qty-btn-increment"
+      ],
+      "role": "button",
+      "text": "+",
+      "bounding_box": {
+        "x": 102,
+        "y": 430,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003cbutton id=\"qty-add-btn\" class=\"qty-btn-increment\"\u003e+\u003c/button\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

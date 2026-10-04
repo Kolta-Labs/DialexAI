@@ -1,0 +1,37 @@
+{
+  "id": "layout_16_sticky_cta_bar",
+  "category": "layout_dom",
+  "description": "Layout refactor moving button element \"Add to Cart - $29.00\"",
+  "original": {
+    "id": "orig-sticky_cta_bar",
+    "test_id": "orig-sticky_cta_bar",
+    "role": "button",
+    "text": "Add to Cart - $29.00",
+    "tag": "button",
+    "bbox": {
+      "x": 300,
+      "y": 900,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "refactored-sticky_cta_bar",
+      "role": "button",
+      "text": "Add to Cart - $29.00",
+      "bounding_box": {
+        "x": 300,
+        "y": 910,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003cbutton id=\"refactored-sticky_cta_bar\" role=\"button\"\u003eAdd to Cart - $29.00\u003c/button\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

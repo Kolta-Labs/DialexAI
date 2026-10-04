@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,17 +18,20 @@ import (
 
 // WebhookServerConfig defines configuration for the webhook daemon.
 type WebhookServerConfig struct {
-	ListenAddr    string
-	GitHubSecret  string
-	GitLabToken   string
-	DefaultDomain string
-	Worker        *RemoteWorker
+	ListenAddr        string
+	GitHubSecret      string
+	GitLabToken       string
+	DefaultDomain     string
+	Worker            *RemoteWorker
+	MaxConcurrentJobs int
+	MaxQueuedJobs     int
 }
 
 // JobStatus tracks the state of an asynchronous worker run.
 type JobStatus struct {
 	ID        string              `json:"id"`
 	Source    string              `json:"source"`
+	Tenant    string              `json:"tenant"`
 	Status    string              `json:"status"` // "queued", "running", "completed", "failed"
 	CreatedAt time.Time           `json:"createdAt"`
 	Result    *RemoteWorkerResult `json:"result,omitempty"`
@@ -38,6 +43,7 @@ type WebhookServer struct {
 	cfg    WebhookServerConfig
 	jobs   map[string]*JobStatus
 	jobsMu sync.RWMutex
+	sem    chan struct{}
 }
 
 // NewWebhookServer creates a new webhook server.
@@ -45,9 +51,31 @@ func NewWebhookServer(cfg WebhookServerConfig) *WebhookServer {
 	if cfg.DefaultDomain == "" {
 		cfg.DefaultDomain = "backend_engineer"
 	}
+	if cfg.MaxConcurrentJobs <= 0 {
+		if envVal := os.Getenv("ARTIX_MAX_CONCURRENT_JOBS"); envVal != "" {
+			if n, err := strconv.Atoi(envVal); err == nil && n > 0 {
+				cfg.MaxConcurrentJobs = n
+			}
+		}
+		if cfg.MaxConcurrentJobs <= 0 {
+			cfg.MaxConcurrentJobs = 4
+		}
+	}
+	if cfg.MaxQueuedJobs <= 0 {
+		if envVal := os.Getenv("ARTIX_MAX_QUEUED_JOBS"); envVal != "" {
+			if n, err := strconv.Atoi(envVal); err == nil && n > 0 {
+				cfg.MaxQueuedJobs = n
+			}
+		}
+		if cfg.MaxQueuedJobs <= 0 {
+			cfg.MaxQueuedJobs = 16
+		}
+	}
+
 	return &WebhookServer{
 		cfg:  cfg,
 		jobs: make(map[string]*JobStatus),
+		sem:  make(chan struct{}, cfg.MaxConcurrentJobs),
 	}
 }
 
@@ -122,6 +150,16 @@ func (s *WebhookServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	if !s.canAcceptJob() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error":  "concurrency cap or queue limit exceeded",
+			"status": "rate_limited",
+		})
+		return
+	}
+
 	jobID := fmt.Sprintf("gh-%d", time.Now().UnixNano())
 	target := RemoteRepoTarget{
 		CloneURL: event.Repository.CloneURL,
@@ -139,7 +177,7 @@ func (s *WebhookServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Reque
 		Domain: s.cfg.DefaultDomain,
 	}
 
-	s.startJob(jobID, "github", task)
+	s.startJob(jobID, "github", target.Owner, task)
 
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]string{
@@ -193,6 +231,16 @@ func (s *WebhookServer) handleGitLabWebhook(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	if !s.canAcceptJob() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error":  "concurrency cap or queue limit exceeded",
+			"status": "rate_limited",
+		})
+		return
+	}
+
 	parts := strings.Split(event.Project.PathWithNamespace, "/")
 	owner := ""
 	repo := ""
@@ -218,7 +266,7 @@ func (s *WebhookServer) handleGitLabWebhook(w http.ResponseWriter, r *http.Reque
 		Domain: s.cfg.DefaultDomain,
 	}
 
-	s.startJob(jobID, "gitlab", task)
+	s.startJob(jobID, "gitlab", owner, task)
 
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]string{
@@ -227,18 +275,44 @@ func (s *WebhookServer) handleGitLabWebhook(w http.ResponseWriter, r *http.Reque
 	})
 }
 
+func (s *WebhookServer) canAcceptJob() bool {
+	s.jobsMu.RLock()
+	defer s.jobsMu.RUnlock()
+	activeOrQueued := 0
+	for _, j := range s.jobs {
+		if j.Status == "queued" || j.Status == "running" {
+			activeOrQueued++
+		}
+	}
+	limit := s.cfg.MaxConcurrentJobs + s.cfg.MaxQueuedJobs
+	return activeOrQueued < limit
+}
+
 func (s *WebhookServer) handleJobs(w http.ResponseWriter, r *http.Request) {
 	s.jobsMu.RLock()
 	defer s.jobsMu.RUnlock()
 
+	tenantQuery := r.URL.Query().Get("tenant")
+	if tenantHeader := r.Header.Get("X-Artix-Tenant"); tenantHeader != "" && tenantQuery == "" {
+		tenantQuery = tenantHeader
+	}
+
+	filtered := make(map[string]*JobStatus)
+	for id, job := range s.jobs {
+		if tenantQuery == "" || job.Tenant == tenantQuery {
+			filtered[id] = job
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(s.jobs)
+	_ = json.NewEncoder(w).Encode(filtered)
 }
 
-func (s *WebhookServer) startJob(id, source string, task *RemoteWorkerTask) {
+func (s *WebhookServer) startJob(id, source, tenant string, task *RemoteWorkerTask) {
 	status := &JobStatus{
 		ID:        id,
 		Source:    source,
+		Tenant:    tenant,
 		Status:    "queued",
 		CreatedAt: time.Now(),
 	}
@@ -252,6 +326,10 @@ func (s *WebhookServer) startJob(id, source string, task *RemoteWorkerTask) {
 	}
 
 	go func() {
+		// Acquire concurrency slot
+		s.sem <- struct{}{}
+		defer func() { <-s.sem }()
+
 		s.jobsMu.Lock()
 		status.Status = "running"
 		s.jobsMu.Unlock()

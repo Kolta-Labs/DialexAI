@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_19_address_zip_truncated",
+  "category": "semantic_bug",
+  "description": "Zip code field mutated to unfillable static text",
+  "original": {
+    "id": "orig-sem-address_zip_truncated",
+    "test_id": "orig-sem-address_zip_truncated",
+    "role": "textbox",
+    "text": "Postal Code",
+    "tag": "input",
+    "bbox": {
+      "x": 100,
+      "y": 560,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "span",
+      "id": "buggy-address_zip_truncated",
+      "role": "status",
+      "text": "Postal Code Error",
+      "bounding_box": {
+        "x": 100,
+        "y": 560,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003ePostal Code Error\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

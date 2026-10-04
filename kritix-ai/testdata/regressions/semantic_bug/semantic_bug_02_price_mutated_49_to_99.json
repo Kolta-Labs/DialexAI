@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_02_price_mutated_49_to_99",
+  "category": "semantic_bug",
+  "description": "Price escalated from $49.99 to $99.99 without user action",
+  "original": {
+    "id": "orig-sem-price_mutated_49_to_99",
+    "test_id": "orig-sem-price_mutated_49_to_99",
+    "role": "status",
+    "text": "$49.99",
+    "tag": "span",
+    "bbox": {
+      "x": 100,
+      "y": 220,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "span",
+      "id": "buggy-price_mutated_49_to_99",
+      "role": "status",
+      "text": "$99.99",
+      "bounding_box": {
+        "x": 100,
+        "y": 220,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003e$99.99\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

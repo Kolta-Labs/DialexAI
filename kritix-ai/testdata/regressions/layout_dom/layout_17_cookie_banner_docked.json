@@ -1,0 +1,37 @@
+{
+  "id": "layout_17_cookie_banner_docked",
+  "category": "layout_dom",
+  "description": "Layout refactor moving div element \"Cookie Preferences\"",
+  "original": {
+    "id": "orig-cookie_banner_docked",
+    "test_id": "orig-cookie_banner_docked",
+    "role": "dialog",
+    "text": "Cookie Preferences",
+    "tag": "div",
+    "bbox": {
+      "x": 0,
+      "y": 950,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "refactored-cookie_banner_docked",
+      "role": "dialog",
+      "text": "Cookie Preferences",
+      "bounding_box": {
+        "x": 0,
+        "y": 950,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003cdiv id=\"refactored-cookie_banner_docked\" role=\"dialog\"\u003eCookie Preferences\u003c/div\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

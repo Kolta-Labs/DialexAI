@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_20_modal_close_btn",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on button element \"Close\"",
+  "original": {
+    "id": "modal-close",
+    "test_id": "modal-close",
+    "role": "button",
+    "text": "Close",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 670,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "dialog-close-btn",
+      "classes": [
+        "modal-dismiss-btn"
+      ],
+      "role": "button",
+      "text": "Close",
+      "bounding_box": {
+        "x": 102,
+        "y": 670,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003cbutton id=\"dialog-close-btn\" class=\"modal-dismiss-btn\"\u003eClose\u003c/button\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

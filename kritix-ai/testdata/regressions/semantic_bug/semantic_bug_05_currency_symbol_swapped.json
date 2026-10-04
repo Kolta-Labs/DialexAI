@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_05_currency_symbol_swapped",
+  "category": "semantic_bug",
+  "description": "Currency swapped from USD to EUR with no exchange conversion",
+  "original": {
+    "id": "orig-sem-currency_symbol_swapped",
+    "test_id": "orig-sem-currency_symbol_swapped",
+    "role": "status",
+    "text": "$150.00",
+    "tag": "span",
+    "bbox": {
+      "x": 100,
+      "y": 280,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "span",
+      "id": "buggy-currency_symbol_swapped",
+      "role": "status",
+      "text": "€150.00",
+      "bounding_box": {
+        "x": 100,
+        "y": 280,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003e€150.00\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

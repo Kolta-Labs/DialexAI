@@ -1,0 +1,50 @@
+{
+  "id": "third_party_05_hotjar_survey_modal",
+  "category": "third_party",
+  "description": "Third-party widget injection from static.hotjar.com (User Feedback Survey)",
+  "original": {
+    "id": "host-target-hotjar_survey_modal",
+    "test_id": "host-target-hotjar_survey_modal",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 180,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "injected-widget-hotjar_survey_modal",
+      "role": "dialog",
+      "text": "How would you rate your experience?",
+      "bounding_box": {
+        "x": 800,
+        "y": 180,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-hotjar_survey_modal",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 180,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-hotjar_survey_modal\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"static.hotjar.com\"\u003e\u003cdiv role=\"dialog\"\u003eHow would you rate your experience?\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

@@ -1,0 +1,37 @@
+{
+  "id": "layout_19_mega_menu_container",
+  "category": "layout_dom",
+  "description": "Layout refactor moving div element \"Department Catalog\"",
+  "original": {
+    "id": "orig-mega_menu_container",
+    "test_id": "orig-mega_menu_container",
+    "role": "menu",
+    "text": "Department Catalog",
+    "tag": "div",
+    "bbox": {
+      "x": 100,
+      "y": 50,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "refactored-mega_menu_container",
+      "role": "menu",
+      "text": "Department Catalog",
+      "bounding_box": {
+        "x": 100,
+        "y": 55,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003cdiv id=\"refactored-mega_menu_container\" role=\"menu\"\u003eDepartment Catalog\u003c/div\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

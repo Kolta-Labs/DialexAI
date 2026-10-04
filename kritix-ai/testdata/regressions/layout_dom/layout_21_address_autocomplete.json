@@ -1,0 +1,37 @@
+{
+  "id": "layout_21_address_autocomplete",
+  "category": "layout_dom",
+  "description": "Layout refactor moving input element \"Enter street address\"",
+  "original": {
+    "id": "orig-address_autocomplete",
+    "test_id": "orig-address_autocomplete",
+    "role": "combobox",
+    "text": "Enter street address",
+    "tag": "input",
+    "bbox": {
+      "x": 100,
+      "y": 350,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "input",
+      "id": "refactored-address_autocomplete",
+      "role": "combobox",
+      "text": "Enter street address",
+      "bounding_box": {
+        "x": 105,
+        "y": 355,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003cinput id=\"refactored-address_autocomplete\" role=\"combobox\"\u003eEnter street address\u003c/input\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_09_coupon_apply_btn",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on button element \"Apply Coupon\"",
+  "original": {
+    "id": "apply-promo",
+    "test_id": "apply-promo",
+    "role": "button",
+    "text": "Apply Coupon",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 340,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "promo-btn",
+      "classes": [
+        "btn-promo-apply"
+      ],
+      "role": "button",
+      "text": "Apply Coupon",
+      "bounding_box": {
+        "x": 102,
+        "y": 340,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003cbutton id=\"promo-btn\" class=\"btn-promo-apply\"\u003eApply Coupon\u003c/button\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

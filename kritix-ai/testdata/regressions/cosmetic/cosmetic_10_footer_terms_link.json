@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_10_footer_terms_link",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on a element \"Terms of Service\"",
+  "original": {
+    "id": "link-terms",
+    "test_id": "link-terms",
+    "role": "link",
+    "text": "Terms of Service",
+    "tag": "a",
+    "bbox": {
+      "x": 100,
+      "y": 370,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "a",
+      "id": "legal-terms",
+      "classes": [
+        "footer-legal-link"
+      ],
+      "role": "link",
+      "text": "Terms of Service",
+      "bounding_box": {
+        "x": 102,
+        "y": 370,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003ca id=\"legal-terms\" class=\"footer-legal-link\"\u003eTerms of Service\u003c/a\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

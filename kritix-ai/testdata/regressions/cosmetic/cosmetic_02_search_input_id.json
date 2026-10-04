@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_02_search_input_id",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on input element \"Search\"",
+  "original": {
+    "id": "q",
+    "test_id": "q",
+    "role": "textbox",
+    "text": "Search",
+    "tag": "input",
+    "bbox": {
+      "x": 100,
+      "y": 130,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "input",
+      "id": "query-input",
+      "classes": [
+        "search-box-field"
+      ],
+      "role": "textbox",
+      "text": "Search",
+      "bounding_box": {
+        "x": 102,
+        "y": 130,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003cinput id=\"query-input\" class=\"search-box-field\"\u003eSearch\u003c/input\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

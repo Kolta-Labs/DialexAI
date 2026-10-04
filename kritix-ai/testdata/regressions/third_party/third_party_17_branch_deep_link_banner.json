@@ -1,0 +1,50 @@
+{
+  "id": "third_party_17_branch_deep_link_banner",
+  "category": "third_party",
+  "description": "Third-party widget injection from app.link (Mobile App Smart Banner)",
+  "original": {
+    "id": "host-target-branch_deep_link_banner",
+    "test_id": "host-target-branch_deep_link_banner",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 420,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "injected-widget-branch_deep_link_banner",
+      "role": "banner",
+      "text": "Open in Enterprise App",
+      "bounding_box": {
+        "x": 800,
+        "y": 420,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-branch_deep_link_banner",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 420,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-branch_deep_link_banner\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"app.link\"\u003e\u003cdiv role=\"banner\"\u003eOpen in Enterprise App\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

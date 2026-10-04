@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_05_submit_btn_rename",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on button element \"Submit Order\"",
+  "original": {
+    "id": "submit-order",
+    "test_id": "submit-order",
+    "role": "button",
+    "text": "Submit Order",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 220,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "order-submit-btn",
+      "classes": [
+        "btn-submit-order"
+      ],
+      "role": "button",
+      "text": "Submit Order",
+      "bounding_box": {
+        "x": 102,
+        "y": 220,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003cbutton id=\"order-submit-btn\" class=\"btn-submit-order\"\u003eSubmit Order\u003c/button\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_12_discount_code_negated",
+  "category": "semantic_bug",
+  "description": "Discount code applied negative balance to customer card",
+  "original": {
+    "id": "orig-sem-discount_code_negated",
+    "test_id": "orig-sem-discount_code_negated",
+    "role": "status",
+    "text": "-$20.00",
+    "tag": "span",
+    "bbox": {
+      "x": 100,
+      "y": 420,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "span",
+      "id": "buggy-discount_code_negated",
+      "role": "status",
+      "text": "+$20.00",
+      "bounding_box": {
+        "x": 100,
+        "y": 420,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003e+$20.00\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

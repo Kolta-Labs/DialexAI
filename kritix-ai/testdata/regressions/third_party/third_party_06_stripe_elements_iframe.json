@@ -1,0 +1,50 @@
+{
+  "id": "third_party_06_stripe_elements_iframe",
+  "category": "third_party",
+  "description": "Third-party widget injection from js.stripe.com (PCI-DSS Payment Input)",
+  "original": {
+    "id": "host-target-stripe_elements_iframe",
+    "test_id": "host-target-stripe_elements_iframe",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 200,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "iframe",
+      "id": "injected-widget-stripe_elements_iframe",
+      "role": "region",
+      "text": "Card details entry frame",
+      "bounding_box": {
+        "x": 800,
+        "y": 200,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-stripe_elements_iframe",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 200,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-stripe_elements_iframe\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"js.stripe.com\"\u003e\u003ciframe role=\"region\"\u003eCard details entry frame\u003c/iframe\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

@@ -1,0 +1,37 @@
+{
+  "id": "layout_14_accordion_faq_section",
+  "category": "layout_dom",
+  "description": "Layout refactor moving div element \"Return Policy FAQs\"",
+  "original": {
+    "id": "orig-accordion_faq_section",
+    "test_id": "orig-accordion_faq_section",
+    "role": "region",
+    "text": "Return Policy FAQs",
+    "tag": "div",
+    "bbox": {
+      "x": 100,
+      "y": 600,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "refactored-accordion_faq_section",
+      "role": "region",
+      "text": "Return Policy FAQs",
+      "bounding_box": {
+        "x": 110,
+        "y": 620,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003cdiv id=\"refactored-accordion_faq_section\" role=\"region\"\u003eReturn Policy FAQs\u003c/div\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

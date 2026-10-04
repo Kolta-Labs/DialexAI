@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_07_login_submit_class",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on button element \"Sign In\"",
+  "original": {
+    "id": "btn-login",
+    "test_id": "btn-login",
+    "role": "button",
+    "text": "Sign In",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 280,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "btn-login-auth",
+      "classes": [
+        "auth-submit-button"
+      ],
+      "role": "button",
+      "text": "Sign In",
+      "bounding_box": {
+        "x": 102,
+        "y": 280,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003cbutton id=\"btn-login-auth\" class=\"auth-submit-button\"\u003eSign In\u003c/button\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

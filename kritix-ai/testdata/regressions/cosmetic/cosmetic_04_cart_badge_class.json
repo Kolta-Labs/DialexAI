@@ -1,0 +1,40 @@
+{
+  "id": "cosmetic_04_cart_badge_class",
+  "category": "cosmetic",
+  "description": "Cosmetic class and ID mutation on span element \"Cart (3)\"",
+  "original": {
+    "id": "cart-count",
+    "test_id": "cart-count",
+    "role": "status",
+    "text": "Cart (3)",
+    "tag": "span",
+    "bbox": {
+      "x": 100,
+      "y": 190,
+      "width": 120,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "span",
+      "id": "cart-count",
+      "classes": [
+        "badge--pill"
+      ],
+      "role": "status",
+      "text": "Cart (3)",
+      "bounding_box": {
+        "x": 102,
+        "y": 190,
+        "width": 120,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"container\"\u003e\u003cspan id=\"cart-count\" class=\"badge--pill\"\u003eCart (3)\u003c/span\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

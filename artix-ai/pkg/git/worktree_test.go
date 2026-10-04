@@ -1,6 +1,7 @@
 package git
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -92,3 +93,109 @@ func TestWorktreeManager_Lifecycle(t *testing.T) {
 		t.Errorf("expected shadow path to be deleted")
 	}
 }
+
+func TestWorktreeManager_GarbageCollect(t *testing.T) {
+	tempRepo := t.TempDir()
+
+	runCmd := func(dir string, name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("cmd %s %v failed: %v\nOutput: %s", name, args, err, string(out))
+		}
+	}
+
+	runCmd(tempRepo, "git", "init", "-b", "main")
+	runCmd(tempRepo, "git", "config", "user.name", "Test Admin")
+	runCmd(tempRepo, "git", "config", "user.email", "admin@test.local")
+	_ = os.WriteFile(filepath.Join(tempRepo, "README.md"), []byte("# Root\n"), 0644)
+	runCmd(tempRepo, "git", "add", ".")
+	runCmd(tempRepo, "git", "commit", "-m", "initial commit")
+
+	mgr := NewWorktreeManager(tempRepo)
+
+	// Create 2 worktrees
+	sw1, err := mgr.CreateShadow("task-old-01", "main")
+	if err != nil {
+		t.Fatalf("failed to create sw1: %v", err)
+	}
+	sw2, err := mgr.CreateShadow("task-old-02", "main")
+	if err != nil {
+		t.Fatalf("failed to create sw2: %v", err)
+	}
+
+	// GC with 0 duration should prune all worktrees
+	pruned, err := mgr.GarbageCollect(0)
+	if err != nil {
+		t.Fatalf("GarbageCollect failed: %v", err)
+	}
+	if pruned != 2 {
+		t.Errorf("expected 2 pruned worktrees, got %d", pruned)
+	}
+
+	if _, err := os.Stat(sw1.Path); !os.IsNotExist(err) {
+		t.Errorf("expected sw1 to be removed")
+	}
+	if _, err := os.Stat(sw2.Path); !os.IsNotExist(err) {
+		t.Errorf("expected sw2 to be removed")
+	}
+}
+
+func TestWorktreeManager_MergeWithVerificationRollback(t *testing.T) {
+	tempRepo := t.TempDir()
+
+	runCmd := func(dir string, name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("cmd %s %v failed: %v\nOutput: %s", name, args, err, string(out))
+		}
+	}
+
+	runCmd(tempRepo, "git", "init", "-b", "main")
+	runCmd(tempRepo, "git", "config", "user.name", "Test Admin")
+	runCmd(tempRepo, "git", "config", "user.email", "admin@test.local")
+	_ = os.WriteFile(filepath.Join(tempRepo, "README.md"), []byte("# Root\n"), 0644)
+	runCmd(tempRepo, "git", "add", ".")
+	runCmd(tempRepo, "git", "commit", "-m", "initial commit")
+
+	revCmd := exec.Command("git", "rev-parse", "HEAD")
+	revCmd.Dir = tempRepo
+	initialOut, _ := revCmd.Output()
+	initialCommit := strings.TrimSpace(string(initialOut))
+
+	mgr := NewWorktreeManager(tempRepo)
+	sw, err := mgr.CreateShadow("task-verify-01", "main")
+	if err != nil {
+		t.Fatalf("CreateShadow failed: %v", err)
+	}
+
+	_ = os.WriteFile(filepath.Join(sw.Path, "broken.txt"), []byte("this breaks tests\n"), 0644)
+	_, _ = sw.RecordCheckpoint(1, "added broken file", true)
+
+	// Attempt merge with a failing test verification command
+	failingRunner := func(cmdStr string) error {
+		return fmt.Errorf("test suite failed: synthetic test failure")
+	}
+
+	_, err = mgr.MergeIntoWithVerification(sw, "main", true, []string{"fake-test"}, failingRunner)
+	if err == nil {
+		t.Fatal("expected MergeIntoWithVerification to fail when verification fails")
+	}
+
+	// Verify rollback happened: HEAD must be restored to initialCommit
+	revCmd2 := exec.Command("git", "rev-parse", "HEAD")
+	revCmd2.Dir = tempRepo
+	postOut, _ := revCmd2.Output()
+	postCommit := strings.TrimSpace(string(postOut))
+
+	if postCommit != initialCommit {
+		t.Fatalf("expected rollback to %s, but HEAD is at %s", initialCommit, postCommit)
+	}
+
+	// Verify broken.txt does NOT exist in main repo
+	if _, err := os.Stat(filepath.Join(tempRepo, "broken.txt")); !os.IsNotExist(err) {
+		t.Fatal("broken.txt should not exist in working directory after rollback")
+	}
+}
+

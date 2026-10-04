@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kritix AI — Autonomous Testing Studio</title>
+  <link rel="stylesheet" href="app.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">⚡</div>
+        <div class="brand-text">
+          <span class="brand-title">Kritix AI</span>
+          <span class="brand-subtitle">Testing Studio</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="runner">
+          <span class="nav-icon">🚀</span>
+          <span>Quick Runner</span>
+        </button>
+        <button class="nav-item" data-tab="studio">
+          <span class="nav-icon">🎥</span>
+          <span>Teach Agent</span>
+        </button>
+        <button class="nav-item" data-tab="security">
+          <span class="nav-icon">🛡️</span>
+          <span>Security & Perf</span>
+        </button>
+        <button class="nav-item" data-tab="triage">
+          <span class="nav-icon">🐞</span>
+          <span>Triage & Repro</span>
+        </button>
+        <button class="nav-item" data-tab="roi">
+          <span class="nav-icon">💰</span>
+          <span>Token ROI</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="connection-status">
+          <span class="status-dot live"></span>
+          <span class="status-label" id="connection-status-text">Studio Engine Ready</span>
+        </div>
+        <div class="engine-version">v0.3.0 Enterprise Engine</div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div class="topbar-search">
+          <span class="target-badge">TARGET URL</span>
+          <input type="text" id="global-target-url" value="http://localhost:3000" placeholder="e.g. http://localhost:3000 or staging URL">
+        </div>
+        <div class="topbar-actions">
+          <div class="preset-pills">
+            <button class="pill-btn" onclick="setTarget('http://localhost:3000')">:3000</button>
+            <button class="pill-btn" onclick="setTarget('http://localhost:8080')">:8080</button>
+            <button class="pill-btn" onclick="setTarget('https://staging.app.internal')">Staging</button>
+          </div>
+          <button class="primary-btn" id="run-primary-btn" onclick="executeQuickRun()">
+            <span>▶ Run Autonomous Test</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- View Containers -->
+      <div class="view-container">
+        <!-- TAB 1: RUNNER -->
+        <section id="tab-runner" class="tab-pane active">
+          <div class="section-header">
+            <div>
+              <h2>Autonomous Test Runner</h2>
+              <p class="section-desc">Execute deterministic DOM-pruned exploratory testing, prebuilt blueprints, or PR gates.</p>
+            </div>
+          </div>
+
+          <!-- Blueprint Selector Cards -->
+          <div class="blueprint-grid">
+            <div class="blueprint-card active" data-blueprint="pr-smoke-guard">
+              <div class="card-badge tier1">Tier 1 · PR Gate</div>
+              <h3>PR Smoke Guard</h3>
+              <p>Critical path smoke test with zero unhandled exceptions and fast pass/fail SLA.</p>
+            </div>
+            <div class="blueprint-card" data-blueprint="exploratory">
+              <div class="card-badge tier1">Vision Explorer</div>
+              <h3>Autonomous Explorer</h3>
+              <p>Intelligently crawls interactive elements, buttons, and form boundaries.</p>
+            </div>
+            <div class="blueprint-card" data-blueprint="api-contract-fuzzer">
+              <div class="card-badge tier2">Tier 2 · Merge</div>
+              <h3>API Contract Fuzzer</h3>
+              <p>Boundary fuzzing, mutation injection, and OpenAPI schema conformance validation.</p>
+            </div>
+            <div class="blueprint-card" data-blueprint="nightly-deep-audit">
+              <div class="card-badge tier3">Tier 3 · Nightly</div>
+              <h3>Nightly Deep Audit</h3>
+              <p>End-to-end multi-journey testing with OWASP Top 10 fuzzing and k6 performance SLA.</p>
+            </div>
+          </div>
+
+          <!-- Live Split Area -->
+          <div class="split-view">
+            <!-- Left: Execution Pipeline State -->
+            <div class="panel pipeline-panel">
+              <div class="panel-header">
+                <h3>Pipeline Execution Steps</h3>
+                <span class="badge" id="execution-status-badge">Idle</span>
+              </div>
+              <div class="node-list" id="pipeline-nodes">
+                <div class="empty-state">
+                  <div class="empty-icon">⚡</div>
+                  <p>Click <strong>"Run Autonomous Test"</strong> to begin execution on your target application.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Real-time Telemetry Terminal -->
+            <div class="panel terminal-panel">
+              <div class="panel-header">
+                <h3>Live Telemetry Stream (SSE)</h3>
+                <button class="text-btn" onclick="clearTerminal()">Clear</button>
+              </div>
+              <div class="terminal-body" id="telemetry-terminal">
+                <div class="term-line info">[System] Kritix AI Studio daemon initialized on localhost:9090</div>
+                <div class="term-line info">[System] CDP Chrome DevTools Protocol virtual driver connected.</div>
+                <div class="term-line info">[System] Ready to test web & mobile web applications.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 2: TEACH AGENT STUDIO -->
+        <section id="tab-studio" class="tab-pane">
+          <div class="section-header">
+            <div>
+              <h2>"Teach the Agent" Studio</h2>
+              <p class="section-desc">Record human demonstrations with mandatory intent, and automatically synthesize BDD Gherkin & Playwright specs.</p>
+            </div>
+            <button class="primary-btn" onclick="synthesizeStudioSession()">
+              <span>✨ Synthesize Test Specs</span>
+            </button>
+          </div>
+
+          <div class="split-view">
+            <!-- Left: Step Input Form & Action Feed -->
+            <div class="panel form-panel">
+              <div class="panel-header">
+                <h3>Record Interaction</h3>
+              </div>
+              <form id="record-action-form" onsubmit="handleRecordAction(event)">
+                <div class="form-group">
+                  <label>Action Type</label>
+                  <select id="action-type" class="form-select">
+                    <option value="click">Click Element</option>
+                    <option value="type_key">Type Text / Input</option>
+                    <option value="assert">Assert State</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Target Identifier / Text</label>
+                  <input type="text" id="action-target" class="form-input" placeholder="e.g. #login-btn, 'Sign In', or input[name=email]" required>
+                </div>
+                <div class="form-group" id="input-val-group">
+                  <label>Input Value (if typing)</label>
+                  <input type="text" id="action-value" class="form-input" placeholder="e.g. user@example.com">
+                </div>
+                <div class="form-group">
+                  <label>Step Business Intent</label>
+                  <input type="text" id="action-intent" class="form-input" placeholder="e.g. User submits credentials to initiate authentication" required>
+                </div>
+                <div class="form-group">
+                  <label>Expected Outcome / Invariant</label>
+                  <input type="text" id="action-outcome" class="form-input" placeholder="e.g. Dashboard view renders without 500 error">
+                </div>
+                <button type="submit" class="secondary-btn">+ Record Step</button>
+              </form>
+
+              <div class="recorded-timeline" id="recorded-actions-list">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+
+            <!-- Right: Synthesized Playwright & Gherkin View -->
+            <div class="panel code-panel">
+              <div class="panel-header">
+                <h3>Synthesized Output (Playwright & Gherkin)</h3>
+                <button class="text-btn" onclick="copyPlaywrightCode()">📋 Copy Playwright Spec</button>
+              </div>
+              <div class="code-container">
+                <pre><code id="synthesized-code">// Synthesized code will appear here after clicking 'Synthesize Test Specs'
+// Zero proprietary lock-in: outputs standard Playwright TypeScript.</code></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 3: SECURITY & PERF -->
+        <section id="tab-security" class="tab-pane">
+          <div class="section-header">
+            <div>
+              <h2>OWASP Top 10 DAST & Performance SLAs</h2>
+              <p class="section-desc">Automated vulnerability fuzzing and k6 performance script generation with zero test coding.</p>
+            </div>
+            <div class="action-buttons">
+              <button class="secondary-btn" onclick="runSecurityFuzz()">🛡️ Run OWASP Fuzz</button>
+              <button class="primary-btn" onclick="runPerfTest()">🚀 Run k6 Perf Scenario</button>
+            </div>
+          </div>
+
+          <div class="split-view">
+            <!-- Left: Security Findings -->
+            <div class="panel">
+              <div class="panel-header">
+                <h3>DAST Security Audit Results</h3>
+                <span class="badge success" id="security-badge">Ready</span>
+              </div>
+              <div class="findings-list" id="security-findings">
+                <div class="finding-item safe">
+                  <div class="finding-title">✓ SQL Injection Fuzzing</div>
+                  <div class="finding-desc">Tested synthetic SQLi strings against URL parameters. No database exceptions or raw stack traces exposed.</div>
+                </div>
+                <div class="finding-item safe">
+                  <div class="finding-title">✓ Cross-Site Scripting (XSS)</div>
+                  <div class="finding-desc">Tested reflected DOM inputs; tags correctly escaped.</div>
+                </div>
+                <div class="finding-item safe">
+                  <div class="finding-title">✓ PII Leak Prevention</div>
+                  <div class="finding-desc">Scanned network payloads; zero plaintext credit cards or credentials leaked.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: k6 Performance Script & SLA -->
+            <div class="panel">
+              <div class="panel-header">
+                <h3>Generated k6 Load Script & SLA</h3>
+                <button class="text-btn" onclick="copyK6Script()">📋 Copy k6 Script</button>
+              </div>
+              <div class="sla-overview">
+                <div class="sla-stat">
+                  <span class="sla-val">50 VUs</span>
+                  <span class="sla-lbl">Concurrent Virtual Users</span>
+                </div>
+                <div class="sla-stat">
+                  <span class="sla-val">250ms</span>
+                  <span class="sla-lbl">Target P95 Latency</span>
+                </div>
+                <div class="sla-stat">
+                  <span class="sla-val">&lt; 1%</span>
+                  <span class="sla-lbl">Max Error Rate</span>
+                </div>
+              </div>
+              <div class="code-container">
+                <pre><code id="perf-code">// Click 'Run k6 Perf Scenario' to generate executable k6 test script.</code></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 4: TRIAGE & REPRO -->
+        <section id="tab-triage" class="tab-pane">
+          <div class="section-header">
+            <div>
+              <h2>Triage & Self-Healing Governance</h2>
+              <p class="section-desc">Inspect regressions, propose locator patches, and generate standalone reproduction specs.</p>
+            </div>
+            <div class="action-buttons">
+              <button class="secondary-btn" onclick="exportArtifact('junit')">📄 Export JUnit XML</button>
+              <button class="secondary-btn" onclick="exportArtifact('sarif')">🛡️ Export SARIF</button>
+            </div>
+          </div>
+
+          <div class="triage-cards">
+            <div class="triage-card">
+              <div class="triage-header">
+                <span class="badge warning">Healed Locator</span>
+                <span class="triage-id">REG-1049</span>
+              </div>
+              <h4>Submit Button Relocated</h4>
+              <p>Primary target <code>#checkout-btn</code> was detached in modern checkout SPA. Self-healing engine resolved replacement via accessibility tree: <code>role=button[name="Pay Now"]</code>.</p>
+              <div class="diff-block">
+                <div class="diff-line del">- await page.click('#checkout-btn');</div>
+                <div class="diff-line add">+ await page.getByRole('button', { name: 'Pay Now' }).click();</div>
+              </div>
+              <div class="triage-actions">
+                <button class="pill-btn primary" onclick="acceptPatch('REG-1049')">Accept Patch</button>
+                <button class="pill-btn" onclick="dismissPatch('REG-1049')">Dismiss</button>
+              </div>
+            </div>
+
+            <div class="triage-card">
+              <div class="triage-header">
+                <span class="badge info">Deterministic Repro</span>
+                <span class="triage-id">REPRO-021</span>
+              </div>
+              <h4>Fast Single-File Reproduction (`repro.spec.ts`)</h4>
+              <p>Standalone Playwright test generated with exact session headers, auth token, and network mocks to reproduce any failure in 1 click.</p>
+              <div class="code-container small">
+                <pre><code>import { test, expect } from '@playwright/test';
+
+test('reproduce regression', async ({ page }) => {
+  await page.goto('http://localhost:3000/cart');
+  await page.click('button[name="checkout"]');
+  await expect(page).toHaveURL(/checkout/);
+});</code></pre>
+              </div>
+              <div class="triage-actions">
+                <button class="pill-btn" onclick="copyReproCode()">Copy Spec</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 5: TOKEN ROI & SAVINGS -->
+        <section id="tab-roi" class="tab-pane">
+          <div class="section-header">
+            <div>
+              <h2>Token Optimization & Dollar ROI</h2>
+              <p class="section-desc">Real-time metrics showing how native Go deterministic DOM pruning reduces AI costs by 90-95%.</p>
+            </div>
+            <button class="secondary-btn" onclick="refreshROIMetrics()">🔄 Refresh Metrics</button>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-title">Token Compression Ratio</div>
+              <div class="metric-value highlight" id="roi-compression">94.2%</div>
+              <div class="metric-sub">Raw DOM pruned before model context</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-title">Cumulative Tokens Saved</div>
+              <div class="metric-value" id="roi-tokens-saved">1,420,000</div>
+              <div class="metric-sub">Across exploratory & regression runs</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-title">API Dollars Saved</div>
+              <div class="metric-value success" id="roi-dollars-saved">$14.20</div>
+              <div class="metric-sub">Compared to uncompressed raw HTML</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-title">State Cache Hits</div>
+              <div class="metric-value" id="roi-cache-hits">87</div>
+              <div class="metric-sub">Zero-token state cache matches</div>
+            </div>
+          </div>
+
+          <div class="panel comparison-panel">
+            <div class="panel-header">
+              <h3>Deterministic-First vs. Traditional AI Agents</h3>
+            </div>
+            <div class="comparison-bars">
+              <div class="bar-group">
+                <div class="bar-label">
+                  <span>Traditional LLM Agent (Raw HTML DOM + Event Stream)</span>
+                  <span class="bar-val">150,000 Tokens / Run</span>
+                </div>
+                <div class="bar-track">
+                  <div class="bar-fill raw" style="width: 100%"></div>
+                </div>
+              </div>
+              <div class="bar-group">
+                <div class="bar-label">
+                  <span>Kritix AI (Pruned Semantic Accessibility Tree)</span>
+                  <span class="bar-val">6,200 Tokens / Run</span>
+                </div>
+                <div class="bar-track">
+                  <div class="bar-fill optimized" style="width: 4.1%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

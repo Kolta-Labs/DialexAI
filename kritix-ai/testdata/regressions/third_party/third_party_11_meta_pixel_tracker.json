@@ -1,0 +1,49 @@
+{
+  "id": "third_party_11_meta_pixel_tracker",
+  "category": "third_party",
+  "description": "Third-party widget injection from connect.facebook.net (Meta Tracking Pixel)",
+  "original": {
+    "id": "host-target-meta_pixel_tracker",
+    "test_id": "host-target-meta_pixel_tracker",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 300,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "img",
+      "id": "injected-widget-meta_pixel_tracker",
+      "role": "img",
+      "bounding_box": {
+        "x": 800,
+        "y": 300,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-meta_pixel_tracker",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 300,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-meta_pixel_tracker\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"connect.facebook.net\"\u003e\u003cimg role=\"img\"\u003e\u003c/img\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

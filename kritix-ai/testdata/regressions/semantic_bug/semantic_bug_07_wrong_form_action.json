@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_07_wrong_form_action",
+  "category": "semantic_bug",
+  "description": "Form submission handler routed to deleted endpoint",
+  "original": {
+    "id": "orig-sem-wrong_form_action",
+    "test_id": "orig-sem-wrong_form_action",
+    "role": "button",
+    "text": "Submit Application",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 320,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "buggy-wrong_form_action",
+      "role": "button",
+      "text": "Submit To Broken Endpoint",
+      "bounding_box": {
+        "x": 100,
+        "y": 320,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003eSubmit To Broken Endpoint\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

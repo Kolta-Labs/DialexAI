@@ -1,0 +1,23 @@
+{
+  "id": "semantic_bug_06_terms_checkbox_missing",
+  "category": "semantic_bug",
+  "description": "Required legal terms checkbox missing from checkout",
+  "original": {
+    "id": "orig-sem-terms_checkbox_missing",
+    "test_id": "orig-sem-terms_checkbox_missing",
+    "role": "checkbox",
+    "text": "I agree to Terms",
+    "tag": "input",
+    "bbox": {
+      "x": 100,
+      "y": 300,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": null,
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

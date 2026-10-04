@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_05_modal_animation_in_flight",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on div \"Confirm Payment Details\"",
+  "original": {
+    "id": "timing-modal_animation_in_flight",
+    "test_id": "timing-modal_animation_in_flight",
+    "role": "dialog",
+    "text": "Confirm Payment Details",
+    "tag": "div",
+    "bbox": {
+      "x": 150,
+      "y": 200,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "timing-resolved-modal_animation_in_flight",
+      "role": "dialog",
+      "text": "Confirm Payment Details",
+      "bounding_box": {
+        "x": 150,
+        "y": 200,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003cdiv id=\"timing-resolved-modal_animation_in_flight\" class=\"animated fadeIn\"\u003eConfirm Payment Details\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

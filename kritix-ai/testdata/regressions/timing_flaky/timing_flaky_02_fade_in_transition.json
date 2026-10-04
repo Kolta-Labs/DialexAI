@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_02_fade_in_transition",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on div \"Your Order Has Been Confirmed\"",
+  "original": {
+    "id": "timing-fade_in_transition",
+    "test_id": "timing-fade_in_transition",
+    "role": "status",
+    "text": "Your Order Has Been Confirmed",
+    "tag": "div",
+    "bbox": {
+      "x": 150,
+      "y": 125,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "timing-resolved-fade_in_transition",
+      "role": "status",
+      "text": "Your Order Has Been Confirmed",
+      "bounding_box": {
+        "x": 150,
+        "y": 125,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003cdiv id=\"timing-resolved-fade_in_transition\" class=\"animated fadeIn\"\u003eYour Order Has Been Confirmed\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

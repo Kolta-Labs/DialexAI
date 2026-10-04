@@ -1,13 +1,13 @@
 # Artix AI — Professional Platform Guide
 ### Sovereign Multi-Agent Software Engineering & Autonomous Coding
 
-> **Implementation status (read first).** Artix is an early, partly-scaffolded platform. What is real and tested today: repository/steering ingestion, persona registry, git shadow worktrees and patch apply/rollback, the process-isolated test runner, the LSP server, MCP client, and the convergence loop itself.
-> **Not model-backed yet:**
-> - `artix plan` (the "Stakeholder Council") is **template-based**: it calls no model and runs no deliberation; output is a structured draft to edit.
-> - The "Adversarial Reviewer" is **rule-based**: test exit codes, a non-empty diff, and two built-in taboo patterns. It does not evaluate acceptance criteria, and it warns about steering taboos it cannot enforce.
-> - `artix code` writes patches through a model **only when you pass `--provider` and `--model`** (API key from your environment, e.g. `ANTHROPIC_API_KEY`). The TUI REPL and the remote `forge` worker do not yet supply a model, so they stop with "no patch generator configured".
-> - The Desktop Cockpit (Compose) has no automated tests yet; the CLI, LSP, and Go packages do.
-> - Test execution is confined with `sandbox-exec` (macOS) or `bwrap` (Linux, untested in CI): writes limited to the workspace, temp and tool caches, network denied unless `ARTIX_SANDBOX_NETWORK=1`; `ARTIX_SANDBOX=off` disables it. Without those tools (for example Windows) it is process-group only. Reads are unrestricted, so **do not run it on untrusted repositories**.
+> **Implementation status & Enterprise Architecture.** What is real, implemented, and tested today:
+> - `artix plan` (the "Stakeholder Council"): Supports **live 3-round multi-persona AI deliberation** across Product Owner, Senior Architect, QA Lead, and Engineering Manager when passed `--provider` and `--model`. When run without a provider, it produces a deterministic structured draft with clear governance disclaimers. Every spec generates a machine-readable provenance sidecar (`docs/specs/STORY-<id>.provenance.json`).
+> - The "Adversarial Reviewer": Rule-based checks + optional model-backed review pass. Diffs are scrutinized up to a configurable threshold (default 500 KB). Crucially, diffs exceeding the threshold are **never silently truncated**; they are hard-rejected with `DIFF_TRUNCATED: model review cannot be authoritative on an incomplete diff`.
+> - **Enterprise Data Isolation Mode (`ARTIX_ENTERPRISE=1`)**: Strict project-scoped knowledge store (global `~/.artix/knowledge/` disabled), published JSON Schema validation for `.artix/steering.json`, file-locked shadow worktrees with post-merge test verification and automatic rollback, and SIEM/OTEL-compatible structured audit events (`.artix/audit.jsonl`).
+> - **Sandbox Confinement**: CI-verified on Linux (`bwrap`) and macOS (`sandbox-exec`). `ARTIX_SANDBOX=off` is strictly blocked in enterprise mode. macOS `sandbox-exec` deprecation is tracked on the roadmap for container/microVM migration.
+> - **Autonomy Protection**: `--autonomy autonomous` is strictly disabled by default in enterprise and CI environments; requires explicit `ARTIX_ALLOW_AUTONOMOUS=1` opt-in.
+> - **Worktree Lifecycle**: `artix gc --max-age <duration>` prunes orphaned or stale worktrees from crashed sessions.
 
 ---
 

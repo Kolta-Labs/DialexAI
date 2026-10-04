@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_18_countdown_timer_tick",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on span \"Deal ends in: 04:59\"",
+  "original": {
+    "id": "timing-countdown_timer_tick",
+    "test_id": "timing-countdown_timer_tick",
+    "role": "timer",
+    "text": "Deal ends in: 04:59",
+    "tag": "span",
+    "bbox": {
+      "x": 150,
+      "y": 525,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "span",
+      "id": "timing-resolved-countdown_timer_tick",
+      "role": "timer",
+      "text": "Deal ends in: 04:59",
+      "bounding_box": {
+        "x": 150,
+        "y": 525,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003cspan id=\"timing-resolved-countdown_timer_tick\" class=\"animated fadeIn\"\u003eDeal ends in: 04:59\u003c/span\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

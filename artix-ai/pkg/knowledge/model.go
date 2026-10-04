@@ -12,14 +12,20 @@ const (
 	CategoryBuildManifest KnowledgeCategory = "build_manifest"
 )
 
+// CurrentSchemaVersion is the latest schema version for KnowledgeItem.
+const CurrentSchemaVersion = 1
+
 // KnowledgeItem encapsulates an institutional learning distilled from an engineering run.
 type KnowledgeItem struct {
+	SchemaVersion   int               `json:"schemaVersion"`
 	ID              string            `json:"id"`
 	Title           string            `json:"title"`
 	Category        KnowledgeCategory `json:"category"`
 	Context         string            `json:"context"`
 	Breakthrough    string            `json:"breakthrough"`
 	AssociatedRules []string          `json:"associatedRules,omitempty"`
+	Author          string            `json:"author,omitempty"`
+	ContentHash     string            `json:"contentHash,omitempty"`
 	CreatedAt       time.Time         `json:"createdAt"`
 }
 

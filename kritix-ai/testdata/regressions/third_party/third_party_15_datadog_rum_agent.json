@@ -1,0 +1,48 @@
+{
+  "id": "third_party_15_datadog_rum_agent",
+  "category": "third_party",
+  "description": "Third-party widget injection from www.datadoghq-browser-agent.com (Datadog RUM Telemetry)",
+  "original": {
+    "id": "host-target-datadog_rum_agent",
+    "test_id": "host-target-datadog_rum_agent",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 380,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "script",
+      "id": "injected-widget-datadog_rum_agent",
+      "bounding_box": {
+        "x": 800,
+        "y": 380,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-datadog_rum_agent",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 380,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-datadog_rum_agent\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"www.datadoghq-browser-agent.com\"\u003e\u003cscript role=\"\"\u003e\u003c/script\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

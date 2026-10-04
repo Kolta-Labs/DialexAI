@@ -1,0 +1,37 @@
+{
+  "id": "layout_09_product_grid_restructure",
+  "category": "layout_dom",
+  "description": "Layout refactor moving section element \"Featured Products\"",
+  "original": {
+    "id": "orig-product_grid_restructure",
+    "test_id": "orig-product_grid_restructure",
+    "role": "region",
+    "text": "Featured Products",
+    "tag": "section",
+    "bbox": {
+      "x": 50,
+      "y": 400,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "section",
+      "id": "refactored-product_grid_restructure",
+      "role": "region",
+      "text": "Featured Products",
+      "bounding_box": {
+        "x": 50,
+        "y": 410,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003csection id=\"refactored-product_grid_restructure\" role=\"region\"\u003eFeatured Products\u003c/section\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

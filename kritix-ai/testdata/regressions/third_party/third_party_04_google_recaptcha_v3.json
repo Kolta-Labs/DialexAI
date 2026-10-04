@@ -1,0 +1,50 @@
+{
+  "id": "third_party_04_google_recaptcha_v3",
+  "category": "third_party",
+  "description": "Third-party widget injection from www.google.com/recaptcha (Bot Protection Badge)",
+  "original": {
+    "id": "host-target-google_recaptcha_v3",
+    "test_id": "host-target-google_recaptcha_v3",
+    "role": "button",
+    "text": "Target Application Action",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 160,
+      "width": 160,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "div",
+      "id": "injected-widget-google_recaptcha_v3",
+      "role": "status",
+      "text": "protected by reCAPTCHA",
+      "bounding_box": {
+        "x": 800,
+        "y": 160,
+        "width": 300,
+        "height": 150
+      },
+      "disabled": false
+    },
+    {
+      "tag": "button",
+      "id": "host-target-live-google_recaptcha_v3",
+      "role": "button",
+      "text": "Target Application Action",
+      "bounding_box": {
+        "x": 100,
+        "y": 160,
+        "width": 160,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv id=\"app-root\"\u003e\u003cbutton id=\"host-target-live-google_recaptcha_v3\"\u003eTarget Application Action\u003c/button\u003e\u003cdiv class=\"3rd-party-overlay\" data-host=\"www.google.com/recaptcha\"\u003e\u003cdiv role=\"status\"\u003eprotected by reCAPTCHA\u003c/div\u003e\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

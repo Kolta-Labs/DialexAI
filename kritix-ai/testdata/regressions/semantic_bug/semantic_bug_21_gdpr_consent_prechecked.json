@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_21_gdpr_consent_prechecked",
+  "category": "semantic_bug",
+  "description": "GDPR marketing consent forced pre-checked and disabled",
+  "original": {
+    "id": "orig-sem-gdpr_consent_prechecked",
+    "test_id": "orig-sem-gdpr_consent_prechecked",
+    "role": "checkbox",
+    "text": "Opt-in to Marketing",
+    "tag": "input",
+    "bbox": {
+      "x": 100,
+      "y": 600,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "input",
+      "id": "buggy-gdpr_consent_prechecked",
+      "role": "checkbox",
+      "text": "Opt-in to Marketing (Required)",
+      "bounding_box": {
+        "x": 100,
+        "y": 600,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": true
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003eOpt-in to Marketing (Required)\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

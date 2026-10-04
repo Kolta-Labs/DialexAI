@@ -1,0 +1,37 @@
+{
+  "id": "timing_flaky_13_drawer_slide_in_active",
+  "category": "timing_flaky",
+  "description": "Animation and async delay mutation on aside \"Filter by Category\"",
+  "original": {
+    "id": "timing-drawer_slide_in_active",
+    "test_id": "timing-drawer_slide_in_active",
+    "role": "complementary",
+    "text": "Filter by Category",
+    "tag": "aside",
+    "bbox": {
+      "x": 150,
+      "y": 400,
+      "width": 200,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "aside",
+      "id": "timing-resolved-drawer_slide_in_active",
+      "role": "complementary",
+      "text": "Filter by Category",
+      "bounding_box": {
+        "x": 150,
+        "y": 400,
+        "width": 200,
+        "height": 40
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"async-container in-flight\"\u003e\u003caside id=\"timing-resolved-drawer_slide_in_active\" class=\"animated fadeIn\"\u003eFilter by Category\u003c/aside\u003e\u003c/div\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

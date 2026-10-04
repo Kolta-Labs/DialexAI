@@ -1,0 +1,37 @@
+{
+  "id": "layout_12_sidebar_collapsible",
+  "category": "layout_dom",
+  "description": "Layout refactor moving aside element \"Category Filters\"",
+  "original": {
+    "id": "orig-sidebar_collapsible",
+    "test_id": "orig-sidebar_collapsible",
+    "role": "complementary",
+    "text": "Category Filters",
+    "tag": "aside",
+    "bbox": {
+      "x": 20,
+      "y": 200,
+      "width": 180,
+      "height": 45
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "aside",
+      "id": "refactored-sidebar_collapsible",
+      "role": "complementary",
+      "text": "Category Filters",
+      "bounding_box": {
+        "x": 30,
+        "y": 210,
+        "width": 180,
+        "height": 45
+      },
+      "disabled": false
+    }
+  ],
+  "raw_dom": "\u003csection class=\"main-layout\"\u003e\u003cdiv class=\"restructured-wrapper\"\u003e\u003caside id=\"refactored-sidebar_collapsible\" role=\"complementary\"\u003eCategory Filters\u003c/aside\u003e\u003c/div\u003e\u003c/section\u003e",
+  "expected_result": "HEALED",
+  "is_semantic_bug": false
+}

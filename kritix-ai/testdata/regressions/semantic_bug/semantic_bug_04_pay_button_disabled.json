@@ -1,0 +1,37 @@
+{
+  "id": "semantic_bug_04_pay_button_disabled",
+  "category": "semantic_bug",
+  "description": "Payment button rendered disabled preventing checkout",
+  "original": {
+    "id": "orig-sem-pay_button_disabled",
+    "test_id": "orig-sem-pay_button_disabled",
+    "role": "button",
+    "text": "Pay $120.00",
+    "tag": "button",
+    "bbox": {
+      "x": 100,
+      "y": 260,
+      "width": 150,
+      "height": 40
+    },
+    "page_url": ""
+  },
+  "live_elements": [
+    {
+      "tag": "button",
+      "id": "buggy-pay_button_disabled",
+      "role": "button",
+      "text": "Pay $120.00",
+      "bounding_box": {
+        "x": 100,
+        "y": 260,
+        "width": 150,
+        "height": 40
+      },
+      "disabled": true
+    }
+  ],
+  "raw_dom": "\u003cdiv class=\"order-panel\"\u003e\u003cdiv class=\"state-bug\"\u003ePay $120.00\u003c/div\u003e\u003c/div\u003e",
+  "expected_result": "REGRESSION_FAIL",
+  "is_semantic_bug": true
+}

@@ -1,0 +1,24 @@
+{
+  "target_app_name": "Enterprise Retail E-Commerce Portal",
+  "monorepo_loc": 245000,
+  "runs_count": 105,
+  "raw_tokens_avg": 971,
+  "optimized_tokens_avg": 8,
+  "token_savings_percent": 99.22,
+  "total_regressions_tested": 21,
+  "false_negatives_detected": 0,
+  "false_negative_rate": 0,
+  "p50_latency_seconds": 0.000001875,
+  "p95_latency_seconds": 0.000004917,
+  "rollback_fidelity_score": 1,
+  "rollback_scope": "Single-service and isolated Docker Compose database containers",
+  "rollback_exclusions": [
+    "Distributed Kafka topics and append-only event streams",
+    "External 3rd-party SaaS webhooks (Stripe live/test sandbox, Salesforce CRM, Segment)",
+    "Multi-service distributed saga transactions across heterogeneous datastores"
+  ],
+  "execution_timestamp": "2026-10-03T18:24:38Z",
+  "reproducer_command": "kritix benchmark --corpus testdata/regressions --runs 1",
+  "commit": "6b2b8c8",
+  "dataset": "testdata/regressions (105 mutation cases across 5 categories)"
+}

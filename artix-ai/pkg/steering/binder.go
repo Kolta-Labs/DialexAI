@@ -37,7 +37,8 @@ func (b *Binder) CompilePersonaSteering(personaID string) *PersonaSteeringContex
 			ForbiddenArguments: []string{},
 			PenaltyAction:      "Reject code; demand adherence to project steering invariants.",
 		},
-		Heuristics: make([]model.HeuristicRule, 0),
+		GlobalTaboos: b.config.GlobalTaboos,
+		Heuristics:   make([]model.HeuristicRule, 0),
 	}
 
 	activeRuleIDs := make(map[string]bool)
