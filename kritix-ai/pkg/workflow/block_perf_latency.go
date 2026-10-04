@@ -53,7 +53,12 @@ func (b *PerfLatencyBlock) Execute(ctx context.Context, bCtx *Context) (*BlockRe
 	}
 
 	if len(latencies) == 0 {
-		latencies = []time.Duration{25 * time.Millisecond, 40 * time.Millisecond}
+		return &BlockResult{
+			BlockID: "perf.latency",
+			Status:  StatusFailed,
+			Message: fmt.Sprintf("Latency audit failed: target %s was unreachable for all %d probe requests", targetURL, sampleCount),
+			Error:   fmt.Errorf("target %s unreachable", targetURL),
+		}, fmt.Errorf("target %s unreachable", targetURL)
 	}
 
 	var total time.Duration

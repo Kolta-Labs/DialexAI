@@ -42,9 +42,9 @@ func (b *AgentVisionCrawlBlock) Execute(ctx context.Context, bCtx *Context) (*Bl
 		bCtx.AddLog(fmt.Sprintf("Vision crawl fallback: %v", err))
 		return &BlockResult{
 			BlockID: "agent.vision-crawl",
-			Status:  StatusPassed,
-			Message: fmt.Sprintf("Autonomous crawl initialized for %s (CDP session configured)", targetURL),
-			Data:    map[string]interface{}{"target_url": targetURL},
+			Status:  StatusSimulated,
+			Message: fmt.Sprintf("Autonomous crawl simulated for %s (CDP browser unavailable: %v)", targetURL, err),
+			Data:    map[string]interface{}{"target_url": targetURL, "simulated": true},
 		}, nil
 	}
 	defer drv.Stop(ctx)

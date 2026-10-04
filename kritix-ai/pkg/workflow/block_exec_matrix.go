@@ -93,12 +93,23 @@ func (b *ExecMatrixBlock) Execute(ctx context.Context, bCtx *Context) (*BlockRes
 		}, errors.New(errorsEncountered[0])
 	}
 
-	if lastState != nil {
-		bCtx.Set("browser_state", lastState)
-		bCtx.Set("elements", lastState.Elements)
-		if lastState.AXTree != nil {
-			bCtx.Set("ax_tree", lastState.AXTree)
-		}
+	if lastState == nil {
+		return &BlockResult{
+			BlockID: "exec.matrix",
+			Status:  StatusSimulated,
+			Message: fmt.Sprintf("Matrix execution simulated for %s across %d viewports (CDP browser unavailable)", targetURL, len(viewports)),
+			Data: map[string]interface{}{
+				"target_url": targetURL,
+				"viewports":  len(viewports),
+				"simulated":  true,
+			},
+		}, nil
+	}
+
+	bCtx.Set("browser_state", lastState)
+	bCtx.Set("elements", lastState.Elements)
+	if lastState.AXTree != nil {
+		bCtx.Set("ax_tree", lastState.AXTree)
 	}
 
 	return &BlockResult{

@@ -50,12 +50,13 @@ func (b *GitPRBlock) Execute(ctx context.Context, bCtx *Context) (*BlockResult, 
 
 	return &BlockResult{
 		BlockID: "git.pr",
-		Status:  StatusPassed,
-		Message: fmt.Sprintf("Prepared and staged Pull Request: %q", prTitle),
+		Status:  StatusSimulated,
+		Message: fmt.Sprintf("Pull Request simulated: %q (changes staged locally for human review)", prTitle),
 		Data: map[string]interface{}{
-			"pr_title": prTitle,
-			"repo_dir": repoDir,
-			"status":   "STAGED_FOR_REVIEW",
+			"pr_title":  prTitle,
+			"repo_dir":  repoDir,
+			"simulated": true,
+			"status":    "STAGED_FOR_REVIEW",
 		},
 	}, nil
 }

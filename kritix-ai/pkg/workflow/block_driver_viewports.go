@@ -54,13 +54,25 @@ func (b *DriverViewportsBlock) Execute(ctx context.Context, bCtx *Context) (*Blo
 		}
 	}
 
+	if captured == 0 {
+		return &BlockResult{
+			BlockID: "driver.viewports",
+			Status:  StatusSimulated,
+			Message: fmt.Sprintf("Viewport capture simulated for %s (CDP browser unavailable)", targetURL),
+			Data: map[string]interface{}{
+				"target_url": targetURL,
+				"simulated":  true,
+			},
+		}, nil
+	}
+
 	return &BlockResult{
 		BlockID: "driver.viewports",
 		Status:  StatusPassed,
-		Message: fmt.Sprintf("Captured %d responsive viewport snapshots for %s (375px, 768px, 1440px)",
-			len(viewports), targetURL),
+		Message: fmt.Sprintf("Captured %d responsive viewport snapshots for %s", captured, targetURL),
 		Data: map[string]interface{}{
 			"target_url": targetURL,
+			"captured":   captured,
 			"viewports":  len(viewports),
 		},
 	}, nil

@@ -85,7 +85,19 @@ func (b *AssertAnalyticsBlock) Execute(ctx context.Context, bCtx *Context) (*Blo
 		}
 	}
 
-	if len(missingEvents) > 0 && len(capturedNetwork) > 0 {
+	if len(capturedNetwork) == 0 {
+		return &BlockResult{
+			BlockID: "assert.analytics",
+			Status:  StatusSimulated,
+			Message: fmt.Sprintf("Analytics assertion simulated for %d event(s) (no network traffic captured in context)", len(expectedEvents)),
+			Data: map[string]interface{}{
+				"expected_events": len(expectedEvents),
+				"simulated":       true,
+			},
+		}, nil
+	}
+
+	if len(missingEvents) > 0 {
 		return &BlockResult{
 			BlockID: "assert.analytics",
 			Status:  StatusFailed,

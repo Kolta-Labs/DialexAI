@@ -46,6 +46,7 @@ func (b *ExecOWASPDASTBlock) Execute(ctx context.Context, bCtx *Context) (*Block
 
 	var securityFindings []string
 	var scannedCount int
+	var successfulProbes int
 
 	for vulnType, payloads := range payloadMap {
 		for _, p := range payloads {
@@ -66,6 +67,7 @@ func (b *ExecOWASPDASTBlock) Execute(ctx context.Context, bCtx *Context) (*Block
 			if err != nil {
 				continue
 			}
+			successfulProbes++
 			bodyBytes, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
 
@@ -83,6 +85,15 @@ func (b *ExecOWASPDASTBlock) Execute(ctx context.Context, bCtx *Context) (*Block
 
 	bCtx.Set("dast_findings", securityFindings)
 
+	if successfulProbes == 0 {
+		return &BlockResult{
+			BlockID: "exec.owasp-dast",
+			Status:  StatusFailed,
+			Message: fmt.Sprintf("OWASP DAST scan failed: target %s was unreachable for all %d probe requests", targetURL, scannedCount),
+			Error:   fmt.Errorf("target %s unreachable", targetURL),
+		}, fmt.Errorf("target %s unreachable", targetURL)
+	}
+
 	if len(securityFindings) > 0 {
 		return &BlockResult{
 			BlockID: "exec.owasp-dast",
@@ -96,7 +107,7 @@ func (b *ExecOWASPDASTBlock) Execute(ctx context.Context, bCtx *Context) (*Block
 		BlockID: "exec.owasp-dast",
 		Status:  StatusPassed,
 		Message: fmt.Sprintf("Completed OWASP Top 10 DAST scan against %s (%d payload checks executed, 0 vulnerabilities detected)",
-			targetURL, scannedCount),
+			targetURL, successfulProbes),
 		Data: map[string]interface{}{
 			"target_url":      targetURL,
 			"payloads_tested": scannedCount,

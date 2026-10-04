@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"kritix/pkg/driver"
@@ -28,14 +27,17 @@ func (b *AuditWCAGBlock) Execute(ctx context.Context, bCtx *Context) (*BlockResu
 		}
 	}
 
-	urlVal, okURL := bCtx.Get("target_url")
-	if len(elements) == 0 && (!okURL || urlVal == nil) {
+	urlVal, _ := bCtx.Get("target_url")
+	if len(elements) == 0 {
 		return &BlockResult{
 			BlockID: "audit.wcag",
-			Status:  StatusFailed,
-			Message: "Missing input: 'elements' or 'target_url' required for WCAG audit",
-			Error:   errors.New("missing elements or target_url"),
-		}, errors.New("missing elements or target_url")
+			Status:  StatusSimulated,
+			Message: fmt.Sprintf("WCAG audit simulated for %v (no DOM elements provided in context)", urlVal),
+			Data: map[string]interface{}{
+				"target_url": urlVal,
+				"simulated":  true,
+			},
+		}, nil
 	}
 
 	var touchTargetIssues []string
