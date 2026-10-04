@@ -1,7 +1,12 @@
 package auth
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -214,14 +219,103 @@ func TestVaultProvidersAndFigmaToken(t *testing.T) {
 		t.Errorf("expected ErrSessionTTLExceeded, got %v", err)
 	}
 
-	// 5. Test HashiCorp Vault provider & AWS Secrets Manager provider wrappers
-	hVault := NewHashiCorpVaultProvider("https://vault.internal:8200", "transit-key")
+	// 5. Test HashiCorp Vault provider against real HTTP API (via httptest)
+	vaultTransitKVStore := make(map[string]map[string]interface{})
+	vaultServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Vault-Token") != "test-vault-token" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		path := r.URL.Path
+		switch {
+		case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/transit/encrypt/"):
+			var body struct {
+				Plaintext string `json:"plaintext"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"data": map[string]string{
+					"ciphertext": "vault:v1:" + body.Plaintext,
+				},
+			})
+		case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/transit/decrypt/"):
+			var body struct {
+				Ciphertext string `json:"ciphertext"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			trimmed := strings.TrimPrefix(body.Ciphertext, "vault:v1:")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"data": map[string]string{
+					"plaintext": trimmed,
+				},
+			})
+		case r.Method == http.MethodPost && strings.HasPrefix(path, "/v1/secret/data/"):
+			var body struct {
+				Data map[string]interface{} `json:"data"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			vaultTransitKVStore[path] = body.Data
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": body.Data})
+		case r.Method == http.MethodGet && strings.HasPrefix(path, "/v1/secret/data/"):
+			data, exists := vaultTransitKVStore[path]
+			if !exists {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"data": map[string]interface{}{
+					"data": data,
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer vaultServer.Close()
+
+	hVault := NewHashiCorpVaultProviderWithClient(vaultServer.URL, "test-vault-token", "transit-key", "secret", vaultServer.Client())
 	if hVault.Type() != "hashicorp_vault" {
 		t.Errorf("unexpected vault type: %s", hVault.Type())
 	}
+
+	// Store session in Vault via real HTTP transit
+	vState := StorageState{
+		Cookies: []Cookie{{Name: "vault_session_cookie", Value: "val_vault_123"}},
+		TTL:     2 * time.Hour,
+	}
+	if err := hVault.StoreSession(context.Background(), "squad-checkout", "sess-v1", vState); err != nil {
+		t.Fatalf("failed to store session in HashiCorp Vault: %v", err)
+	}
+
+	// Retrieve session from Vault
+	retrievedState, err := hVault.RetrieveSession(context.Background(), "squad-checkout", "sess-v1", 4*time.Hour)
+	if err != nil {
+		t.Fatalf("failed to retrieve session from HashiCorp Vault: %v", err)
+	}
+	if retrievedState.Cookies[0].Value != "val_vault_123" {
+		t.Errorf("expected val_vault_123, got: %s", retrievedState.Cookies[0].Value)
+	}
+
+	// 6. Test Enterprise Mode gate (refuse in-memory local KMS in enterprise mode)
+	os.Setenv("KRITIX_ENTERPRISE", "true")
+	defer os.Unsetenv("KRITIX_ENTERPRISE")
+
+	if err := ValidateEnterpriseVault(kmsVault); err != ErrEnterpriseLocalKMSProhibited {
+		t.Errorf("expected ErrEnterpriseLocalKMSProhibited when local KMS is used in enterprise mode, got: %v", err)
+	}
+	if err := ValidateEnterpriseVault(hVault); err != nil {
+		t.Errorf("expected HashiCorp Vault to pass enterprise validation, got: %v", err)
+	}
+
+	// 7. Test AWS Secrets Manager provider
 	awsVault := NewAWSSecretsManagerProvider("us-east-1", "arn:aws:kms:123")
-	if awsVault.Type() != "aws_secrets_manager" {
+	if awsVault.Type() != "aws_secrets_manager" || awsVault.CloudProviderName() != "aws" {
 		t.Errorf("unexpected aws vault type: %s", awsVault.Type())
+	}
+	if err := awsVault.StoreSession(context.Background(), "tenant-1", "s1", vState); err != ErrCloudKMSUnsupported {
+		t.Errorf("expected ErrCloudKMSUnsupported on unconfigured AWS provider, got: %v", err)
 	}
 }
 

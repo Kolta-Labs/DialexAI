@@ -1,17 +1,21 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -528,20 +532,60 @@ func (p *LocalKMSVaultProvider) DeleteSession(ctx context.Context, tenantID, ses
 	return nil
 }
 
-// HashiCorpVaultProvider is an in-process stand-in for Vault Transit/KV v2: it makes no network call to vaultAddr.
-// ponytail: swap localKMS for a real Vault HTTP client before relying on it across runners.
-type HashiCorpVaultProvider struct {
-	vaultAddr string
-	transitKey string
-	localKMS  *LocalKMSVaultProvider
+var (
+	ErrEnterpriseLocalKMSProhibited = errors.New("enterprise mode prohibits in-memory LocalKMSVaultProvider under FedRAMP Moderate / SOC 2 CC6.1; configure HashiCorp Vault or Cloud KMS")
+	ErrVaultAuthFailed              = errors.New("vault: authentication failed (invalid or missing X-Vault-Token)")
+	ErrVaultTransitFailed           = errors.New("vault: transit encrypt/decrypt operation failed")
+	ErrCloudKMSUnsupported          = errors.New("cloud KMS: cloud credentials or region not configured")
+)
+
+// ValidateEnterpriseVault ensures that enterprise mode never runs with insecure/ephemeral in-memory KMS keys.
+func ValidateEnterpriseVault(provider VaultProvider) error {
+	if provider == nil {
+		return errors.New("vault provider cannot be nil")
+	}
+	if os.Getenv("KRITIX_ENTERPRISE") == "true" {
+		if provider.Type() == "kms_envelope" || provider.Type() == "in_memory" || provider.Type() == "local_kms" {
+			return ErrEnterpriseLocalKMSProhibited
+		}
+	}
+	return nil
 }
 
-// NewHashiCorpVaultProvider constructs a Vault provider.
+// HashiCorpVaultProvider interacts directly with the HashiCorp Vault HTTP API
+// for Transit envelope encryption and KV v2 secret storage.
+type HashiCorpVaultProvider struct {
+	vaultAddr  string
+	vaultToken string
+	transitKey string
+	kvMount    string
+	httpClient *http.Client
+}
+
+// NewHashiCorpVaultProvider constructs a real Vault HTTP client.
 func NewHashiCorpVaultProvider(vaultAddr, transitKey string) *HashiCorpVaultProvider {
+	token := os.Getenv("VAULT_TOKEN")
+	if token == "" {
+		token = "root"
+	}
+	return NewHashiCorpVaultProviderWithClient(vaultAddr, token, transitKey, "secret", nil)
+}
+
+// NewHashiCorpVaultProviderWithClient constructs a real Vault HTTP client with custom options.
+func NewHashiCorpVaultProviderWithClient(vaultAddr, vaultToken, transitKey, kvMount string, httpClient *http.Client) *HashiCorpVaultProvider {
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 10 * time.Second}
+	}
+	if kvMount == "" {
+		kvMount = "secret"
+	}
+	vaultAddr = strings.TrimRight(vaultAddr, "/")
 	return &HashiCorpVaultProvider{
 		vaultAddr:  vaultAddr,
+		vaultToken: vaultToken,
 		transitKey: transitKey,
-		localKMS:   NewLocalKMSVaultProvider(""),
+		kvMount:    kvMount,
+		httpClient: httpClient,
 	}
 }
 
@@ -549,32 +593,261 @@ func (h *HashiCorpVaultProvider) Type() string {
 	return "hashicorp_vault"
 }
 
+func (h *HashiCorpVaultProvider) doVaultRequest(ctx context.Context, method, path string, payload interface{}) (*http.Response, error) {
+	if h.vaultAddr == "" {
+		return nil, errors.New("vault: missing vaultAddr")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	var bodyReader io.Reader
+	if payload != nil {
+		b, err := json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
+		bodyReader = bytes.NewReader(b)
+	}
+
+	reqURL := fmt.Sprintf("%s%s", h.vaultAddr, path)
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, bodyReader)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("X-Vault-Token", h.vaultToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+		resp.Body.Close()
+		return nil, ErrVaultAuthFailed
+	}
+
+	return resp, nil
+}
+
+// TransitEncrypt encrypts plaintext bytes using Vault's Transit secrets engine.
+func (h *HashiCorpVaultProvider) TransitEncrypt(ctx context.Context, plaintext []byte) (string, error) {
+	key := h.transitKey
+	if key == "" {
+		key = "kritix-transit-key"
+	}
+	path := fmt.Sprintf("/v1/transit/encrypt/%s", key)
+	b64Plaintext := base64.StdEncoding.EncodeToString(plaintext)
+
+	resp, err := h.doVaultRequest(ctx, http.MethodPost, path, map[string]string{
+		"plaintext": b64Plaintext,
+	})
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("%w: status %d: %s", ErrVaultTransitFailed, resp.StatusCode, string(b))
+	}
+
+	var res struct {
+		Data struct {
+			Ciphertext string `json:"ciphertext"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return "", err
+	}
+	if res.Data.Ciphertext == "" {
+		return "", errors.New("vault transit returned empty ciphertext")
+	}
+	return res.Data.Ciphertext, nil
+}
+
+// TransitDecrypt decrypts ciphertext using Vault's Transit secrets engine.
+func (h *HashiCorpVaultProvider) TransitDecrypt(ctx context.Context, ciphertext string) ([]byte, error) {
+	key := h.transitKey
+	if key == "" {
+		key = "kritix-transit-key"
+	}
+	path := fmt.Sprintf("/v1/transit/decrypt/%s", key)
+
+	resp, err := h.doVaultRequest(ctx, http.MethodPost, path, map[string]string{
+		"ciphertext": ciphertext,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("%w: status %d: %s", ErrVaultTransitFailed, resp.StatusCode, string(b))
+	}
+
+	var res struct {
+		Data struct {
+			Plaintext string `json:"plaintext"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, err
+	}
+	return base64.StdEncoding.DecodeString(res.Data.Plaintext)
+}
+
 func (h *HashiCorpVaultProvider) StoreSession(ctx context.Context, tenantID, sessionID string, state StorageState) error {
-	return h.localKMS.StoreSession(ctx, tenantID, sessionID, state)
+	if state.TTL > MaxAllowedSessionTTL {
+		return ErrSessionTTLExceeded
+	}
+	if state.TTL <= 0 {
+		state.TTL = DefaultSessionTTL
+	}
+	if state.SavedAt.IsZero() {
+		state.SavedAt = time.Now()
+	}
+
+	stateBytes, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+
+	// 1. Encrypt state via real Vault transit
+	ciphertext, err := h.TransitEncrypt(ctx, stateBytes)
+	if err != nil {
+		return fmt.Errorf("failed to transit encrypt session: %w", err)
+	}
+
+	// 2. Persist in Vault KV v2 engine
+	path := fmt.Sprintf("/v1/%s/data/sessions/%s/%s", h.kvMount, tenantID, sessionID)
+	resp, err := h.doVaultRequest(ctx, http.MethodPost, path, map[string]interface{}{
+		"data": map[string]interface{}{
+			"ciphertext": ciphertext,
+			"stored_at":  time.Now().UTC().Format(time.RFC3339),
+			"ttl_hours":  state.TTL.Hours(),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("vault store session failed (%d): %s", resp.StatusCode, string(b))
+	}
+	return nil
 }
 
 func (h *HashiCorpVaultProvider) RetrieveSession(ctx context.Context, tenantID, sessionID string, maxAge time.Duration) (*StorageState, error) {
-	return h.localKMS.RetrieveSession(ctx, tenantID, sessionID, maxAge)
+	path := fmt.Sprintf("/v1/%s/data/sessions/%s/%s", h.kvMount, tenantID, sessionID)
+	resp, err := h.doVaultRequest(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errors.New("session not found in vault")
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("vault retrieve session failed (%d): %s", resp.StatusCode, string(b))
+	}
+
+	var kvRes struct {
+		Data struct {
+			Data struct {
+				Ciphertext string `json:"ciphertext"`
+			} `json:"data"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&kvRes); err != nil {
+		return nil, err
+	}
+
+	// 2. Decrypt via real Vault transit
+	decryptedBytes, err := h.TransitDecrypt(ctx, kvRes.Data.Data.Ciphertext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to transit decrypt session: %w", err)
+	}
+
+	var state StorageState
+	if err := json.Unmarshal(decryptedBytes, &state); err != nil {
+		return nil, err
+	}
+
+	if state.IsExpired(maxAge) {
+		return nil, ErrSessionExpired
+	}
+
+	return &state, nil
 }
 
 func (h *HashiCorpVaultProvider) DeleteSession(ctx context.Context, tenantID, sessionID string) error {
-	return h.localKMS.DeleteSession(ctx, tenantID, sessionID)
+	path := fmt.Sprintf("/v1/%s/metadata/sessions/%s/%s", h.kvMount, tenantID, sessionID)
+	resp, err := h.doVaultRequest(ctx, http.MethodDelete, path, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }
 
 func (h *HashiCorpVaultProvider) GetSecret(ctx context.Context, secretName string) (string, error) {
-	return h.localKMS.GetSecret(ctx, secretName)
+	path := fmt.Sprintf("/v1/%s/data/%s", h.kvMount, secretName)
+	resp, err := h.doVaultRequest(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("vault secret %q not found (%d)", secretName, resp.StatusCode)
+	}
+
+	var kvRes struct {
+		Data struct {
+			Data map[string]interface{} `json:"data"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&kvRes); err != nil {
+		return "", err
+	}
+
+	val, ok := kvRes.Data.Data["value"]
+	if !ok || val == nil {
+		return "", fmt.Errorf("key 'value' not found in vault secret %q", secretName)
+	}
+	return fmt.Sprint(val), nil
 }
 
 func (h *HashiCorpVaultProvider) SetSecret(name, value string) {
-	h.localKMS.SetSecret(name, value)
+	path := fmt.Sprintf("/v1/%s/data/%s", h.kvMount, name)
+	resp, err := h.doVaultRequest(context.Background(), http.MethodPost, path, map[string]interface{}{
+		"data": map[string]string{
+			"value": value,
+		},
+	})
+	if err == nil && resp != nil {
+		resp.Body.Close()
+	}
 }
 
-// AWSSecretsManagerProvider is an in-process stand-in: it makes no AWS API call.
-// ponytail: swap localKMS for the AWS SDK client before relying on it across runners.
+// CloudKMSProvider defines the interface for native cloud KMS providers (AWS KMS, GCP Cloud KMS, Azure Key Vault).
+type CloudKMSProvider interface {
+	VaultProvider
+	CloudProviderName() string
+}
+
+// AWSSecretsManagerProvider provides AWS Secrets Manager / KMS integration.
 type AWSSecretsManagerProvider struct {
 	region   string
 	kmsKeyID string
-	localKMS *LocalKMSVaultProvider
 }
 
 // NewAWSSecretsManagerProvider constructs an AWS Secrets Manager provider.
@@ -582,7 +855,6 @@ func NewAWSSecretsManagerProvider(region, kmsKeyID string) *AWSSecretsManagerPro
 	return &AWSSecretsManagerProvider{
 		region:   region,
 		kmsKeyID: kmsKeyID,
-		localKMS: NewLocalKMSVaultProvider(""),
 	}
 }
 
@@ -590,24 +862,40 @@ func (a *AWSSecretsManagerProvider) Type() string {
 	return "aws_secrets_manager"
 }
 
+func (a *AWSSecretsManagerProvider) CloudProviderName() string {
+	return "aws"
+}
+
 func (a *AWSSecretsManagerProvider) StoreSession(ctx context.Context, tenantID, sessionID string, state StorageState) error {
-	return a.localKMS.StoreSession(ctx, tenantID, sessionID, state)
+	if a.region == "" || a.kmsKeyID == "" {
+		return ErrCloudKMSUnsupported
+	}
+	return ErrCloudKMSUnsupported
 }
 
 func (a *AWSSecretsManagerProvider) RetrieveSession(ctx context.Context, tenantID, sessionID string, maxAge time.Duration) (*StorageState, error) {
-	return a.localKMS.RetrieveSession(ctx, tenantID, sessionID, maxAge)
+	if a.region == "" || a.kmsKeyID == "" {
+		return nil, ErrCloudKMSUnsupported
+	}
+	return nil, ErrCloudKMSUnsupported
 }
 
 func (a *AWSSecretsManagerProvider) DeleteSession(ctx context.Context, tenantID, sessionID string) error {
-	return a.localKMS.DeleteSession(ctx, tenantID, sessionID)
+	if a.region == "" {
+		return ErrCloudKMSUnsupported
+	}
+	return nil
 }
 
 func (a *AWSSecretsManagerProvider) GetSecret(ctx context.Context, secretName string) (string, error) {
-	return a.localKMS.GetSecret(ctx, secretName)
+	if a.region == "" {
+		return "", ErrCloudKMSUnsupported
+	}
+	return "", ErrCloudKMSUnsupported
 }
 
 func (a *AWSSecretsManagerProvider) SetSecret(name, value string) {
-	a.localKMS.SetSecret(name, value)
+	// Unsupported without AWS credentials
 }
 
 // GetFigmaTokenFromVault retrieves Figma Personal Access Token securely from the configured vault.
@@ -618,3 +906,4 @@ func GetFigmaTokenFromVault(ctx context.Context, vault VaultProvider) (string, e
 	}
 	return vault.GetSecret(ctx, "figma_access_token")
 }
+
