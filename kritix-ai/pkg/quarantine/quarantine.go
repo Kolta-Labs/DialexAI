@@ -2,14 +2,24 @@ package quarantine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
+
+	"kritix/pkg/tracker"
+	"kritix/pkg/triage"
 )
 
 const (
 	MaxQuarantineAutoDeleteTTL = 7 * 24 * time.Hour // 7 days maximum in quarantine before auto-deletion
+	DefaultTeamQuarantineCap   = 5                  // Maximum 5 flaky tests allowed per squad simultaneously
+)
+
+var (
+	ErrQuarantineCapExceeded = errors.New("quarantine cap exceeded for team; resolve or fix existing flaky tests before quarantining more")
+	ErrSpecBudgetExceeded    = errors.New("generated spec budget exceeded for squad; SDET review required before generating more specs")
 )
 
 // Classification classifies a test's stability.
@@ -40,9 +50,10 @@ type FlakeAnalysis struct {
 	ShouldQuarantine bool               `json:"should_quarantine"`
 }
 
-// QuarantinedItem models an isolated test with strict SLA and tech-debt ownership.
+// QuarantinedItem models an isolated test with strict SLA, squad, and individual engineer ownership.
 type QuarantinedItem struct {
 	TestID           string        `json:"test_id"`
+	Owner            string        `json:"owner"` // Individual engineer / SDET owner (e.g. sdet@company.com)
 	Analysis         FlakeAnalysis `json:"analysis"`
 	QuarantinedAt    time.Time     `json:"quarantined_at"`
 	SLA              time.Duration `json:"sla"` // e.g. 7 days
@@ -134,18 +145,21 @@ func (e *FlakeEvaluator) EvaluateTest(ctx context.Context, testID string, runner
 	}
 }
 
-// QuarantineRegistry keeps track of quarantined flaky tests and enforces enterprise SLAs.
+// QuarantineRegistry keeps track of quarantined flaky tests and enforces enterprise SLAs,
+// individual test ownership, and per-team quarantine limits.
 type QuarantineRegistry struct {
 	mu          sync.RWMutex
 	quarantined map[string]QuarantinedItem
 	defaultSLA  time.Duration
+	maxPerTeam  int
 }
 
-// NewQuarantineRegistry constructs a quarantine registry with default 7-day SLA.
+// NewQuarantineRegistry constructs a quarantine registry with default 7-day SLA and per-team cap of 5.
 func NewQuarantineRegistry() *QuarantineRegistry {
 	return &QuarantineRegistry{
 		quarantined: make(map[string]QuarantinedItem),
-		defaultSLA:  7 * 24 * time.Hour, // 7-day strict SLA requested by Head of Tech
+		defaultSLA:  7 * 24 * time.Hour,
+		maxPerTeam:  DefaultTeamQuarantineCap,
 	}
 }
 
@@ -154,23 +168,99 @@ func (r *QuarantineRegistry) SetDefaultSLA(sla time.Duration) {
 	r.defaultSLA = sla
 }
 
-// AddQuarantine registers a flaky test into quarantine using default SLA.
-func (r *QuarantineRegistry) AddQuarantine(analysis FlakeAnalysis) {
-	r.AddQuarantineWithSLA(analysis, "unassigned", "", r.defaultSLA)
+// SetMaxPerTeam configures the maximum number of tests allowed in quarantine per squad.
+func (r *QuarantineRegistry) SetMaxPerTeam(maxTests int) {
+	if maxTests > 0 {
+		r.maxPerTeam = maxTests
+	}
+}
+
+// AddQuarantine registers a flaky test into quarantine using default SLA and unassigned squad/owner.
+func (r *QuarantineRegistry) AddQuarantine(analysis FlakeAnalysis) error {
+	return r.AddQuarantineWithOwner(analysis, "unassigned", "unassigned@company.com", "", r.defaultSLA)
 }
 
 // AddQuarantineWithSLA registers a flaky test with explicit squad ownership and ticket ID.
-func (r *QuarantineRegistry) AddQuarantineWithSLA(analysis FlakeAnalysis, squad string, ticketID string, sla time.Duration) {
+func (r *QuarantineRegistry) AddQuarantineWithSLA(analysis FlakeAnalysis, squad string, ticketID string, sla time.Duration) error {
+	return r.AddQuarantineWithOwner(analysis, squad, squad+"-lead@company.com", ticketID, sla)
+}
+
+// AddQuarantineWithOwner registers a flaky test with explicit owner, squad, ticket, and SLA while enforcing per-squad limits.
+func (r *QuarantineRegistry) AddQuarantineWithOwner(analysis FlakeAnalysis, squad, owner, ticketID string, sla time.Duration) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if squad == "" {
+		squad = "unassigned"
+	}
+	if owner == "" {
+		owner = squad + "-lead@company.com"
+	}
+	if sla <= 0 {
+		sla = r.defaultSLA
+	}
+
+	// Enforce per-team quarantine cap
+	teamCount := 0
+	for _, item := range r.quarantined {
+		if item.AssignedSquad == squad && item.TestID != analysis.TestID {
+			teamCount++
+		}
+	}
+	if teamCount >= r.maxPerTeam {
+		return fmt.Errorf("%w (%d active in squad %q, max allowed: %d)",
+			ErrQuarantineCapExceeded, teamCount, squad, r.maxPerTeam)
+	}
+
 	r.quarantined[analysis.TestID] = QuarantinedItem{
 		TestID:           analysis.TestID,
+		Owner:            owner,
 		Analysis:         analysis,
 		QuarantinedAt:    time.Now(),
 		SLA:              sla,
 		AssignedSquad:    squad,
 		TechDebtTicketID: ticketID,
 	}
+	return nil
+}
+
+// AutoTicketExpired scans for expired quarantine items and automatically creates defect tickets via the IssueTracker.
+func (r *QuarantineRegistry) AutoTicketExpired(ctx context.Context, trackerClient tracker.IssueTracker) ([]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if trackerClient == nil {
+		return nil, errors.New("tracker client cannot be nil")
+	}
+
+	var createdTickets []string
+	for id, item := range r.quarantined {
+		if item.IsSLAExceeded() && item.TechDebtTicketID == "" {
+			report := triage.DefectReport{
+				ID:       fmt.Sprintf("QUARANTINE-EXPIRED-%s", item.TestID),
+				Title:    fmt.Sprintf("[QUARANTINE EXPIRED] Flaky test %s SLA exceeded (Owner: %s, Squad: %s)", item.TestID, item.Owner, item.AssignedSquad),
+				Severity: triage.SeverityMajor,
+				Category: triage.CategoryInfraFlake,
+				ActualBehavior: fmt.Sprintf("Test %s has remained in quarantine for %v past its SLA of %v without remediation by owner %s (Squad: %s). Merge gate blocked.",
+					item.TestID, time.Since(item.QuarantinedAt).Round(time.Hour), item.SLA, item.Owner, item.AssignedSquad),
+				StepsToReproduce: []string{
+					fmt.Sprintf("1. Investigate test %s in %s repository", item.TestID, item.AssignedSquad),
+					"2. Run statistical flake reproducer: kritix test --reproduce " + item.TestID,
+					"3. Fix timing race condition or delete obsolete test",
+				},
+				DiscoveredAt: time.Now(),
+			}
+
+			res, err := trackerClient.CreateIssue(ctx, report)
+			if err == nil && res != nil {
+				item.TechDebtTicketID = res.IssueID
+				r.quarantined[id] = item
+				createdTickets = append(createdTickets, res.IssueID)
+			}
+		}
+	}
+
+	return createdTickets, nil
 }
 
 // IsQuarantined checks if a test is currently quarantined.
@@ -182,7 +272,6 @@ func (r *QuarantineRegistry) IsQuarantined(testID string) bool {
 }
 
 // ShouldFailBuild checks if an executing test is in quarantine and whether its SLA has expired.
-// If SLA is exceeded, returns true so CI fails until the team resolves their tech debt!
 func (r *QuarantineRegistry) ShouldFailBuild(testID string) (bool, string) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -191,10 +280,10 @@ func (r *QuarantineRegistry) ShouldFailBuild(testID string) (bool, string) {
 		return false, ""
 	}
 	if item.IsSLAExceeded() {
-		return true, fmt.Sprintf("QUARANTINE SLA EXCEEDED: Test %q has been in quarantine >%v without a fix (Assigned to: %s, Ticket: %s). Blocking CI build.",
-			testID, item.SLA, item.AssignedSquad, item.TechDebtTicketID)
+		return true, fmt.Sprintf("QUARANTINE SLA EXCEEDED: Test %q has been in quarantine >%v without a fix (Owner: %s, Squad: %s, Ticket: %s). Blocking CI build.",
+			testID, item.SLA, item.Owner, item.AssignedSquad, item.TechDebtTicketID)
 	}
-	return false, fmt.Sprintf("Test %q is in quarantine (Assigned to: %s, Ticket: %s). Non-blocking.", testID, item.AssignedSquad, item.TechDebtTicketID)
+	return false, fmt.Sprintf("Test %q is in quarantine (Owner: %s, Squad: %s, Ticket: %s). Non-blocking.", testID, item.Owner, item.AssignedSquad, item.TechDebtTicketID)
 }
 
 // ListQuarantined returns all currently quarantined tests.
@@ -230,15 +319,15 @@ func (r *QuarantineRegistry) TeamLeadEscalations() []QuarantinedItem {
 func (q *QuarantinedItem) FormatEscalationNotice() string {
 	return fmt.Sprintf("🚨 [QUARANTINE ESCALATION - ACTION REQUIRED]\n"+
 		"Test ID:    %s\n"+
+		"Owner:      %s\n"+
 		"Squad:      %s\n"+
 		"Ticket:     %s\n"+
 		"SLA Limit:  %v (EXCEEDED)\n"+
 		"Policy:     Test has rotted in quarantine past its SLA without remediation. CI merge gates are now BLOCKED until fixed or signed off by Team Lead.\n",
-		q.TestID, q.AssignedSquad, q.TechDebtTicketID, q.SLA)
+		q.TestID, q.Owner, q.AssignedSquad, q.TechDebtTicketID, q.SLA)
 }
 
 // PurgeExpiredTests automatically deletes tests that have been quarantined longer than maxAge (default 7 days).
-// Eliminates test rot and creates forced team accountability as requested by VP Engineering.
 func (r *QuarantineRegistry) PurgeExpiredTests(maxAge time.Duration) []QuarantinedItem {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -257,12 +346,82 @@ func (r *QuarantineRegistry) PurgeExpiredTests(maxAge time.Duration) []Quarantin
 	return purged
 }
 
+// SpecBudgetManager enforces generation budgets on AI test synthesis to prevent AI code debt.
+type SpecBudgetManager struct {
+	mu           sync.RWMutex
+	pendingSpecs map[string]map[string]time.Time // [squad][specID] -> createdAt
+	maxBudget    int
+}
+
+// NewSpecBudgetManager initializes a budget manager with a max unreviewed spec cap per squad.
+func NewSpecBudgetManager(maxBudgetPerSquad int) *SpecBudgetManager {
+	if maxBudgetPerSquad <= 0 {
+		maxBudgetPerSquad = 10
+	}
+	return &SpecBudgetManager{
+		pendingSpecs: make(map[string]map[string]time.Time),
+		maxBudget:    maxBudgetPerSquad,
+	}
+}
+
+// RegisterGeneratedSpec registers an AI synthesized test spec against the squad's budget.
+func (m *SpecBudgetManager) RegisterGeneratedSpec(squad, specID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if squad == "" {
+		squad = "default-squad"
+	}
+	if m.pendingSpecs[squad] == nil {
+		m.pendingSpecs[squad] = make(map[string]time.Time)
+	}
+
+	if len(m.pendingSpecs[squad]) >= m.maxBudget {
+		return fmt.Errorf("%w: squad %q already has %d unreviewed AI specs (budget limit: %d)",
+			ErrSpecBudgetExceeded, squad, len(m.pendingSpecs[squad]), m.maxBudget)
+	}
+
+	m.pendingSpecs[squad][specID] = time.Now()
+	return nil
+}
+
+// SignOffSpec removes a spec from the pending budget once human SDET signoff is completed.
+func (m *SpecBudgetManager) SignOffSpec(squad, specID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.pendingSpecs[squad] != nil {
+		delete(m.pendingSpecs[squad], specID)
+	}
+}
+
+// PurgeStaleSpecs removes unreviewed AI specs that have rotted beyond maxAge (default 72h).
+func (m *SpecBudgetManager) PurgeStaleSpecs(maxAge time.Duration) []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if maxAge <= 0 {
+		maxAge = 72 * time.Hour
+	}
+
+	var purged []string
+	now := time.Now()
+	for squad, specs := range m.pendingSpecs {
+		for id, createdAt := range specs {
+			if now.Sub(createdAt) > maxAge {
+				purged = append(purged, fmt.Sprintf("%s:%s", squad, id))
+				delete(specs, id)
+			}
+		}
+	}
+	return purged
+}
+
 // LeadershipFlakeScorecard models the weekly flakiness and tech-debt report surfaced to Engineering leadership.
 type LeadershipFlakeScorecard struct {
 	GeneratedAt       time.Time         `json:"generated_at"`
 	TotalQuarantined  int               `json:"total_quarantined"`
 	ExceededSLACount  int               `json:"exceeded_sla_count"`
-	PendingPurgeCount int               `json:"pending_purge_count"` // Approaching 30-day auto deletion
+	PendingPurgeCount int               `json:"pending_purge_count"`
 	SquadDebt         map[string]int    `json:"squad_debt"`
 	HighFlakeTests    []QuarantinedItem `json:"high_flake_tests"`
 }
@@ -313,8 +472,8 @@ func (s *LeadershipFlakeScorecard) FormatMarkdownScorecard() string {
 	if len(s.HighFlakeTests) > 0 {
 		sb.WriteString("### 🔥 Severe Flakiness Tests (Flake Rate >= 50%)\n")
 		for _, t := range s.HighFlakeTests {
-			sb.WriteString(fmt.Sprintf("- `%s` (Squad: %s, Flake: %.0f%%, Age: %dd)\n",
-				t.TestID, t.AssignedSquad, t.Analysis.FlakeRate*100, int(time.Since(t.QuarantinedAt).Hours()/24)))
+			sb.WriteString(fmt.Sprintf("- `%s` (Owner: %s, Squad: %s, Flake: %.0f%%, Age: %dd)\n",
+				t.TestID, t.Owner, t.AssignedSquad, t.Analysis.FlakeRate*100, int(time.Since(t.QuarantinedAt).Hours()/24)))
 		}
 	}
 
