@@ -55,13 +55,30 @@ func (b *IngestMultiDocBlock) Execute(ctx context.Context, bCtx *Context) (*Bloc
 		return &BlockResult{
 			BlockID: "ingest.multi-doc",
 			Status:  StatusFailed,
-			Message: fmt.Sprintf("Spec reconciliation halted: %v", err),
+			Message: fmt.Sprintf("Spec reconciliation error: %v", err),
 			Error:   err,
 		}, err
 	}
 
 	bCtx.Set("bundle", bundle)
 	bCtx.Set("reconciliation_report", report)
+
+	if report.HaltedForHumanResolution {
+		return &BlockResult{
+			BlockID: "ingest.multi-doc",
+			Status:  StatusFailed,
+			Message: fmt.Sprintf("Spec reconciliation blocked: confidence (%.2f) below safety threshold (%.2f) with %d contradiction(s)",
+				report.CalculatedConfidence, report.AmbiguityThreshold, len(report.Conflicts)),
+			Error: errors.New("specification reconciliation failed safety confidence threshold"),
+			Data: map[string]interface{}{
+				"ticket_id":             bundle.TicketID,
+				"confidence":            report.CalculatedConfidence,
+				"conflicts":             len(report.Conflicts),
+				"halted":                true,
+				"reconciliation_report": report,
+			},
+		}, errors.New("specification reconciliation failed safety confidence threshold")
+	}
 
 	return &BlockResult{
 		BlockID: "ingest.multi-doc",

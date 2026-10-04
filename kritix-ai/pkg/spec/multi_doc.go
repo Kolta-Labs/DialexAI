@@ -169,6 +169,82 @@ func (b *MultiArtifactBundle) ReconcileAndAudit(customThreshold float64) (*Confl
 			})
 			confidence -= 0.40
 		}
+
+		// Check for session timeout mismatch (e.g., 15m vs 60m)
+		if (strings.Contains(fddLower, "15 min") || strings.Contains(fddLower, "15-minute")) &&
+			(strings.Contains(jiraLower, "60 min") || strings.Contains(jiraLower, "1 hour")) {
+			conflicts = append(conflicts, DocumentConflict{
+				Field:            "SessionTimeout",
+				SourceA:          "Feature Design Doc (FDD)",
+				ValueA:          "15 minutes inactivity timeout",
+				SourceB:          "Jira Ticket Description",
+				ValueB:          "60 minutes session duration",
+				Severity:         ConflictSevHigh,
+				Explanation:      "Contradictory session timeout policy between FDD and Jira ticket.",
+				ResolutionPrompt: "Security/SecOps alignment required: Determine authoritative session expiration duration.",
+			})
+			confidence -= 0.30
+		}
+
+		// Check for password length / policy mismatch (e.g. min 8 vs min 12)
+		if strings.Contains(fddLower, "minimum 12") && strings.Contains(jiraLower, "minimum 8") {
+			conflicts = append(conflicts, DocumentConflict{
+				Field:            "PasswordPolicy",
+				SourceA:          "Feature Design Doc (FDD)",
+				ValueA:          "Minimum 12 characters",
+				SourceB:          "Jira Ticket Description",
+				ValueB:          "Minimum 8 characters",
+				Severity:         ConflictSevHigh,
+				Explanation:      "Password complexity minimum length differs between security spec (12) and Jira user story (8).",
+				ResolutionPrompt: "Align on SOC 2 password policy compliance requirements.",
+			})
+			confidence -= 0.30
+		}
+
+		// Check for currency conflict (e.g., USD vs EUR)
+		if strings.Contains(fddLower, "currency: eur") && strings.Contains(jiraLower, "currency: usd") {
+			conflicts = append(conflicts, DocumentConflict{
+				Field:            "CurrencySettlement",
+				SourceA:          "Feature Design Doc (FDD)",
+				ValueA:          "EUR (€)",
+				SourceB:          "Jira Ticket Description",
+				ValueB:          "USD ($)",
+				Severity:         ConflictSevCritical,
+				Explanation:      "Settlement currency contradiction between European market FDD and US Jira AC.",
+				ResolutionPrompt: "Confirm regional billing market configuration.",
+			})
+			confidence -= 0.40
+		}
+
+		// Check for 3D Secure / payment challenge contradiction
+		if strings.Contains(fddLower, "3ds mandatory") && strings.Contains(jiraLower, "frictionless instant charge") {
+			conflicts = append(conflicts, DocumentConflict{
+				Field:            "PaymentAuthWorkflow",
+				SourceA:          "Feature Design Doc (FDD)",
+				ValueA:          "Mandatory 3DS challenge popup",
+				SourceB:          "Jira Ticket Description",
+				ValueB:          "Frictionless instant charge",
+				Severity:         ConflictSevCritical,
+				Explanation:      "Payment authorization contradiction: mandatory 3DS verification vs frictionless bypass.",
+				ResolutionPrompt: "Align with Fraud & Risk engineering on SCA (Strong Customer Authentication) requirements.",
+			})
+			confidence -= 0.40
+		}
+	}
+
+	// 3. Completeness check: Incomplete specifications without required analytics or accessibility notes
+	if len(b.AnalyticsEvents) == 0 && strings.Contains(strings.ToLower(b.FeatureDesignDoc), "track") {
+		conflicts = append(conflicts, DocumentConflict{
+			Field:            "AnalyticsTrackingSpec",
+			SourceA:          "Feature Design Doc (FDD)",
+			ValueA:          "Mentions telemetry/conversion tracking",
+			SourceB:          "AnalyticsEvents Schema",
+			ValueB:          "Empty / missing analytics event definitions",
+			Severity:         ConflictSevMedium,
+			Explanation:      "FDD indicates telemetry tracking is required, but no AnalyticsEvents are declared in the bundle.",
+			ResolutionPrompt: "Request analytics tagging plan from Product Analytics team.",
+		})
+		confidence -= 0.20
 	}
 
 	if confidence < 0.0 {
