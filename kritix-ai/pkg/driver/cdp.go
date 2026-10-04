@@ -30,6 +30,7 @@ type CDPConfig struct {
 	ViewportHeight     int
 	UserAgent          string
 	Timeout            time.Duration
+	DisableSandbox     bool // Only set when running in privileged non-container environments that require no-sandbox
 }
 
 // DefaultCDPConfig returns standard defaults for headless CDP operations.
@@ -40,6 +41,17 @@ func DefaultCDPConfig() CDPConfig {
 		ViewportHeight: 900,
 		Timeout:        30 * time.Second,
 	}
+}
+
+// isRunningInContainer checks if the current process is executing within a container environment.
+func isRunningInContainer() bool {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
+	}
+	if os.Getenv("KRITIX_CONTAINER_SANDBOX") == "true" || os.Getenv("KUBERNETES_SERVICE_HOST") != "" || os.Getenv("CONTAINER") != "" {
+		return true
+	}
+	return false
 }
 
 // CDPDriver manages real Chrome DevTools Protocol browser automation.
@@ -95,11 +107,14 @@ func (c *CDPDriver) Start(ctx context.Context) error {
 		opts := append(chromedp.DefaultExecAllocatorOptions[:],
 			chromedp.Flag("headless", c.config.Headless),
 			chromedp.Flag("disable-gpu", true),
-			chromedp.Flag("no-sandbox", true),
 			chromedp.Flag("disable-dev-shm-usage", true),
 			chromedp.Flag("disable-extensions", true),
 			chromedp.WindowSize(c.config.ViewportWidth, c.config.ViewportHeight),
 		)
+		// Hardening: do not disable Chrome sandbox unless executing within a container or explicitly configured
+		if c.config.DisableSandbox || isRunningInContainer() {
+			opts = append(opts, chromedp.Flag("no-sandbox", true))
+		}
 		if c.config.ExecPath != "" {
 			opts = append(opts, chromedp.ExecPath(c.config.ExecPath))
 		}

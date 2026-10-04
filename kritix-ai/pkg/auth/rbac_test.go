@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -358,3 +361,35 @@ func TestAuditChainDurableAndTamperEvident(t *testing.T) {
 		t.Fatal("must refuse to append to a broken log")
 	}
 }
+
+func TestAnchorAuditHead(t *testing.T) {
+	mgr := mustMgr(t, "audit-anchor-test-secret-32bytes!")
+	u := UserIdentity{ID: "usr-admin-anchor", Role: RoleAdmin, Squad: "secops"}
+	_ = mgr.Authorize(&u, PermManageWorkflows, "dag-1")
+	_ = mgr.Authorize(&u, PermExecuteWorkflows, "dag-1")
+
+	var receivedSignature string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedSignature = r.Header.Get("X-Kritix-Audit-Signature")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"anchored"}`))
+	}))
+	defer ts.Close()
+
+	ctx := context.Background()
+	proof, err := mgr.AnchorAuditHead(ctx, ts.URL)
+	if err != nil {
+		t.Fatalf("unexpected error anchoring audit head: %v", err)
+	}
+
+	if proof.HeadHash == "" {
+		t.Error("expected non-empty HeadHash in proof")
+	}
+	if proof.TotalEntries != 2 {
+		t.Errorf("expected 2 entries, got %d", proof.TotalEntries)
+	}
+	if receivedSignature == "" || receivedSignature != proof.Signature {
+		t.Errorf("expected signature %s to match header %s", proof.Signature, receivedSignature)
+	}
+}
+

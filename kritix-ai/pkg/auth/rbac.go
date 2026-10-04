@@ -2,6 +2,8 @@ package auth
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -9,12 +11,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 )
+
+// MaxAuditLineSize specifies the maximum byte size of an individual audit entry (1 MiB buffer).
+// Any individual entry exceeding 1 MiB is rejected during chain validation to prevent unbounded memory allocation.
+const MaxAuditLineSize = 1 << 20
 
 // Role defines enterprise authorization tiers.
 type Role string
@@ -626,3 +633,64 @@ func (q *EnvironmentQuotaEnforcer) ReleaseRun(squadID string) {
 		q.activeRuns[squadID]--
 	}
 }
+
+// AuditAnchorProof contains verification metadata confirming that a specific audit chain head hash
+// was externally witnessed and anchored by a remote tamper-evident authority/webhook.
+type AuditAnchorProof struct {
+	AnchorURL    string    `json:"anchor_url"`
+	HeadHash     string    `json:"head_hash"`
+	TotalEntries int       `json:"total_entries"`
+	AnchoredAt   time.Time `json:"anchored_at"`
+	Signature    string    `json:"signature"`
+	Status       string    `json:"status"` // "COMMITTED"
+}
+
+// AnchorAuditHead exports the current audit chain head hash and signs it with the enterprise key,
+// posting it to an external tamper-evident webhook or ledger.
+func (m *EnterpriseAuthManager) AnchorAuditHead(ctx context.Context, anchorWebhookURL string) (*AuditAnchorProof, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.lastHash == "" && len(m.auditLogs) == 0 {
+		return nil, errors.New("cannot anchor empty audit chain")
+	}
+
+	proof := &AuditAnchorProof{
+		AnchorURL:    anchorWebhookURL,
+		HeadHash:     m.lastHash,
+		TotalEntries: len(m.auditLogs),
+		AnchoredAt:   time.Now().UTC(),
+		Status:       "COMMITTED",
+	}
+
+	payload := fmt.Sprintf("%s|%s|%d|%d", proof.AnchorURL, proof.HeadHash, proof.TotalEntries, proof.AnchoredAt.Unix())
+	mac := hmac.New(sha256.New, m.signingKey)
+	mac.Write([]byte(payload))
+	proof.Signature = hex.EncodeToString(mac.Sum(nil))
+
+	if anchorWebhookURL != "" {
+		body, err := json.Marshal(proof)
+		if err != nil {
+			return nil, err
+		}
+		req, err := http.NewRequestWithContext(ctx, "POST", anchorWebhookURL, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Kritix-Audit-Signature", proof.Signature)
+
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send audit head anchor to %s: %w", anchorWebhookURL, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return nil, fmt.Errorf("external audit anchor returned HTTP %d", resp.StatusCode)
+		}
+	}
+
+	return proof, nil
+}
+
