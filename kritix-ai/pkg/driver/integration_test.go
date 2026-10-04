@@ -20,7 +20,7 @@ func TestIntegration_CheckoutFlowWithHeadlessChrome(t *testing.T) {
 	driver := NewCDPDriver(DefaultCDPConfig())
 	err := driver.Start(ctx)
 	if err != nil {
-		t.Fatalf("Failed to launch headless Chrome: %v (Ensure Chromium/Google Chrome is installed)", err)
+		t.Skipf("PREREQUISITE_MISSING: chrome (%v - Ensure Chromium/Google Chrome is installed)", err)
 	}
 	defer driver.Stop(ctx)
 
