@@ -52,7 +52,7 @@ type BenchmarkSuite struct {
 // RunReproducibleBenchmark runs a measured benchmark harness evaluating token savings, regression detection, and CI latency.
 func RunReproducibleBenchmark(runs int) BenchmarkSuite {
 	if runs <= 0 {
-		runs = 200
+		runs = 1
 	}
 
 	suite, err := RunBenchmarkOnCorpus("testdata/regressions", runs)
@@ -60,70 +60,19 @@ func RunReproducibleBenchmark(runs int) BenchmarkSuite {
 		return *suite
 	}
 
-	// Fallback if testdata path is not relative to current directory
+	// Fallback path if testdata path is not relative to current directory
 	suite, err = RunBenchmarkOnCorpus("../../testdata/regressions", runs)
 	if err == nil && suite != nil {
 		return *suite
 	}
 
-	apps := []AppBenchmarkResult{
-		{
-			Name:                "Medusa Storefront (Next.js / Node / PostgreSQL)",
-			LOC:                 185000,
-			Flow:                "Authentication, Product Discovery & Multi-Step Checkout",
-			P50LatencySeconds:   1.45,
-			P95LatencySeconds:   2.80,
-			RawTokensAvg:        8200,
-			OptimizedTokensAvg:  1280,
-			TokenSavingsPercent: 84.39,
-			RunsCount:           runs,
-			FlakeRate:           0.0,
-		},
-		{
-			Name:                "Saleor / TodoMVC RealWorld SPA",
-			LOC:                 60000,
-			Flow:                "User Onboarding, State Mutation & Filter Persistence",
-			P50LatencySeconds:   0.85,
-			P95LatencySeconds:   1.60,
-			RawTokensAvg:        4500,
-			OptimizedTokensAvg:  690,
-			TokenSavingsPercent: 84.67,
-			RunsCount:           runs,
-			FlakeRate:           0.0,
-		},
-	}
-
-	exclusions := []string{
-		"Distributed Kafka topics and append-only event streams",
-		"External 3rd-party SaaS webhooks (Stripe live sandbox, Salesforce CRM, Segment)",
-		"Multi-service distributed saga transactions across heterogeneous datastores",
-	}
-
+	// Fail closed / honest unmeasured state if harness cannot execute
 	return BenchmarkSuite{
-		TargetApplications:         apps,
-		TargetAppName:              "Medusa / Saleor E-Commerce Storefronts",
-		MonorepoLOC:                245000,
-		RunsCount:                  runs,
-		RawTokensAvg:               8200.0,
-		OptimizedTokensAvg:         1280.0,
-		TokenSavingsPercent:        84.39,
-		TotalRegressionsTested:     51,
-		SemanticSwapsTested:        30,
-		FalseNegativesDetected:     0,
-		FalseNegativeRate:          0.0,
-		FalsePassRateSemanticSwaps: 0.0,
-		P50LatencySeconds:          1.45,
-		P95LatencySeconds:          2.80,
-		WallClockCISeconds:         2.80,
-		LocalModelTokenCountAvg:    1280.0,
-		APIModelTokenCountAvg:      1150.0,
-		ResetScope:                 "Docker Compose PostgreSQL transactional rollback and test container isolation",
-		ResetExclusions:            exclusions,
-		RollbackExclusions:         exclusions,
-		ExecutionTimestamp:         time.Now().UTC().Format(time.RFC3339),
-		ReproducerCommand:          fmt.Sprintf("kritix benchmark --corpus testdata/regressions --runs %d", runs),
-		Commit:                     getGitCommit(),
-		Dataset:                    "testdata/regressions + 30 hand-written semantic swap validation suite",
+		TargetAppName:      "not measured (harness unavailable or unexecuted)",
+		ExecutionTimestamp: time.Now().UTC().Format(time.RFC3339),
+		ReproducerCommand:  "kritix benchmark --corpus testdata/regressions",
+		Commit:             getGitCommit(),
+		Dataset:            "not measured",
 	}
 }
 

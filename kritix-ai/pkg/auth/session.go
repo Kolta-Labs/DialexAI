@@ -563,12 +563,13 @@ type HashiCorpVaultProvider struct {
 }
 
 // NewHashiCorpVaultProvider constructs a real Vault HTTP client.
-func NewHashiCorpVaultProvider(vaultAddr, transitKey string) *HashiCorpVaultProvider {
+// Fails closed if VAULT_TOKEN is missing or empty to prevent insecure defaults.
+func NewHashiCorpVaultProvider(vaultAddr, transitKey string) (*HashiCorpVaultProvider, error) {
 	token := os.Getenv("VAULT_TOKEN")
 	if token == "" {
-		token = "root"
+		return nil, errors.New("vault: missing required VAULT_TOKEN environment variable; refusing to start with empty or default credentials")
 	}
-	return NewHashiCorpVaultProviderWithClient(vaultAddr, token, transitKey, "secret", nil)
+	return NewHashiCorpVaultProviderWithClient(vaultAddr, token, transitKey, "secret", nil), nil
 }
 
 // NewHashiCorpVaultProviderWithClient constructs a real Vault HTTP client with custom options.

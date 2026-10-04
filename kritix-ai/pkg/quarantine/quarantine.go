@@ -20,6 +20,8 @@ const (
 var (
 	ErrQuarantineCapExceeded = errors.New("quarantine cap exceeded for team; resolve or fix existing flaky tests before quarantining more")
 	ErrSpecBudgetExceeded    = errors.New("generated spec budget exceeded for squad; SDET review required before generating more specs")
+	ErrMissingOwner          = errors.New("quarantine error: mandatory engineer/SDET owner required; unowned quarantine is prohibited")
+	ErrMissingExpiry         = errors.New("quarantine error: mandatory expiry SLA required; indefinite quarantine is prohibited")
 )
 
 // Classification classifies a test's stability.
@@ -190,14 +192,14 @@ func (r *QuarantineRegistry) AddQuarantineWithOwner(analysis FlakeAnalysis, squa
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if squad == "" {
+	if strings.TrimSpace(squad) == "" {
 		squad = "unassigned"
 	}
-	if owner == "" {
-		owner = squad + "-lead@company.com"
+	if strings.TrimSpace(owner) == "" {
+		return ErrMissingOwner
 	}
 	if sla <= 0 {
-		sla = r.defaultSLA
+		return ErrMissingExpiry
 	}
 
 	// Enforce per-team quarantine cap

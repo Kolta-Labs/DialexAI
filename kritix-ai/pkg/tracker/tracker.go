@@ -58,7 +58,7 @@ func (l *LocalFileTracker) CreateIssue(ctx context.Context, report triage.Defect
 	return &IssueResult{
 		Tracker:   TrackerLocal,
 		IssueID:   issueID,
-		IssueURL:  fmt.Sprintf("file://%s/%s.md", l.outputDir, issueID),
+		IssueURL:  fmt.Sprintf("%s/%s.md", l.outputDir, issueID),
 		Title:     report.Title,
 		CreatedAt: time.Now(),
 	}, nil

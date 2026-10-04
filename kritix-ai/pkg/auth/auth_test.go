@@ -363,3 +363,15 @@ func TestPlaintextStorageProhibitedInCI(t *testing.T) {
 		t.Errorf("expected ErrInsecureStorageProhibited in CI environment, got: %v", err)
 	}
 }
+
+func TestVaultFailClosedWithoutToken(t *testing.T) {
+	origToken := os.Getenv("VAULT_TOKEN")
+	defer os.Setenv("VAULT_TOKEN", origToken)
+
+	os.Unsetenv("VAULT_TOKEN")
+	_, err := NewHashiCorpVaultProvider("http://127.0.0.1:8200", "transit-key")
+	if err == nil {
+		t.Errorf("expected error when VAULT_TOKEN is unset, got nil")
+	}
+}
+

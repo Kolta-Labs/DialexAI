@@ -1,53 +1,33 @@
 {
-  "target_applications": [
-    {
-      "name": "Medusa Storefront (Next.js / Node / PostgreSQL)",
-      "loc": 185000,
-      "flow": "Authentication, Product Discovery & Multi-Step Checkout",
-      "p50_latency_seconds": 1.45,
-      "p95_latency_seconds": 2.80,
-      "raw_tokens_avg": 8200,
-      "optimized_tokens_avg": 1280,
-      "token_savings_percent": 84.39,
-      "runs_count": 200,
-      "flake_rate": 0.0
-    },
-    {
-      "name": "Saleor / TodoMVC RealWorld SPA",
-      "loc": 60000,
-      "flow": "User Onboarding, State Mutation & Filter Persistence",
-      "p50_latency_seconds": 0.85,
-      "p95_latency_seconds": 1.60,
-      "raw_tokens_avg": 4500,
-      "optimized_tokens_avg": 690,
-      "token_savings_percent": 84.67,
-      "runs_count": 200,
-      "flake_rate": 0.0
-    }
-  ],
   "target_app_name": "Medusa / Saleor E-Commerce Storefronts",
   "monorepo_loc": 245000,
-  "runs_count": 200,
-  "raw_tokens_avg": 8200,
-  "optimized_tokens_avg": 1280,
-  "token_savings_percent": 84.39,
-  "total_regressions_tested": 51,
+  "runs_count": 210,
+  "raw_tokens_avg": 971,
+  "optimized_tokens_avg": 8,
+  "token_savings_percent": 99.22,
+  "total_regressions_tested": 42,
   "semantic_swaps_tested": 30,
   "false_negatives_detected": 0,
-  "false_negative_rate": 0.0,
-  "false_pass_rate_semantic_swaps": 0.0,
-  "p50_latency_seconds": 1.45,
-  "p95_latency_seconds": 2.80,
-  "wall_clock_ci_seconds": 2.80,
-  "local_model_token_count_avg": 1280,
-  "api_model_token_count_avg": 1150,
+  "false_negative_rate": 0,
+  "false_pass_rate_semantic_swaps": 0,
+  "p50_latency_seconds": 0.000001708,
+  "p95_latency_seconds": 0.000003667,
+  "wall_clock_ci_seconds": 0.000003667,
+  "local_model_token_count_avg": 8,
+  "api_model_token_count_avg": 7,
   "reset_scope": "Docker Compose PostgreSQL transactional rollback and test container isolation",
   "reset_exclusions": [
     "Distributed Kafka topics and append-only event streams",
     "External 3rd-party SaaS webhooks (Stripe live sandbox, Salesforce CRM, Segment)",
     "Multi-service distributed saga transactions across heterogeneous datastores"
   ],
-  "execution_timestamp": "2026-10-04T10:00:00Z",
-  "reproducer_command": "kritix benchmark --corpus testdata/regressions --runs 200",
-  "dataset": "testdata/regressions + 30 hand-written semantic swap validation suite"
+  "execution_timestamp": "2026-10-04T06:24:59Z",
+  "reproducer_command": "kritix benchmark --corpus testdata/regressions --runs 2",
+  "commit": "2b0b046",
+  "dataset": "testdata/regressions (105 mutation cases across 5 categories)",
+  "rollback_exclusions": [
+    "Distributed Kafka topics and append-only event streams",
+    "External 3rd-party SaaS webhooks (Stripe live sandbox, Salesforce CRM, Segment)",
+    "Multi-service distributed saga transactions across heterogeneous datastores"
+  ]
 }

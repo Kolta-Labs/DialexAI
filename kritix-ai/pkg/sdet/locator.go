@@ -103,6 +103,64 @@ func DefaultSemanticDiffValidator() *SemanticDiffValidator {
 	}
 }
 
+// IsInteractiveRole returns true if an ARIA role represents an interactive actionable element.
+func IsInteractiveRole(role string) bool {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "button", "link", "checkbox", "radio", "textbox", "combobox", "menuitem", "tab", "switch", "option", "searchbox":
+		return true
+	default:
+		return false
+	}
+}
+
+// DeriveActionIntent computes semantic action intent from live DOM properties (text, aria attributes, role, tag).
+func DeriveActionIntent(el driver.Element) string {
+	if el.ActionIntent != "" {
+		return el.ActionIntent
+	}
+	if val, ok := el.Attributes["data-action"]; ok && val != "" {
+		return val
+	}
+	if val, ok := el.Attributes["aria-label"]; ok && val != "" {
+		return val
+	}
+	if val, ok := el.Attributes["action"]; ok && val != "" {
+		return val
+	}
+	if el.Text != "" {
+		return strings.TrimSpace(el.Text)
+	}
+	if el.Placeholder != "" {
+		return strings.TrimSpace(el.Placeholder)
+	}
+	if el.Value != "" {
+		return strings.TrimSpace(el.Value)
+	}
+	return ""
+}
+
+// ExtractFingerprintFromElement extracts a robust multi-factor signature directly from a live DOM element.
+func ExtractFingerprintFromElement(el driver.Element) ElementFingerprint {
+	intent := DeriveActionIntent(el)
+	containerID := el.ContainerID
+	if containerID == "" && el.Attributes != nil {
+		containerID = el.Attributes["data-container"]
+	}
+
+	return ElementFingerprint{
+		ID:            el.ID,
+		TestID:        el.TestID,
+		Role:          el.Role,
+		Text:          el.Text,
+		Tag:           el.Tag,
+		XPath:         el.XPath,
+		ContainerID:   containerID,
+		ContainerRole: el.ContainerRole,
+		ActionIntent:  intent,
+		BBox:          el.BoundingBox,
+	}
+}
+
 // ValidateDiff verifies that candidate element does not exhibit dangerous semantic, ancestry, or layout drift.
 func (v *SemanticDiffValidator) ValidateDiff(fp ElementFingerprint, candidate *driver.Element) (bool, string) {
 	if candidate == nil {
@@ -114,9 +172,32 @@ func (v *SemanticDiffValidator) ValidateDiff(fp ElementFingerprint, candidate *d
 		return false, fmt.Sprintf("SEMANTIC DRIFT DETECTED: Element ARIA role mutated from %q to %q. Self-healing aborted to prevent false-positive pass.", fp.Role, candidate.Role)
 	}
 
+	// Derive live action intents if not explicitly provided
+	fpIntent := fp.ActionIntent
+	if fpIntent == "" {
+		fpIntent = strings.TrimSpace(fp.Text)
+	}
+	candidateIntent := candidate.ActionIntent
+	if candidateIntent == "" {
+		candidateIntent = DeriveActionIntent(*candidate)
+	}
+
 	// 2. Action Intent Check: prevents dangerous same-role-different-action semantic swaps
-	if v.EnforceIntentCheck && fp.ActionIntent != "" && candidate.ActionIntent != "" && !strings.EqualFold(fp.ActionIntent, candidate.ActionIntent) {
-		return false, fmt.Sprintf("ACTION INTENT MISMATCH DETECTED: Target action intent is %q, but candidate has action intent %q. Self-healing aborted to prevent dangerous semantic swap.", fp.ActionIntent, candidate.ActionIntent)
+	if v.EnforceIntentCheck {
+		if fpIntent != "" && candidateIntent != "" && !strings.EqualFold(fpIntent, candidateIntent) {
+			return false, fmt.Sprintf("ACTION INTENT MISMATCH DETECTED: Target action intent is %q, but candidate has action intent %q. Self-healing aborted to prevent dangerous semantic swap.", fpIntent, candidateIntent)
+		}
+
+		// Fail closed on interactive elements if target had text/intent and candidate has different or empty intent
+		isInteractive := IsInteractiveRole(fp.Role) || IsInteractiveRole(candidate.Role) || fp.Tag == "button" || candidate.Tag == "button"
+		if isInteractive {
+			if fp.Text != "" && candidate.Text != "" && !strings.EqualFold(strings.TrimSpace(fp.Text), strings.TrimSpace(candidate.Text)) {
+				return false, fmt.Sprintf("SEMANTIC ACTION INTENT MISMATCH: Interactive element text changed from %q to %q. Refusing to heal onto different action target.", fp.Text, candidate.Text)
+			}
+			if (fpIntent == "" || candidateIntent == "") && fp.TestID == "" && candidate.TestID == "" && fp.ID != candidate.ID {
+				return false, "AMBIGUOUS INTENT: Cannot verify semantic equivalence on interactive element without matching text or explicit intent. Failing closed."
+			}
+		}
 	}
 
 	// 3. Container / Ancestry Anchor Check: prevents cross-container semantic swaps

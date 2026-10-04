@@ -246,3 +246,25 @@ func TestQuarantinePurgeAndLeadershipScorecard(t *testing.T) {
 		t.Errorf("fresh test should remain in quarantine")
 	}
 }
+
+func TestQuarantine_MandatoryOwnerAndExpiry(t *testing.T) {
+	registry := NewQuarantineRegistry()
+	analysis := FlakeAnalysis{
+		TestID:           "test_unowned",
+		Classification:   ClassificationFlaky,
+		ShouldQuarantine: true,
+	}
+
+	// 1. Missing owner rejected
+	err := registry.AddQuarantineWithOwner(analysis, "squad-checkout", "", "TICKET-1", 7*24*time.Hour)
+	if err != ErrMissingOwner {
+		t.Errorf("expected ErrMissingOwner when owner is empty, got: %v", err)
+	}
+
+	// 2. Zero or negative SLA rejected
+	err = registry.AddQuarantineWithOwner(analysis, "squad-checkout", "owner@company.com", "TICKET-1", 0)
+	if err != ErrMissingExpiry {
+		t.Errorf("expected ErrMissingExpiry when SLA <= 0, got: %v", err)
+	}
+}
+

@@ -41,6 +41,8 @@ type DefectReport struct {
 	FailedNetworkReqs  []driver.NetworkEvent `json:"failed_network_reqs,omitempty"`
 	PlaywrightRepro    string                `json:"playwright_repro"`
 	CurlRepro          string                `json:"curl_repro,omitempty"`
+	FailureFile        string                `json:"failure_file,omitempty"`
+	FailureLine        int                   `json:"failure_line,omitempty"`
 	GitBlameHint       string                `json:"git_blame_hint,omitempty"`
 	AIDiagnosisComment string                `json:"ai_diagnosis_comment,omitempty"`
 	ProposedFixDiff    string                `json:"proposed_fix_diff,omitempty"`

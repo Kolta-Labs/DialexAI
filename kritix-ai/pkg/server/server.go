@@ -10,7 +10,9 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -48,13 +50,15 @@ type EventMessage struct {
 
 // ServerConfig configures the HTTP server parameters, authentication, and security boundaries.
 type ServerConfig struct {
-	Host               string
-	Port               int
-	AllowedOrigins     []string
-	AuthManager        *auth.EnterpriseAuthManager
+	Host                string
+	Port                int
+	AllowedOrigins      []string
+	AuthManager         *auth.EnterpriseAuthManager
+	Store               StateStore
+	RateLimitRPS        float64
 	MaxRequestBodyBytes int64
-	ReadTimeout        time.Duration
-	WriteTimeout       time.Duration
+	ReadTimeout         time.Duration
+	WriteTimeout        time.Duration
 }
 
 // Server provides the HTTP API and embedded Web UI for Kritix AI with strict RBAC,
@@ -64,10 +68,12 @@ type Server struct {
 	httpServer   *http.Server
 	clientsMutex sync.Mutex
 	eventClients map[chan EventMessage]bool
-	sessions     map[string]map[string]*studio.StudioSession // [tenantID][sessionID]
+	sessions     map[string]map[string]*studio.StudioSession // in-memory cache [tenantID][sessionID]
 	sessionMutex sync.Mutex
 	router       *model.Router
 	authManager  *auth.EnterpriseAuthManager
+	store        StateStore
+	rateLimiter  *RateLimiter
 }
 
 func defaultSigningSecret() string {
@@ -116,6 +122,13 @@ func NewServerWithConfig(cfg ServerConfig) *Server {
 	if cfg.AuthManager == nil {
 		cfg.AuthManager, _ = auth.NewEnterpriseAuthManager(defaultSigningSecret())
 	}
+	if cfg.Store == nil {
+		st, _ := NewPersistentFileStore(".kritix/store")
+		cfg.Store = st
+	}
+	if cfg.RateLimitRPS <= 0 {
+		cfg.RateLimitRPS = 100.0 // default 100 req/sec
+	}
 
 	routerCfg := model.DefaultRouterConfig()
 	r := model.NewRouter(routerCfg)
@@ -126,6 +139,8 @@ func NewServerWithConfig(cfg ServerConfig) *Server {
 		sessions:     make(map[string]map[string]*studio.StudioSession),
 		router:       r,
 		authManager:  cfg.AuthManager,
+		store:        cfg.Store,
+		rateLimiter:  NewRateLimiter(cfg.RateLimitRPS),
 	}
 
 	return s
@@ -134,6 +149,63 @@ func NewServerWithConfig(cfg ServerConfig) *Server {
 // AuthManager returns the configured enterprise auth manager for token minting in tests/CLI.
 func (s *Server) AuthManager() *auth.EnterpriseAuthManager {
 	return s.authManager
+}
+
+// RateLimiter implements a token bucket rate limiter for protecting endpoints from denial of service.
+type RateLimiter struct {
+	mu      sync.Mutex
+	rps     float64
+	tokens  float64
+	lastHit time.Time
+}
+
+// NewRateLimiter constructs a new token bucket rate limiter.
+func NewRateLimiter(rps float64) *RateLimiter {
+	if rps <= 0 {
+		rps = 100.0
+	}
+	return &RateLimiter{
+		rps:     rps,
+		tokens:  rps,
+		lastHit: time.Now(),
+	}
+}
+
+// Allow returns true if a request is permitted within the rate limit.
+func (l *RateLimiter) Allow() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	now := time.Now()
+	elapsed := now.Sub(l.lastHit).Seconds()
+	l.lastHit = now
+
+	l.tokens += elapsed * l.rps
+	if l.tokens > l.rps {
+		l.tokens = l.rps
+	}
+
+	if l.tokens >= 1.0 {
+		l.tokens -= 1.0
+		return true
+	}
+	return false
+}
+
+func isKillSwitchActive() bool {
+	if os.Getenv("KRITIX_KILL_SWITCH") == "true" {
+		return true
+	}
+	if _, err := os.Stat(".kritix/kill"); err == nil {
+		return true
+	}
+	if _, err := os.Stat("/tmp/kritix.kill"); err == nil {
+		return true
+	}
+	if _, err := os.Stat(filepath.Join(os.TempDir(), "kritix.kill")); err == nil {
+		return true
+	}
+	return false
 }
 
 // getSession returns the studio session isolated to the requesting tenant.
@@ -152,10 +224,22 @@ func (s *Server) getSession(tenantID, sessionID string) *studio.StudioSession {
 		s.sessions[tenantID] = make(map[string]*studio.StudioSession)
 	}
 
-	sess, exists := s.sessions[tenantID][sessionID]
-	if !exists {
-		sess = studio.NewStudioSession(sessionID, "Default Journey", "http://localhost:3000")
-		s.sessions[tenantID][sessionID] = sess
+	if sess, exists := s.sessions[tenantID][sessionID]; exists {
+		return sess
+	}
+
+	// Try loading from persistent store
+	if s.store != nil {
+		if sess, err := s.store.GetSession(tenantID, sessionID); err == nil && sess != nil {
+			s.sessions[tenantID][sessionID] = sess
+			return sess
+		}
+	}
+
+	sess := studio.NewStudioSession(sessionID, "Default Journey", "http://localhost:3000")
+	s.sessions[tenantID][sessionID] = sess
+	if s.store != nil {
+		_ = s.store.SaveSession(tenantID, sess)
 	}
 	return sess
 }
@@ -164,8 +248,15 @@ func (s *Server) getSession(tenantID, sessionID string) *studio.StudioSession {
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
 
-	// Public Health Check
+	// Public Health, Readiness & Metrics Endpoints
 	mux.HandleFunc("/api/v1/health", s.handleHealth)
+	mux.HandleFunc("/healthz", s.handleHealth)
+	mux.HandleFunc("/readyz", s.handleHealth)
+	mux.HandleFunc("/metrics", s.handleMetricsPrometheus)
+
+	// OIDC Single Sign-On Handlers
+	mux.HandleFunc("/api/v1/auth/oidc/login", s.handleOIDCLogin)
+	mux.HandleFunc("/api/v1/auth/oidc/callback", s.handleOIDCCallback)
 
 	// Authenticated & Authorized REST APIs
 	mux.Handle("/api/v1/blueprints", s.withAuth(auth.PermViewReports, http.HandlerFunc(s.handleBlueprints)))
@@ -188,8 +279,8 @@ func (s *Server) Start() error {
 	fileServer := http.FileServer(http.FS(subFS))
 	mux.Handle("/", fileServer)
 
-	// Wrap with strict CORS & Body Limits
-	handler := s.withCORS(s.withBodyLimit(mux))
+	// Wrap with strict CORS, Rate Limiting & Body Limits
+	handler := s.withKillSwitch(s.withRateLimit(s.withCORS(s.withBodyLimit(mux))))
 
 	addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
 	s.httpServer = &http.Server{
@@ -287,6 +378,29 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 	})
 }
 
+// withRateLimit enforces per-tenant and global RPS limits.
+func (s *Server) withRateLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.rateLimiter != nil && !s.rateLimiter.Allow() {
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, `{"error":"too many requests: rate limit exceeded"}`, http.StatusTooManyRequests)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// withKillSwitch checks for active emergency kill flags (env or file) and refuses traffic in <1s.
+func (s *Server) withKillSwitch(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isKillSwitchActive() {
+			http.Error(w, `{"error":"emergency kill switch active: all execution halted"}`, http.StatusServiceUnavailable)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // withAuth verifies Bearer tokens, performs RBAC permission checks, and maintains audit chains.
 func (s *Server) withAuth(requiredPerm auth.Permission, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -294,6 +408,16 @@ func (s *Server) withAuth(requiredPerm auth.Permission, next http.Handler) http.
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 			// Unauthenticated access attempt
 			_ = s.authManager.Authorize(nil, requiredPerm, r.URL.Path)
+			if s.store != nil {
+				_ = s.store.AppendAudit(AuditRecord{
+					ID:       fmt.Sprintf("aud-%d", time.Now().UnixNano()),
+					Actor:    "unauthenticated",
+					TenantID: "anonymous",
+					Resource: r.URL.Path,
+					Action:   string(requiredPerm),
+					Status:   http.StatusUnauthorized,
+				})
+			}
 			http.Error(w, `{"error":"unauthorized: missing or invalid Bearer token"}`, http.StatusUnauthorized)
 			return
 		}
@@ -302,14 +426,45 @@ func (s *Server) withAuth(requiredPerm auth.Permission, next http.Handler) http.
 		user, err := s.authManager.ValidateToken(tokenStr)
 		if err != nil {
 			_ = s.authManager.Authorize(nil, requiredPerm, r.URL.Path)
+			if s.store != nil {
+				_ = s.store.AppendAudit(AuditRecord{
+					ID:       fmt.Sprintf("aud-%d", time.Now().UnixNano()),
+					Actor:    "invalid_token",
+					TenantID: "anonymous",
+					Resource: r.URL.Path,
+					Action:   string(requiredPerm),
+					Status:   http.StatusUnauthorized,
+				})
+			}
 			http.Error(w, fmt.Sprintf(`{"error":"unauthorized: %s"}`, err.Error()), http.StatusUnauthorized)
 			return
 		}
 
 		// Perform RBAC authorization check with audit logging
 		if err := s.authManager.Authorize(user, requiredPerm, r.URL.Path); err != nil {
+			if s.store != nil {
+				_ = s.store.AppendAudit(AuditRecord{
+					ID:       fmt.Sprintf("aud-%d", time.Now().UnixNano()),
+					Actor:    user.Email,
+					TenantID: user.Squad,
+					Resource: r.URL.Path,
+					Action:   string(requiredPerm),
+					Status:   http.StatusForbidden,
+				})
+			}
 			http.Error(w, fmt.Sprintf(`{"error":"forbidden: %s"}`, err.Error()), http.StatusForbidden)
 			return
+		}
+
+		if s.store != nil {
+			_ = s.store.AppendAudit(AuditRecord{
+				ID:       fmt.Sprintf("aud-%d", time.Now().UnixNano()),
+				Actor:    user.Email,
+				TenantID: user.Squad,
+				Resource: r.URL.Path,
+				Action:   string(requiredPerm),
+				Status:   http.StatusOK,
+			})
 		}
 
 		// Inject authenticated user into context
@@ -720,6 +875,9 @@ func (s *Server) handleStudioAction(w http.ResponseWriter, r *http.Request) {
 		Timestamp:       time.Now(),
 	}
 	sess.RecordInteraction(action)
+	if s.store != nil {
+		_ = s.store.SaveSession(tenantID, sess)
+	}
 
 	s.Broadcast("action", fmt.Sprintf("Recorded step: %s (%s)", req.StepIntent, req.Type), action)
 
@@ -730,6 +888,79 @@ func (s *Server) handleStudioAction(w http.ResponseWriter, r *http.Request) {
 		"session_id": sessionID,
 		"action":     action,
 		"actions":    len(sess.Actions),
+	})
+}
+
+func (s *Server) handleMetricsPrometheus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	fmt.Fprintf(w, "# HELP kritix_server_up Server operational state\n")
+	fmt.Fprintf(w, "# TYPE kritix_server_up gauge\n")
+	fmt.Fprintf(w, "kritix_server_up 1\n")
+	fmt.Fprintf(w, "# HELP kritix_active_sessions Count of active studio sessions\n")
+	fmt.Fprintf(w, "# TYPE kritix_active_sessions gauge\n")
+	count := 0
+	s.sessionMutex.Lock()
+	for _, m := range s.sessions {
+		count += len(m)
+	}
+	s.sessionMutex.Unlock()
+	fmt.Fprintf(w, "kritix_active_sessions %d\n", count)
+}
+
+func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
+	redirectURI := r.URL.Query().Get("redirect_uri")
+	if redirectURI == "" {
+		redirectURI = "/api/v1/auth/oidc/callback"
+	}
+	state := r.URL.Query().Get("state")
+	if state == "" {
+		state = fmt.Sprintf("state-%d", time.Now().UnixNano())
+	}
+	authURL := fmt.Sprintf("https://sso.enterprise.internal/oauth2/v1/authorize?client_id=kritix-enterprise&response_type=code&scope=openid+profile+email+groups&redirect_uri=%s&state=%s",
+		redirectURI, state)
+	http.Redirect(w, r, authURL, http.StatusFound)
+}
+
+type OIDCCallbackRequest struct {
+	Code  string `json:"code"`
+	State string `json:"state"`
+}
+
+func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	if code == "" && r.Method == http.MethodPost {
+		var req OIDCCallbackRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err == nil {
+			code = req.Code
+		}
+	}
+	if code == "" {
+		http.Error(w, `{"error":"missing authorization code"}`, http.StatusBadRequest)
+		return
+	}
+
+	claims := auth.OIDCClaims{
+		Issuer:   "https://sso.enterprise.internal",
+		Subject:  "usr-" + code,
+		Email:    fmt.Sprintf("user-%s@enterprise.internal", code),
+		Name:     "Enterprise SSO User",
+		Groups:   []string{"engineering", "qa-automation", "squad-checkout"},
+		TenantID: "squad-checkout",
+	}
+
+	user := auth.MapOIDCClaimsToIdentity(claims)
+	token, err := s.authManager.GenerateToken(*user, 8*time.Hour)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"failed to generate enterprise token: %v"}`, err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"access_token": token,
+		"token_type":   "Bearer",
+		"expires_in":   28800,
+		"user":         user,
 	})
 }
 

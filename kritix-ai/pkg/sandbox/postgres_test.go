@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -128,3 +129,40 @@ func TestPostgresDatabaseResetter_ErrorHandling(t *testing.T) {
 		t.Fatalf("expected ErrDatabaseResetFailed on query error, got %v", err)
 	}
 }
+
+func TestPostgresDatabaseResetter_ConcurrentIsolation(t *testing.T) {
+	ctx := context.Background()
+	mockDB := &mockSQLDB{}
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 10)
+
+	for worker := 0; worker < 10; worker++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			r := NewPostgresDatabaseResetter(PostgresResetConfig{
+				Strategy:     ResetStrategySavepoint,
+				ActiveDBName: fmt.Sprintf("tenant_db_%d", w),
+			}, mockDB)
+
+			spName := fmt.Sprintf("sp_worker_%d", w)
+			if err := r.CreateSavepoint(ctx, spName); err != nil {
+				errCh <- err
+				return
+			}
+			if err := r.RollbackToSavepoint(ctx, spName); err != nil {
+				errCh <- err
+				return
+			}
+		}(worker)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Errorf("concurrent isolation error: %v", err)
+	}
+}
+
