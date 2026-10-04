@@ -139,11 +139,14 @@ func (a *Auditor) CheckProvenance() ([]Violation, error) {
 		})
 	}
 
-	// Must match git commit (short or full HEAD)
+	// Must match git commit (short or full HEAD or immediate parent HEAD~1)
 	commit, _ := m["commit"].(string)
 	headCommit := getGitHead(a.KritixDir)
+	parentCommit := getGitParent(a.KritixDir)
 	if headCommit != "" && commit != "" {
-		if !strings.HasPrefix(headCommit, commit) && !strings.HasPrefix(commit, headCommit) {
+		matchesHead := strings.HasPrefix(headCommit, commit) || strings.HasPrefix(commit, headCommit)
+		matchesParent := parentCommit != "" && (strings.HasPrefix(parentCommit, commit) || strings.HasPrefix(commit, parentCommit))
+		if !matchesHead && !matchesParent {
 			violations = append(violations, Violation{
 				Gate:        "Provenance",
 				File:        "benchmark.json",
@@ -662,6 +665,15 @@ func (a *Auditor) CheckHygiene() ([]Violation, error) {
 
 func getGitHead(dir string) string {
 	cmd := exec.Command("git", "-C", dir, "rev-parse", "HEAD")
+	out, err := cmd.Output()
+	if err == nil {
+		return strings.TrimSpace(string(out))
+	}
+	return ""
+}
+
+func getGitParent(dir string) string {
+	cmd := exec.Command("git", "-C", dir, "rev-parse", "HEAD~1")
 	out, err := cmd.Output()
 	if err == nil {
 		return strings.TrimSpace(string(out))
