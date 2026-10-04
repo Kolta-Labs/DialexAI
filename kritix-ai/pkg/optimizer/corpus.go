@@ -2,13 +2,14 @@ package optimizer
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -122,6 +123,12 @@ func RunBenchmarkOnCorpus(corpusDir string, runs int) (*BenchmarkSuite, error) {
 	var falseNegativesDetected int
 	var latencies []float64
 
+	runID := fmt.Sprintf("harness-%d", time.Now().UnixNano())
+	rawLogDir := filepath.Join(".dev", "kritix-ai", "evidence", "round1")
+	_ = os.MkdirAll(rawLogDir, 0755)
+	rawLogPath := filepath.Join(rawLogDir, fmt.Sprintf("benchmark_corpus_%s.jsonl", runID))
+	logFile, _ := os.OpenFile(rawLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+
 	for r := 0; r < runs; r++ {
 		for _, tc := range cases {
 			start := time.Now()
@@ -147,17 +154,44 @@ func RunBenchmarkOnCorpus(corpusDir string, runs int) (*BenchmarkSuite, error) {
 			res := registry.ResolveWithMode(sdet.HealModeStrict, tc.Original.ID, tc.LiveElements)
 
 			// 3. Invariant check on Category 3: True Semantic Bugs
+			isFalseNegative := false
 			if tc.IsSemanticBug || tc.Category == CategorySemanticBug {
 				totalSemanticBugsTested++
-				// A true semantic bug MUST NOT be healed or passed (must trigger REGRESSION_FAIL or confidence < 0.85)
+				// A true semantic bug MUST NOT be healed or passed
 				if res != nil && (res.Status == sdet.StatusExactPass || (res.Status == sdet.StatusHealed && res.ConfidenceScore >= 0.85)) {
 					falseNegativesDetected++
+					isFalseNegative = true
 				}
 			}
 
 			elapsed := time.Since(start).Seconds()
 			latencies = append(latencies, elapsed)
+
+			if logFile != nil {
+				eventJSON, _ := json.Marshal(map[string]interface{}{
+					"timestamp":          time.Now().UTC().Format(time.RFC3339Nano),
+					"event":              "case_evaluated",
+					"harness_run_id":     runID,
+					"case_id":            tc.ID,
+					"category":           string(tc.Category),
+					"raw_tokens":         rawTokenEst,
+					"pruned_tokens":      prunedTokenEst,
+					"elapsed_seconds":    elapsed,
+					"is_semantic_bug":    tc.IsSemanticBug,
+					"is_false_negative":  isFalseNegative,
+				})
+				_, _ = logFile.WriteString(string(eventJSON) + "\n")
+			}
 		}
+	}
+	if logFile != nil {
+		_ = logFile.Close()
+	}
+
+	rawSHA256 := "none"
+	if b, err := os.ReadFile(rawLogPath); err == nil && len(b) > 0 {
+		h := sha256.Sum256(b)
+		rawSHA256 = hex.EncodeToString(h[:])
 	}
 
 	avgRaw := totalRawTokens / float64(totalCasesEvaluated)
@@ -172,18 +206,6 @@ func RunBenchmarkOnCorpus(corpusDir string, runs int) (*BenchmarkSuite, error) {
 		fnRate = (float64(falseNegativesDetected) / float64(totalSemanticBugsTested)) * 100.0
 	}
 
-	sort.Float64s(latencies)
-	p50 := 0.0
-	p95 := 0.0
-	if len(latencies) > 0 {
-		p50 = latencies[int(math.Floor(float64(len(latencies))*0.50))]
-		p95Idx := int(math.Floor(float64(len(latencies)) * 0.95))
-		if p95Idx >= len(latencies) {
-			p95Idx = len(latencies) - 1
-		}
-		p95 = latencies[p95Idx]
-	}
-
 	commitHash := getGitCommit()
 
 	totalSemanticSwapsTested := 0
@@ -194,9 +216,12 @@ func RunBenchmarkOnCorpus(corpusDir string, runs int) (*BenchmarkSuite, error) {
 	}
 
 	suite := &BenchmarkSuite{
-		TargetAppName:              deriveDynamicAppName(corpusDir),
+		HarnessRunID:               runID,
+		ExecutedTarget:             "corpus-classifier",
+		TargetAppName:              "corpus-classifier",
 		MonorepoLOC:                computeDynamicLOC(corpusDir),
-		RunsCount:                  totalCasesEvaluated,
+		RunsCount:                  runs,
+		TotalEvaluations:           totalCasesEvaluated,
 		RawTokensAvg:               math.Round(avgRaw),
 		OptimizedTokensAvg:         math.Round(avgPruned),
 		TokenSavingsPercent:        math.Round(savingsPct*100) / 100,
@@ -205,18 +230,13 @@ func RunBenchmarkOnCorpus(corpusDir string, runs int) (*BenchmarkSuite, error) {
 		FalseNegativesDetected:     falseNegativesDetected,
 		FalseNegativeRate:          fnRate,
 		FalsePassRateSemanticSwaps: 0.0,
-		P50LatencySeconds:          p50,
-		P95LatencySeconds:          p95,
-		WallClockCISeconds:         p95,
-		LocalModelTokenCountAvg:    math.Round(avgPruned),
-		APIModelTokenCountAvg:      math.Round(avgPruned * 0.90),
+		P50LatencySeconds:          "not measured",
+		P95LatencySeconds:          "not measured",
+		WallClockCISeconds:         "not measured",
+		LocalModelTokenCountAvg:    "not measured",
+		APIModelTokenCountAvg:      "not measured",
 		ResetScope:                 "Docker Compose PostgreSQL transactional rollback and test container isolation",
 		ResetExclusions: []string{
-			"Distributed Kafka topics and append-only event streams",
-			"External 3rd-party SaaS webhooks (Stripe live sandbox, Salesforce CRM, Segment)",
-			"Multi-service distributed saga transactions across heterogeneous datastores",
-		},
-		RollbackExclusions: []string{
 			"Distributed Kafka topics and append-only event streams",
 			"External 3rd-party SaaS webhooks (Stripe live sandbox, Salesforce CRM, Segment)",
 			"Multi-service distributed saga transactions across heterogeneous datastores",
@@ -224,7 +244,9 @@ func RunBenchmarkOnCorpus(corpusDir string, runs int) (*BenchmarkSuite, error) {
 		ExecutionTimestamp: time.Now().UTC().Format(time.RFC3339),
 		ReproducerCommand:  fmt.Sprintf("kritix benchmark --corpus %s --runs %d", corpusDir, runs),
 		Commit:             commitHash,
-		Dataset:            fmt.Sprintf("%s (%d mutation cases across 5 categories)", corpusDir, len(cases)),
+		Dataset:            fmt.Sprintf("%s (%d mutation cases across 5 categories; %d semantic swaps tested across %d runs = %d evaluations)", corpusDir, len(cases), totalSemanticSwapsTested, runs, totalSemanticBugsTested),
+		RawLogPath:         rawLogPath,
+		RawLogSHA256:       rawSHA256,
 	}
 
 	return suite, nil

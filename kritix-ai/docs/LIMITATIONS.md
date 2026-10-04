@@ -41,7 +41,11 @@ This document explicitly defines what Kritix AI supports, its runtime boundaries
 
 ---
 
-## 4. Benchmark & Metric Verifiability
+## 4. Benchmark & Metric Verifiability & Unmeasured Boundaries
 
 - Hardcoded marketing metrics are prohibited across the codebase.
-- All printed metrics are derived from executions against the 105-case mutation corpus in `testdata/regressions/` and committed to `benchmark.json`.
+- Metrics in `benchmark.json` and scorecards are derived from verifiable harness runs against `testdata/regressions/` and live containers when available.
+- **Unmeasured Metrics in Corpus Mode**:
+  - `p50_latency_seconds` / `p95_latency_seconds` / `wall_clock_ci_seconds`: Marked `"not measured"` in corpus mode. True CI wall-clock requires containerized multi-app runs (`Medusa`, `TodoMVC`) with cold Chrome CDP instances.
+  - `local_model_token_count_avg` / `api_model_token_count_avg`: Marked `"not measured"` unless real model calls are executed via Ollama or authorized API keys.
+- **Harness Prerequisite Fail-Closed Gate**: If any required infrastructure tool (`docker`, `chrome`, `postgres`, `vault`, `k6`) is absent, the harness exits non-zero with `PREREQUISITE_MISSING: <tool>` rather than silently substituting emulated measurements.

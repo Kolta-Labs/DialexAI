@@ -10,11 +10,14 @@ Most AI testing agents dump full raw HTML DOMs and network event streams into ma
 
 **Kritix reverses this model:**
 - **Deterministic Native Go Algorithms First**: DOM pruning to semantic interactive trees, state hashing, regex assertions, TOTP MFA calculations, and AST diffing run natively in Go (<1ms, **0 LLM tokens**).
-- **90–95% Token & Dollar Reduction**: Raw DOMs of 150KB are pruned to 6KB interactive accessibility trees before any model sees them.
+- **Structural DOM Pruning Engine**: Transforms full HTML DOMs into compact semantic accessibility trees before model submission, stripping decorative styling and non-interactive nodes.
 - **Model & Provider Agnostic**: Kritix does not lock you into expensive on-premise GPU clusters. It is 100% agnostic to your intelligence substrate:
-  - **Commercial Cloud APIs**: OpenAI (`gpt-4o`), Anthropic (`claude-3-5-sonnet`), Google (`gemini-2.0`), or DeepSeek—with **90-95% dollar savings on your existing API bill**.
+  - **Commercial Cloud APIs**: OpenAI (`gpt-4o`), Anthropic (`claude-3-5-sonnet`), Google (`gemini-2.0`), or DeepSeek.
   - **Flat-Rate Developer Subshells**: Zero-token-cost subshells via existing employee developer CLI seats (`claude`, `codex`, `agy`).
   - **Air-Gapped / Sovereign On-Premise**: Pure offline local runtimes (Ollama/vLLM with Qwen 2.5 Coder or Gemma 2) for defense, banking, and strict compliance environments.
+
+> **Note on Performance Metrics**: Laboratory token compression metrics on testdata are labelled `synthetic-corpus`. Production CI times, multi-app end-to-end token costs, and live model usage remain unmeasured until run against containerized target applications via the full evidence harness.
+
 
 ---
 
@@ -77,6 +80,16 @@ A native desktop application built with Kotlin Multiplatform and Compose Desktop
 cd kritix-ai
 ./gradlew :app:run
 ```
+
+### 3. Developer Guidance & How-To Guides
+For detailed step-by-step guides on testing specific tech stacks:
+👉 **[Read the Complete Developer How-To Guide](docs/HOW_TO_GUIDE.md)**
+- Testing Web SPAs (React, Next.js, Vue, Vite)
+- Testing Python Web Apps (Django, Flask, FastAPI, Streamlit)
+- Testing Kotlin Multiplatform (KMP) & Mobile Web
+- Using the Visual Studio demonstration recorder
+- Running OWASP Top 10 DAST & k6 performance audits
+- Adding GitHub Actions automated PR smoke checks
 
 ---
 

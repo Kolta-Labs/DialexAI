@@ -23,11 +23,11 @@ func TestReproducibleBenchmark(t *testing.T) {
 			suite.FalseNegativeRate, suite.FalseNegativesDetected)
 	}
 
-	if suite.P95LatencySeconds > 90.0 {
-		t.Errorf("expected p95 CI latency <= 90s, got %.2fs", suite.P95LatencySeconds)
+	if suite.P95LatencySeconds != "not measured" {
+		t.Errorf("expected p95 CI latency to be 'not measured' on corpus classifier, got %s", suite.P95LatencySeconds)
 	}
 
-	if len(suite.RollbackExclusions) == 0 {
+	if len(suite.ResetExclusions) == 0 {
 		t.Errorf("expected explicit rollback exclusions to be documented")
 	}
 
