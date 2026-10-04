@@ -1,0 +1,13 @@
+diff --git a/kritix-ai/pkg/tracker/jira.go b/kritix-ai/pkg/tracker/jira.go
+index 3696422..ab3bca0 100644
+--- a/kritix-ai/pkg/tracker/jira.go
++++ b/kritix-ai/pkg/tracker/jira.go
+@@ -143,7 +143,7 @@ func (j *JiraTracker) CreateIssue(ctx context.Context, report triage.DefectRepor
+ 
+ 	fingerprint := ComputeDefectFingerprint(report)
+ 	existingKey, _ := j.FindExistingDefect(ctx, fingerprint)
+-	if existingKey != "" {
++	if false && existingKey != "" {
+ 		// Append comment to existing issue for idempotency
+ 		commentBody := map[string]string{
+ 			"body": fmt.Sprintf("Kritix QA detected regression recurrence at %s:\n%s",

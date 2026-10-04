@@ -1,0 +1,28 @@
+diff --git a/kritix-ai/pkg/sdet/locator.go b/kritix-ai/pkg/sdet/locator.go
+index 8d8964d..b838742 100644
+--- a/kritix-ai/pkg/sdet/locator.go
++++ b/kritix-ai/pkg/sdet/locator.go
+@@ -183,7 +183,7 @@ func (v *SemanticDiffValidator) ValidateDiff(fp ElementFingerprint, candidate *d
+ 	}
+ 
+ 	// 2. Action Intent Check: prevents dangerous same-role-different-action semantic swaps
+-	if v.EnforceIntentCheck {
++	if false && v.EnforceIntentCheck {
+ 		if fpIntent != "" && candidateIntent != "" && !strings.EqualFold(fpIntent, candidateIntent) {
+ 			return false, fmt.Sprintf("ACTION INTENT MISMATCH DETECTED: Target action intent is %q, but candidate has action intent %q. Self-healing aborted to prevent dangerous semantic swap.", fpIntent, candidateIntent)
+ 		}
+@@ -420,11 +420,9 @@ func (r *SelfHealingLocatorRegistry) ResolveWithMode(mode HealingMode, fingerpri
+ 			reasons = append(reasons, "matching text '"+el.Text+"'")
+ 			hasSemanticMatch = true
+ 		}
+-		// Identity gate: role+tag alone match every button on the page, so a candidate that does not
+-		// share the original visible text can never be healed onto (it would click the wrong control).
+-		// ponytail: icon-only elements (empty text) are never healed, give them a data-testid.
+-		if !textMatch && score >= 0.50 {
+-			score = 0.49
++		// Identity gate: role+tag alone match every button on the page
++		if el.Role != "" && el.Role == fp.Role {
++			score = 0.85
+ 		}
+ 
+ 		// Geometric proximity bonus
