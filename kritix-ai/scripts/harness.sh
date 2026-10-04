@@ -74,13 +74,36 @@ cat > "$CAPABILITIES_JSON" <<EOF
 }
 EOF
 
-# 2. Run structural truth audit
-echo "🔍 [1/3] Executing structural truth audit..."
+# Set harness mode: skips are strictly prohibited in harness mode
+export KRITIX_HARNESS=1
+
+# 2. Run structural truth audit and integration vet
+echo "🔍 [1/3] Executing structural truth audit and integration vet..."
+(cd "$KRITIX_DIR" && go vet -tags integration ./...)
 (cd "$KRITIX_DIR" && go run ./cmd/truth-audit)
 
-# 3. Run full unit & race suite
-echo "🧪 [2/3] Executing full test suite with race detector..."
-(cd "$KRITIX_DIR" && go test ./... -race -count=1)
+# 3. Run full unit, race, and integration suite with zero-skip enforcement
+echo "🧪 [2/3] Executing full test suite with race detector and -tags integration..."
+TEST_JSON_OUT="$EVIDENCE_DIR/test_results.jsonl"
+set +e
+(cd "$KRITIX_DIR" && go test -tags integration -json ./... -race -count=1) > "$TEST_JSON_OUT"
+TEST_EXIT=$?
+set -e
+
+if [ $TEST_EXIT -ne 0 ]; then
+  echo "⛔ TEST SUITE FAILED with exit code $TEST_EXIT" >&2
+  exit $TEST_EXIT
+fi
+
+# Zero-skip enforcement in harness mode
+SKIPPED_TESTS=$(grep '"Action":"skip"' "$TEST_JSON_OUT" | grep '"Test":' || true)
+if [ -n "$SKIPPED_TESTS" ]; then
+  SKIP_COUNT=$(echo "$SKIPPED_TESTS" | wc -l | tr -d ' ')
+  echo "⛔ ZERO-SKIP CHECK FAILED: Found $SKIP_COUNT skipped tests in harness mode (KRITIX_HARNESS=1 prohibits skips):" >&2
+  echo "$SKIPPED_TESTS" >&2
+  exit 1
+fi
+echo "✓ Zero-skip check passed: all tests executed without skipping."
 
 # 4. Run real benchmark
 echo "📊 [3/3] Generating benchmark evidence from real executions..."

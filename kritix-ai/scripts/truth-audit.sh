@@ -15,4 +15,5 @@ else
 fi
 
 echo "🔍 [Truth Audit v3] Running structural mechanical verification..."
+(cd "$KRITIX_DIR" && go vet -tags integration ./...)
 (cd "$KRITIX_DIR" && go run ./cmd/truth-audit)
