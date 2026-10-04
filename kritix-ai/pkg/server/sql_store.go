@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	_ "github.com/lib/pq"
 	"kritix/pkg/studio"
 )
 

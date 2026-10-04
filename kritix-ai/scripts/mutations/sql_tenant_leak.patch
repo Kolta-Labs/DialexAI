@@ -1,0 +1,21 @@
+diff --git a/kritix-ai/pkg/server/sql_store.go b/kritix-ai/pkg/server/sql_store.go
+index fc08652..2e88a19 100644
+--- a/kritix-ai/pkg/server/sql_store.go
++++ b/kritix-ai/pkg/server/sql_store.go
+@@ -9,6 +9,7 @@ import (
+ 	"sync"
+ 	"time"
+ 
++	_ "github.com/lib/pq"
+ 	"kritix/pkg/studio"
+ )
+ 
+@@ -115,7 +116,7 @@ func (s *SQLStateStore) GetSession(tenantID, sessionID string) (*studio.StudioSe
+ 
+ 	var data string
+ 	err := s.db.QueryRow(
+-		`SELECT data FROM kritix_sessions WHERE tenant_id = ? AND session_id = ?`,
++		`SELECT data FROM kritix_sessions WHERE session_id = ?`,
+ 		tenantID, sessionID,
+ 	).Scan(&data)
+ 	if err == sql.ErrNoRows {
