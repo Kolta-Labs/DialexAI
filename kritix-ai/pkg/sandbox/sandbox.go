@@ -286,30 +286,37 @@ func (s *SandboxEnvironment) GetInterceptedWebhooks() []InterceptedWebhook {
 	return copied
 }
 
-// MarkCheckpoint records a named checkpoint. It captures NO data and does NOT snapshot any database,
-// container or service: it only lets ResetInterceptedState verify the caller marked a baseline first.
-// Real state rollback (SQL reset, volume restore) is out of scope; use per-tenant synthetic data
-// (TenantID) and service virtualization (WireMock/Pact) instead.
-func (s *SandboxEnvironment) MarkCheckpoint(ctx context.Context, checkpointID string) error {
+// RecordBaseline records a named baseline marker for verifying test start states.
+func (s *SandboxEnvironment) RecordBaseline(ctx context.Context, baselineID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.checkpoints[checkpointID] = time.Now()
+	s.checkpoints[baselineID] = time.Now()
 	return nil
 }
 
-// ResetInterceptedState discards the webhooks this sandbox intercepted. It touches nothing outside
-// this process: no database, queue or third-party system is rolled back.
-func (s *SandboxEnvironment) ResetInterceptedState(ctx context.Context, checkpointID string) error {
+// MarkCheckpoint is an alias for RecordBaseline.
+func (s *SandboxEnvironment) MarkCheckpoint(ctx context.Context, checkpointID string) error {
+	return s.RecordBaseline(ctx, checkpointID)
+}
+
+// ResetInterceptedWebhooks discards caught webhooks from this test run.
+// For real database rollback, use PostgresDatabaseResetter or per-tenant data partitioning.
+func (s *SandboxEnvironment) ResetInterceptedWebhooks(ctx context.Context, baselineID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, exists := s.checkpoints[checkpointID]; !exists {
-		return fmt.Errorf("checkpoint %q not found", checkpointID)
+	if _, exists := s.checkpoints[baselineID]; !exists {
+		return fmt.Errorf("baseline marker %q not found", baselineID)
 	}
 
 	s.lastResetAt = time.Now()
 	s.interceptedWebhooks = make([]InterceptedWebhook, 0)
 	return nil
+}
+
+// ResetInterceptedState is an alias for ResetInterceptedWebhooks.
+func (s *SandboxEnvironment) ResetInterceptedState(ctx context.Context, checkpointID string) error {
+	return s.ResetInterceptedWebhooks(ctx, checkpointID)
 }
 
 // GetLastResetTime returns when the sandbox was last restored.
