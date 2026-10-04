@@ -21,6 +21,7 @@ import (
 	"kritix/pkg/perf"
 	"kritix/pkg/quarantine"
 	"kritix/pkg/sandbox"
+	"kritix/pkg/security"
 	"kritix/pkg/server"
 	"kritix/pkg/spec"
 	"kritix/pkg/workflow"
@@ -95,6 +96,8 @@ func isKillSwitchActive() bool {
 }
 
 func main() {
+	security.SetupEgressInterceptor()
+
 	if isKillSwitchActive() {
 		fmt.Println("⛔ Emergency kill switch active: all Kritix execution halted (<1s response).")
 		os.Exit(5)
@@ -453,6 +456,9 @@ func runBlueprint(blueprintID string) {
 	}
 	if blueprintID == "self-healing-maintenance" {
 		vars["heal_mode"] = "advisory" // maintenance proposes a PR for human review; every other run stays strict
+	}
+	if blueprintID == "offline-contract-audit" {
+		vars["openapi_spec"] = `{"openapi":"3.0.0","info":{"title":"Offline Sovereign Test","version":"1.0"},"paths":{"/health":{"get":{}}}}`
 	}
 	if v := os.Getenv("KRITIX_HEAL_MODE"); v != "" {
 		vars["heal_mode"] = v

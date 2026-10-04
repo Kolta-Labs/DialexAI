@@ -7,6 +7,7 @@ func init() {
 	RegisterBlueprint(&NightlyDeepAuditBlueprint{})
 	RegisterBlueprint(&VisualA11yAuditBlueprint{})
 	RegisterBlueprint(&SelfHealingMaintenanceBlueprint{})
+	RegisterBlueprint(&OfflineContractAuditBlueprint{})
 }
 
 // -------------------------------------------------------------------------
@@ -200,3 +201,31 @@ func (b *SelfHealingMaintenanceBlueprint) BuildDAG() (*DAG, error) {
 
 	return dag, nil
 }
+
+// -------------------------------------------------------------------------
+// 6. OFFLINE CONTRACT AUDIT BLUEPRINT (Zero-Telemetry Sovereign Offline Engine)
+// -------------------------------------------------------------------------
+
+type OfflineContractAuditBlueprint struct{}
+
+func (b *OfflineContractAuditBlueprint) Descriptor() BlueprintDescriptor {
+	return BlueprintDescriptor{
+		ID:             "offline-contract-audit",
+		Name:           "Offline OpenAPI Contract Audit",
+		Category:       "offline",
+		Tier:           Tier1PRGate,
+		Description:    "Completely offline, air-gapped OpenAPI contract validation and schema parsing with guaranteed zero network egress.",
+		TargetAudience: "Security Guild, Sovereign Cloud Engineers",
+		DefaultTimeout: "30s",
+		ZeroLLM:        true,
+		FastPath:       true,
+	}
+}
+
+func (b *OfflineContractAuditBlueprint) BuildDAG() (*DAG, error) {
+	dag := NewDAG("offline-contract-audit", "Offline OpenAPI Contract Audit")
+	dag.SetTier(Tier1PRGate)
+	dag.AddNode("ingest_openapi", &IngestOpenAPIBlock{})
+	return dag, nil
+}
+

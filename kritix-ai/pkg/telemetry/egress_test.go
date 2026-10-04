@@ -23,6 +23,9 @@ func TestZeroTelemetryByDefault_ProofOfZeroEgress(t *testing.T) {
 	}))
 	defer honeypot.Close()
 
+	t.Setenv("KRITIX_TELEMETRY_ENDPOINT", honeypot.URL)
+	t.Setenv("KRITIX_ZERO_EGRESS", "true")
+
 	// Execute offline blueprint / blocks
 	dag := workflow.NewDAG("offline-zero-telemetry-proof", "Offline Zero Telemetry Proof")
 	dag.AddNode("local_parse", &workflow.IngestOpenAPIBlock{})
