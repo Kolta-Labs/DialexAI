@@ -20,41 +20,34 @@ func TestCalculateTCO(t *testing.T) {
 		t.Errorf("expected 4400 monthly runs for 100 engineers, got %d", result.MonthlyPRRuns)
 	}
 
-	if result.NetMonthlySavings <= 0 {
-		t.Errorf("expected positive savings from token pruning")
-	}
-
-	if result.MonthlyCloudAPIOptimized >= result.MonthlyCloudAPIUnassisted {
-		t.Errorf("optimized cost must be lower than unassisted cost")
-	}
-
-	// Verify measured assumptions are populated
-	if result.Assumptions.MeasuredTokensAPIPerTest <= 0 || result.Assumptions.MeasuredCIMinutesPerRun <= 0 {
-		t.Errorf("expected populated measured assumptions")
+	// In corpus mode with unmeasured production latency, headline must be blocked
+	if !result.IsHeadlineBlocked {
+		t.Errorf("expected headline ROI to be blocked when multi-app latency is not measured")
 	}
 
 	breakdown := result.FormatBreakdown()
-	if !strings.Contains(breakdown, "MEASURED BENCHMARK ASSUMPTIONS") {
-		t.Errorf("missing assumptions section in breakdown: %s", breakdown)
+	if !strings.Contains(breakdown, "HEADLINE ROI: [BLOCKED") {
+		t.Errorf("expected breakdown to show headline blocked warning: %s", breakdown)
 	}
 
-	// Test GPU mode for 100 engineers
-	paramsGPU := params
-	paramsGPU.Deployment = DeploymentVLLMCloud
-	resGPU := CalculateTCO(paramsGPU)
+	if !strings.Contains(breakdown, "DEDICATED GPU HOSTING (AWS A10G") {
+		t.Errorf("missing dedicated GPU hosting breakdown: %s", breakdown)
+	}
 
-	// Sizing for 100 engineers: 2 nodes ($7,800) + 1 MLOps FTE ($15,000) = $22,800/mo
-	if resGPU.MonthlyGPUInfraCost != 7800.0 {
-		t.Errorf("expected $7,800 monthly GPU infra cost for 100 engineers, got $%.2f", resGPU.MonthlyGPUInfraCost)
+	// 100 Engineers: 2 nodes * $5.672 * 730h * 0.70 util = $5,797/mo infra + $15,000 MLOps = $20,797/mo
+	if result.GPU100MonthlyInfra <= 5000 || result.GPU100MonthlyInfra >= 6500 {
+		t.Errorf("unexpected 100-engineer GPU infra cost: $%.2f", result.GPU100MonthlyInfra)
 	}
-	if resGPU.MonthlyMLOpsFTEBurden != 15000.0 {
-		t.Errorf("expected $15,000 monthly MLOps FTE burden for 100 engineers, got $%.2f", resGPU.MonthlyMLOpsFTEBurden)
+	if result.GPU100MLOpsBurden != 15000.0 {
+		t.Errorf("expected $15,000 MLOps burden for 100 engineers, got $%.2f", result.GPU100MLOpsBurden)
 	}
-	if resGPU.TotalMonthlyCost != 22800.0 {
-		t.Errorf("expected $22,800 total monthly cost for 100 engineers, got $%.2f", resGPU.TotalMonthlyCost)
+
+	// 500 Engineers: 8 nodes * $5.672 * 730h * 0.70 util = $23,187/mo infra + $30,000 MLOps = $53,187/mo
+	if result.GPU500MonthlyInfra <= 20000 || result.GPU500MonthlyInfra >= 25000 {
+		t.Errorf("unexpected 500-engineer GPU infra cost: $%.2f", result.GPU500MonthlyInfra)
 	}
-	if resGPU.AnnualizedTCO != 22800.0*12.0 {
-		t.Errorf("expected $273,600 annualized TCO for 100 engineers, got $%.2f", resGPU.AnnualizedTCO)
+	if result.GPU500MLOpsBurden != 30000.0 {
+		t.Errorf("expected $30,000 MLOps burden for 500 engineers, got $%.2f", result.GPU500MLOpsBurden)
 	}
 
 	if len(result.HardwareComparison) != 2 {

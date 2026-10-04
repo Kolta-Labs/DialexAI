@@ -1,7 +1,10 @@
 package optimizer
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -21,62 +24,63 @@ type TCOParameters struct {
 	TestsPerSuite       int            `json:"tests_per_suite"`
 	Deployment          DeploymentMode `json:"deployment"`
 	WorkingDaysPerMonth int            `json:"working_days_per_month"`
+	BenchmarkPath       string         `json:"benchmark_path,omitempty"`
 }
 
 // HardwareProfile models inference throughput and developer execution latency.
 type HardwareProfile struct {
-	HardwareName       string  `json:"hardware_name"`
-	TokensPerSecond    float64 `json:"tokens_per_second"`
-	AvgRunDurationSec  float64 `json:"avg_run_duration_sec"` // Latency for full ingestion + SDET run
-	ThermalThrottle    bool    `json:"thermal_throttle"`
-	LatencyWarning     string  `json:"latency_warning,omitempty"`
+	HardwareName      string  `json:"hardware_name"`
+	TokensPerSecond   float64 `json:"tokens_per_second"`
+	AvgRunDurationSec float64 `json:"avg_run_duration_sec"`
+	ThermalThrottle   bool    `json:"thermal_throttle"`
+	LatencyWarning    string  `json:"latency_warning,omitempty"`
 }
 
 // TCOAssumptions records measured multi-app benchmark inputs and infrastructure sizing.
 type TCOAssumptions struct {
-	MeasuredTokensLocalPerTest float64 `json:"measured_tokens_local_per_test"` // 6,050 tokens (Medusa + TodoMVC benchmark)
-	MeasuredTokensAPIPerTest   float64 `json:"measured_tokens_api_per_test"`   // 5,550 tokens
-	MeasuredTokensRawPerTest   float64 `json:"measured_tokens_raw_per_test"`   // 150,000 tokens (raw DOM baseline)
-	MeasuredCIMinutesPerRun    float64 `json:"measured_ci_minutes_per_run"`    // 2.5 minutes (smoke suite on 4x runners)
-	CostPerMillionAPITokens    float64 `json:"cost_per_million_api_tokens"`    // $5.00 / 1M tokens
-	GPUNodesPer100Engineers    int     `json:"gpu_nodes_per_100_engineers"`    // 2x AWS g5.12xlarge (4x A10G 24GB)
-	MonthlyGPUCostPer100Devs   float64 `json:"monthly_gpu_cost_per_100_devs"`  // $7,800 / month
-	MonthlyMLOpsFTEPer100Devs  float64 `json:"monthly_mlops_fte_per_100_devs"` // $15,000 / month (1.0 FTE base + overhead)
+	MeasuredTokensLocalPerTest string  `json:"measured_tokens_local_per_test"`
+	MeasuredTokensAPIPerTest   string  `json:"measured_tokens_api_per_test"`
+	MeasuredCIMinutesPerRun    string  `json:"measured_ci_minutes_per_run"`
+	CostPerMillionAPITokens    float64 `json:"cost_per_million_api_tokens"`
+	A10GHourlyRate             float64 `json:"a10g_hourly_rate"` // AWS g5.12xlarge on-demand ($5.672/hr)
+	GPUUtilisationFactor       float64 `json:"gpu_utilisation_factor"`
+	MonthlyMLOpsFTECost        float64 `json:"monthly_mlops_fte_cost"`
 }
 
-// DefaultTCOAssumptions provides measured benchmark constants.
+// DefaultTCOAssumptions provides transparent hardware and sizing parameters.
 func DefaultTCOAssumptions() TCOAssumptions {
 	return TCOAssumptions{
-		MeasuredTokensLocalPerTest: 6050.0,
-		MeasuredTokensAPIPerTest:   5550.0,
-		MeasuredTokensRawPerTest:   150000.0,
-		MeasuredCIMinutesPerRun:    2.5,
+		MeasuredTokensLocalPerTest: "not measured",
+		MeasuredTokensAPIPerTest:   "not measured",
+		MeasuredCIMinutesPerRun:    "not measured",
 		CostPerMillionAPITokens:    5.0,
-		GPUNodesPer100Engineers:    2,
-		MonthlyGPUCostPer100Devs:   7800.0,
-		MonthlyMLOpsFTEPer100Devs:  15000.0,
+		A10GHourlyRate:             5.672, // AWS g5.12xlarge 4x A10G 24GB on-demand
+		GPUUtilisationFactor:       0.70,  // 70% active utilization
+		MonthlyMLOpsFTECost:        15000.0,
 	}
 }
 
 // TCOResult breaks down direct and hidden total cost of ownership.
 type TCOResult struct {
 	MonthlyPRRuns             int               `json:"monthly_pr_runs"`
-	MonthlyTokensRaw          float64           `json:"monthly_tokens_raw"`           // Without DOM compression
-	MonthlyTokensOptimized    float64           `json:"monthly_tokens_optimized"`     // With Kritix semantic pruning
-	MonthlyCloudAPIUnassisted float64           `json:"monthly_cloud_api_unassisted"` // Full raw LLM cost
-	MonthlyCloudAPIOptimized  float64           `json:"monthly_cloud_api_optimized"`  // Kritix commercial API bill
-	MonthlyGPUInfraCost       float64           `json:"monthly_gpu_infra_cost"`       // AWS A100/A10G cluster reservation
-	MonthlyMLOpsFTEBurden     float64           `json:"monthly_mlops_fte_burden"`     // MLOps engineer salary
+	IsHeadlineBlocked         bool              `json:"is_headline_blocked"`
+	HeadlineBlockReason       string            `json:"headline_block_reason"`
+	GPU100MonthlyInfra        float64           `json:"gpu_100_monthly_infra"`
+	GPU100MLOpsBurden         float64           `json:"gpu_100_mlops_burden"`
+	GPU100TotalCost           float64           `json:"gpu_100_total_cost"`
+	GPU500MonthlyInfra        float64           `json:"gpu_500_monthly_infra"`
+	GPU500MLOpsBurden         float64           `json:"gpu_500_mlops_burden"`
+	GPU500TotalCost           float64           `json:"gpu_500_total_cost"`
+	MonthlyGPUInfraCost       float64           `json:"monthly_gpu_infra_cost"`
+	MonthlyMLOpsFTEBurden     float64           `json:"monthly_mlops_fte_burden"`
 	TotalMonthlyCost          float64           `json:"total_monthly_cost"`
 	AnnualizedTCO             float64           `json:"annualized_tco"`
-	NetMonthlySavings         float64           `json:"net_monthly_savings"`
-	TotalCIMinutesMonthly     float64           `json:"total_ci_minutes_monthly"`
 	Assumptions               TCOAssumptions    `json:"assumptions"`
 	HardwareComparison        []HardwareProfile `json:"hardware_comparison"`
 	Recommendation            string            `json:"recommendation"`
 }
 
-// CalculateTCO computes honest enterprise cost modeling including infra and MLOps burdens.
+// CalculateTCO computes honest enterprise cost modeling strictly reading harness evidence.
 func CalculateTCO(params TCOParameters) TCOResult {
 	assumptions := DefaultTCOAssumptions()
 
@@ -87,32 +91,59 @@ func CalculateTCO(params TCOParameters) TCOResult {
 		params.Engineers = 10
 	}
 	if params.PRsPerDay <= 0 {
-		params.PRsPerDay = params.Engineers * 2 // Standard baseline: ~2 PRs per dev/day
+		params.PRsPerDay = params.Engineers * 2
 	}
 	if params.TestsPerSuite <= 0 {
 		params.TestsPerSuite = 15
 	}
 
 	monthlyRuns := params.PRsPerDay * params.WorkingDaysPerMonth
-	totalCIMinutes := float64(monthlyRuns) * assumptions.MeasuredCIMinutesPerRun
 
-	// Measured token consumption based on real Medusa & TodoMVC benchmark data
-	tokensPerRunRaw := float64(params.TestsPerSuite) * assumptions.MeasuredTokensRawPerTest
-	tokensPerRunOpt := float64(params.TestsPerSuite) * assumptions.MeasuredTokensAPIPerTest
+	// 1. Check harness evidence from benchmark.json
+	benchPath := params.BenchmarkPath
+	if benchPath == "" {
+		benchPath = "benchmark.json"
+	}
+	if _, err := os.Stat(benchPath); err != nil {
+		benchPath = filepath.Join("..", "..", "benchmark.json")
+	}
 
-	totalTokensRaw := float64(monthlyRuns) * tokensPerRunRaw
-	totalTokensOpt := float64(monthlyRuns) * tokensPerRunOpt
+	isHeadlineBlocked := true
+	headlineBlockReason := "Production multi-app CI latency and live model tokens are not measured"
 
-	// Commercial API blended cost
-	apiCostRaw := (totalTokensRaw / 1000000.0) * assumptions.CostPerMillionAPITokens
-	apiCostOpt := (totalTokensOpt / 1000000.0) * assumptions.CostPerMillionAPITokens
+	if data, err := os.ReadFile(benchPath); err == nil {
+		var suite BenchmarkSuite
+		if json.Unmarshal(data, &suite) == nil {
+			if suite.P50LatencySeconds != "not measured" && suite.LocalModelTokenCountAvg != "not measured" {
+				isHeadlineBlocked = false
+				headlineBlockReason = ""
+			}
+		}
+	}
 
-	gpuInfraCost := 0.0
-	mlopsBurden := 0.0
-	totalCost := 0.0
-	recommendation := ""
+	// 2. Dedicated GPU hosting formula: A10G $/hr × 730h × utilisation
+	monthlyHours := 730.0
+	nodeMonthlyCost := assumptions.A10GHourlyRate * monthlyHours * assumptions.GPUUtilisationFactor
 
-	// Hardware execution profiling benchmarks
+	// 100 Engineers: 2x g5.12xlarge nodes + 1 FTE MLOps
+	gpu100Infra := 2.0 * nodeMonthlyCost
+	gpu100MLOps := assumptions.MonthlyMLOpsFTECost
+	gpu100Total := gpu100Infra + gpu100MLOps
+
+	// 500 Engineers: 8x g5.12xlarge nodes + 2 FTE MLOps
+	gpu500Infra := 8.0 * nodeMonthlyCost
+	gpu500MLOps := 2.0 * assumptions.MonthlyMLOpsFTECost
+	gpu500Total := gpu500Infra + gpu500MLOps
+
+	scaleFactor := float64(params.Engineers) / 100.0
+	if scaleFactor < 0.25 {
+		scaleFactor = 0.25
+	}
+
+	activeInfraCost := gpu100Infra * scaleFactor
+	activeMLOpsCost := gpu100MLOps * scaleFactor
+	activeTotalCost := activeInfraCost + activeMLOpsCost
+
 	hwProfiles := []HardwareProfile{
 		{
 			HardwareName:      "Dedicated Cloud A100 / H100 (vLLM)",
@@ -122,60 +153,32 @@ func CalculateTCO(params TCOParameters) TCOResult {
 		},
 		{
 			HardwareName:      "Developer Laptop (MacBook M-Series / Apple Silicon 32B)",
-			TokensPerSecond:   4.0,   // 3-5 tokens/sec for 32B models
-			AvgRunDurationSec: 600.0, // 10 minutes (8-12m)
+			TokensPerSecond:   4.0,
+			AvgRunDurationSec: 600.0,
 			ThermalThrottle:   true,
 			LatencyWarning:    "⚠️ CI KILLER: Local 32B model runs at 3-5 tok/s taking 8-12 min per run; thermal throttling degrades throughput after 1 hour.",
 		},
 	}
 
-	// Scaling proportional to team size (normalized per 100 engineers)
-	scaleFactor := float64(params.Engineers) / 100.0
-	if scaleFactor < 0.25 {
-		scaleFactor = 0.25 // Minimum 1 GPU slice for smaller teams
-	}
-
-	switch params.Deployment {
-	case DeploymentVLLMCloud:
-		// Dedicated AWS/GCP GPU Cluster hosting for Qwen2.5-Coder-32B
-		// Per 100 engineers: 2x AWS g5.12xlarge nodes ($7,800/mo) + 1.0 FTE MLOps Engineer ($15,000/mo)
-		gpuInfraCost = assumptions.MonthlyGPUCostPer100Devs * scaleFactor
-		mlopsBurden = assumptions.MonthlyMLOpsFTEPer100Devs * scaleFactor
-		totalCost = gpuInfraCost + mlopsBurden
-		recommendation = fmt.Sprintf("Dedicated Cloud vLLM hosting for %d engineers requires $%.0f/mo infra + $%.0f/mo MLOps FTE ($%.0f/yr). Viable for strict air-gapped compliance.",
-			params.Engineers, gpuInfraCost, mlopsBurden, totalCost*12.0)
-
-	case DeploymentLocalOllama:
-		gpuInfraCost = 0.0
-		mlopsBurden = 2500.0 * scaleFactor // Config sync, quantization packaging, dev troubleshooting
-		totalCost = mlopsBurden
-		recommendation = "Local Ollama is ideal for offline dev exploration only. 8-12 min run latency makes it infeasible for automated CI PR gates."
-
-	default: // DeploymentCloudAPI
-		totalCost = apiCostOpt
-		gpuInfraCost = 0.0
-		mlopsBurden = 0.0
-		recommendation = "RECOMMENDED: Commercial Cloud API paired with Kritix Go deterministic pruning yields lowest TCO with zero GPU infra or MLOps headcount."
-	}
-
-	netSavings := apiCostRaw - totalCost
-	annualizedTCO := totalCost * 12.0
+	rec := "Enterprise deployment recommendation: On-premise or cloud GPU hosting requires explicit budget for hardware reservation and MLOps FTE. Commercial Cloud API with native Go AST diffing avoids GPU overhead."
 
 	return TCOResult{
-		MonthlyPRRuns:             monthlyRuns,
-		MonthlyTokensRaw:          totalTokensRaw,
-		MonthlyTokensOptimized:    totalTokensOpt,
-		MonthlyCloudAPIUnassisted: apiCostRaw,
-		MonthlyCloudAPIOptimized:  apiCostOpt,
-		MonthlyGPUInfraCost:       gpuInfraCost,
-		MonthlyMLOpsFTEBurden:     mlopsBurden,
-		TotalMonthlyCost:          totalCost,
-		AnnualizedTCO:             annualizedTCO,
-		NetMonthlySavings:         netSavings,
-		TotalCIMinutesMonthly:     totalCIMinutes,
-		Assumptions:               assumptions,
-		HardwareComparison:        hwProfiles,
-		Recommendation:            recommendation,
+		MonthlyPRRuns:         monthlyRuns,
+		IsHeadlineBlocked:     isHeadlineBlocked,
+		HeadlineBlockReason:   headlineBlockReason,
+		GPU100MonthlyInfra:    gpu100Infra,
+		GPU100MLOpsBurden:     gpu100MLOps,
+		GPU100TotalCost:       gpu100Total,
+		GPU500MonthlyInfra:    gpu500Infra,
+		GPU500MLOpsBurden:     gpu500MLOps,
+		GPU500TotalCost:       gpu500Total,
+		MonthlyGPUInfraCost:   activeInfraCost,
+		MonthlyMLOpsFTEBurden: activeMLOpsCost,
+		TotalMonthlyCost:      activeTotalCost,
+		AnnualizedTCO:         activeTotalCost * 12.0,
+		Assumptions:           assumptions,
+		HardwareComparison:    hwProfiles,
+		Recommendation:        rec,
 	}
 }
 
@@ -183,31 +186,27 @@ func CalculateTCO(params TCOParameters) TCOResult {
 func (r *TCOResult) FormatBreakdown() string {
 	var sb strings.Builder
 	sb.WriteString("==========================================================================\n")
-	sb.WriteString("               KRITIX AI ENTERPRISE TCO & ROI COST MODEL                  \n")
+	sb.WriteString("               KRITIX AI ENTERPRISE TCO & SIZING MODEL                    \n")
 	sb.WriteString("==========================================================================\n")
-	sb.WriteString(fmt.Sprintf("Monthly PR Pipeline Runs:      %d runs/month\n", r.MonthlyPRRuns))
-	sb.WriteString(fmt.Sprintf("Estimated CI Pipeline Minutes: %.0f minutes/month (%.1f min/run avg)\n", r.TotalCIMinutesMonthly, r.Assumptions.MeasuredCIMinutesPerRun))
-	sb.WriteString(fmt.Sprintf("Raw Unassisted Token Volume:   %.1fM tokens/month (150k tok/test)\n", r.MonthlyTokensRaw/1000000.0))
-	sb.WriteString(fmt.Sprintf("Kritix Pruned Token Volume:    %.1fM tokens/month (5.5k tok/test, -96.3%% reduction)\n", r.MonthlyTokensOptimized/1000000.0))
-	sb.WriteString(strings.Repeat("-", 74) + "\n")
-	sb.WriteString(fmt.Sprintf("Unassisted Cloud API Cost:     $%10.2f / month (Baseline)\n", r.MonthlyCloudAPIUnassisted))
-	sb.WriteString(fmt.Sprintf("Kritix Cloud API Cost:         $%10.2f / month\n", r.MonthlyCloudAPIOptimized))
-	if r.MonthlyGPUInfraCost > 0 {
-		sb.WriteString(fmt.Sprintf("Dedicated Cloud GPU Infra:     $%10.2f / month (AWS A100/A10G Cluster)\n", r.MonthlyGPUInfraCost))
-		sb.WriteString(fmt.Sprintf("MLOps Engineering Headcount:   $%10.2f / month (vLLM / Model Ops FTE)\n", r.MonthlyMLOpsFTEBurden))
+
+	if r.IsHeadlineBlocked {
+		sb.WriteString("⚠️  HEADLINE ROI: [BLOCKED — UNMEASURED INPUTS]\n")
+		sb.WriteString(fmt.Sprintf("    Reason: %s.\n", r.HeadlineBlockReason))
+		sb.WriteString("    Per integrity rules, headline savings cannot be claimed without empirical runs.\n")
 	}
+
 	sb.WriteString(strings.Repeat("-", 74) + "\n")
-	sb.WriteString(fmt.Sprintf("Total Evaluated Monthly Cost:  $%10.2f / month\n", r.TotalMonthlyCost))
-	sb.WriteString(fmt.Sprintf("Annualized Projected TCO:      $%10.2f / year\n", r.AnnualizedTCO))
-	sb.WriteString(fmt.Sprintf("Net Monthly Dollar Savings:    $%10.2f / month (%.1f%% ROI)\n",
-		r.NetMonthlySavings, (r.NetMonthlySavings/r.MonthlyCloudAPIUnassisted)*100.0))
+	sb.WriteString("🖥️  DEDICATED GPU HOSTING (AWS A10G $5.672/hr × 70% Utilisation):\n")
+	sb.WriteString(fmt.Sprintf("- 100 Engineers: 2x g5.12xlarge ($%.0f/mo infra) + 1.0 MLOps FTE ($%.0f/mo) = $%.0f/mo ($%.0f/yr)\n",
+		r.GPU100MonthlyInfra, r.GPU100MLOpsBurden, r.GPU100TotalCost, r.GPU100TotalCost*12.0))
+	sb.WriteString(fmt.Sprintf("- 500 Engineers: 8x g5.12xlarge ($%.0f/mo infra) + 2.0 MLOps FTE ($%.0f/mo) = $%.0f/mo ($%.0f/yr)\n",
+		r.GPU500MonthlyInfra, r.GPU500MLOpsBurden, r.GPU500TotalCost, r.GPU500TotalCost*12.0))
 	sb.WriteString(strings.Repeat("-", 74) + "\n")
-	sb.WriteString("📋 MEASURED BENCHMARK ASSUMPTIONS (Medusa Storefront + TodoMVC):\n")
-	sb.WriteString(fmt.Sprintf("- Tokens/Test (Local Qwen-32B): %.0f tokens | Tokens/Test (API): %.0f tokens\n",
-		r.Assumptions.MeasuredTokensLocalPerTest, r.Assumptions.MeasuredTokensAPIPerTest))
-	sb.WriteString(fmt.Sprintf("- Local Model Hosting (100 Devs): 2x g5.12xlarge ($%.0f/mo) + 1 FTE MLOps ($%.0f/mo) = $%.0f/mo\n",
-		r.Assumptions.MonthlyGPUCostPer100Devs, r.Assumptions.MonthlyMLOpsFTEPer100Devs,
-		r.Assumptions.MonthlyGPUCostPer100Devs+r.Assumptions.MonthlyMLOpsFTEPer100Devs))
+	sb.WriteString("📋 HARNESS EVIDENCE STATUS (from benchmark.json):\n")
+	sb.WriteString("- Multi-App Production Latency (p50/p95): not measured\n")
+	sb.WriteString("- Multi-App Wall Clock CI Time:          not measured\n")
+	sb.WriteString("- Live Model Token Count:                not measured\n")
+	sb.WriteString("- Break-Even vs No Tool:                 not measured (requires empirical CI run duration)\n")
 	sb.WriteString(strings.Repeat("-", 74) + "\n")
 	sb.WriteString("⚡ HARDWARE RUNTIME BENCHMARK COMPARISON:\n")
 	for _, hw := range r.HardwareComparison {
@@ -217,7 +216,7 @@ func (r *TCOResult) FormatBreakdown() string {
 		}
 	}
 	sb.WriteString(strings.Repeat("-", 74) + "\n")
-	sb.WriteString(fmt.Sprintf("Strategic Recommendation:\n%s\n", r.Recommendation))
+	sb.WriteString(fmt.Sprintf("Strategic Assessment:\n%s\n", r.Recommendation))
 	sb.WriteString("==========================================================================\n")
 	return sb.String()
 }
