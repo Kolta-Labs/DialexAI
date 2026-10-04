@@ -207,6 +207,8 @@ func (d *DAG) Execute(ctx context.Context, bCtx *Context) (*DAGResult, error) {
 			quarantinedCount++
 		case StatusSkipped:
 			skippedCount++
+		case StatusSimulated:
+			// Simulated component executed safely without side effects
 		}
 	}
 
@@ -216,7 +218,7 @@ func (d *DAG) Execute(ctx context.Context, bCtx *Context) (*DAGResult, error) {
 	var simulatedComponents []string
 	for id, node := range d.Nodes {
 		res, ok := results[id]
-		if ok && (res.Simulated || (node.Block != nil && node.Block.Descriptor().Simulated)) {
+		if ok && (res.Simulated || res.Status == StatusSimulated || (node.Block != nil && node.Block.Descriptor().Simulated)) {
 			simulatedComponents = append(simulatedComponents, node.Block.Descriptor().ID)
 		}
 	}

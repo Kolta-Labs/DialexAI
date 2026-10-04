@@ -1,6 +1,7 @@
 package perf
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -45,5 +46,55 @@ func TestEvaluateLatency(t *testing.T) {
 	strictReport := EvaluateLatency(samples, 300*time.Millisecond)
 	if strictReport.PassedSLA {
 		t.Errorf("expected to fail SLA of 300ms when p95 is 450ms")
+	}
+}
+
+func TestParseK6SummaryJSON(t *testing.T) {
+	summary := `{
+		"metrics": {
+			"http_req_duration": {
+				"values": {
+					"med": 45.2,
+					"p(95)": 180.5,
+					"p(99)": 240.0,
+					"avg": 55.1
+				}
+			},
+			"http_req_failed": {
+				"values": {
+					"rate": 0.002
+				}
+			},
+			"http_reqs": {
+				"values": {
+					"count": 5000.0
+				}
+			}
+		}
+	}`
+
+	res, err := ParseK6SummaryJSON([]byte(summary), 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("ParseK6SummaryJSON failed: %v", err)
+	}
+
+	if !res.PassedSLA {
+		t.Errorf("expected PassedSLA = true for 180.5ms vs 200ms target")
+	}
+	if res.TotalReqs != 5000 {
+		t.Errorf("expected 5000 requests, got %d", res.TotalReqs)
+	}
+	if res.ErrorRate != 0.002 {
+		t.Errorf("expected 0.002 error rate, got %f", res.ErrorRate)
+	}
+}
+
+func TestExecuteK6_NotInstalledOrRun(t *testing.T) {
+	// If k6 is not installed, ExecuteK6Script must return ErrK6NotInstalled
+	if !IsK6Installed() {
+		_, err := ExecuteK6Script(context.Background(), "script", 200*time.Millisecond)
+		if err != ErrK6NotInstalled {
+			t.Errorf("expected ErrK6NotInstalled, got %v", err)
+		}
 	}
 }

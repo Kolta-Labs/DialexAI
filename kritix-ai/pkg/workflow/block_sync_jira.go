@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"kritix/pkg/spec"
@@ -23,8 +24,46 @@ func (b *SyncJiraBlock) Descriptor() BlockDescriptor {
 	}
 }
 
+func (b *SyncJiraBlock) resolveTracker(bCtx *Context) (tracker.IssueTracker, bool) {
+	if val, ok := bCtx.Get("tracker_client"); ok && val != nil {
+		if t, ok := val.(tracker.IssueTracker); ok {
+			return t, true
+		}
+	}
+
+	// Check environment variables for real Jira / Linear credentials
+	jiraToken := os.Getenv("JIRA_API_TOKEN")
+	jiraURL := os.Getenv("JIRA_BASE_URL")
+	jiraEmail := os.Getenv("JIRA_USER_EMAIL")
+	jiraProject := os.Getenv("JIRA_PROJECT_KEY")
+
+	if jiraToken != "" && jiraURL != "" && jiraEmail != "" {
+		cfg := tracker.JiraConfig{
+			BaseURL:    jiraURL,
+			UserEmail:  jiraEmail,
+			APIToken:   jiraToken,
+			ProjectKey: jiraProject,
+		}
+		if cfg.ProjectKey == "" {
+			cfg.ProjectKey = "QA"
+		}
+		return tracker.NewJiraTracker(cfg, nil), true
+	}
+
+	linearKey := os.Getenv("LINEAR_API_KEY")
+	linearTeam := os.Getenv("LINEAR_TEAM_ID")
+	if linearKey != "" && linearTeam != "" {
+		return tracker.NewLinearTracker(tracker.LinearConfig{
+			APIKey: linearKey,
+			TeamID: linearTeam,
+		}, nil), true
+	}
+
+	return nil, false
+}
+
 func (b *SyncJiraBlock) Execute(ctx context.Context, bCtx *Context) (*BlockResult, error) {
-	ticketID := "DEFAULT-TICKET"
+	ticketID := ""
 	if val, ok := bCtx.Get("bundle"); ok && val != nil {
 		if bundle, ok := val.(*spec.MultiArtifactBundle); ok && bundle.TicketID != "" {
 			ticketID = bundle.TicketID
@@ -33,20 +72,30 @@ func (b *SyncJiraBlock) Execute(ctx context.Context, bCtx *Context) (*BlockResul
 		ticketID = fmt.Sprint(val)
 	}
 
-	if ticketID == "DEFAULT-TICKET" && len(bCtx.Failures) == 0 {
-		ticketIDVal, ok := bCtx.Get("ticket_id")
-		if !ok || ticketIDVal == nil {
-			return &BlockResult{
-				BlockID: "sync.jira",
-				Status:  StatusFailed,
-				Message: "Missing input: 'ticket_id' or 'bundle' is required in context for Jira defect sync",
-				Error:   errors.New("missing ticket_id"),
-			}, errors.New("missing ticket_id")
-		}
-		ticketID = fmt.Sprint(ticketIDVal)
+	if ticketID == "" {
+		return &BlockResult{
+			BlockID: "sync.jira",
+			Status:  StatusFailed,
+			Message: "Missing input: 'ticket_id' or 'bundle' is required in context for Jira defect sync",
+			Error:   errors.New("missing ticket_id"),
+		}, errors.New("missing ticket_id")
 	}
 
-	trackerClient := tracker.NewLocalFileTracker(".artix/triage")
+	trackerClient, hasRealTracker := b.resolveTracker(bCtx)
+	if !hasRealTracker {
+		// No real credentials configured -> Return StatusSimulated, NEVER StatusPassed!
+		return &BlockResult{
+			BlockID:   "sync.jira",
+			Status:    StatusSimulated,
+			Simulated: true,
+			Message:   fmt.Sprintf("Simulated: No Jira/Linear credentials configured; skipped defect sync for %s", ticketID),
+			Data: map[string]interface{}{
+				"ticket_id": ticketID,
+				"failures":  len(bCtx.Failures),
+				"simulated": true,
+			},
+		}, nil
+	}
 
 	if len(bCtx.Failures) > 0 {
 		report := triage.DefectReport{
@@ -59,17 +108,23 @@ func (b *SyncJiraBlock) Execute(ctx context.Context, bCtx *Context) (*BlockResul
 			DiscoveredAt:     time.Now(),
 		}
 		res, err := trackerClient.CreateIssue(ctx, report)
-		defectID := "BUG-" + ticketID
-		if err == nil && res != nil {
-			defectID = res.IssueID
+		if err != nil {
+			return &BlockResult{
+				BlockID: "sync.jira",
+				Status:  StatusFailed,
+				Message: fmt.Sprintf("Failed to sync defect to tracker: %v", err),
+				Error:   err,
+			}, err
 		}
+
 		return &BlockResult{
 			BlockID: "sync.jira",
 			Status:  StatusPassed,
-			Message: fmt.Sprintf("Logged defect %s for %d failure(s) in %s", defectID, len(bCtx.Failures), ticketID),
+			Message: fmt.Sprintf("Logged defect %s for %d failure(s) in %s", res.IssueID, len(bCtx.Failures), ticketID),
 			Data: map[string]interface{}{
 				"ticket_id": ticketID,
-				"defect_id": defectID,
+				"defect_id": res.IssueID,
+				"issue_url": res.IssueURL,
 				"failures":  len(bCtx.Failures),
 			},
 		}, nil
@@ -78,7 +133,7 @@ func (b *SyncJiraBlock) Execute(ctx context.Context, bCtx *Context) (*BlockResul
 	return &BlockResult{
 		BlockID: "sync.jira",
 		Status:  StatusPassed,
-		Message: fmt.Sprintf("Zero defects encountered; Jira ticket %s updated to 'QA Verified'", ticketID),
+		Message: fmt.Sprintf("Zero defects encountered; Jira ticket %s verified clean", ticketID),
 		Data: map[string]interface{}{
 			"ticket_id": ticketID,
 			"status":    "QA_VERIFIED",

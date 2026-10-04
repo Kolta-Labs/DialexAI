@@ -1,9 +1,21 @@
 package perf
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
+)
+
+var (
+	ErrK6NotInstalled = errors.New("k6 executable not found in PATH; install k6 (https://k6.io/docs/get-started/installation/) or run in simulated mode")
+	ErrK6Execution    = errors.New("k6 execution failed")
+	ErrSLAViolation   = errors.New("k6 performance threshold violated SLA")
 )
 
 // ProfileType defines load distribution characteristics.
@@ -31,6 +43,17 @@ type LatencyReport struct {
 	P95Latency time.Duration `json:"p95_latency"`
 	P99Latency time.Duration `json:"p99_latency"`
 	PassedSLA  bool          `json:"passed_sla"`
+}
+
+// K6ExecutionResult holds parsed output from a live k6 run.
+type K6ExecutionResult struct {
+	P50Latency  time.Duration `json:"p50_latency"`
+	P95Latency  time.Duration `json:"p95_latency"`
+	P99Latency  time.Duration `json:"p99_latency"`
+	ErrorRate   float64       `json:"error_rate"`
+	TotalReqs   int           `json:"total_reqs"`
+	PassedSLA   bool          `json:"passed_sla"`
+	SummaryJSON string        `json:"summary_json,omitempty"`
 }
 
 // GenerateK6Script creates a standalone, production-ready k6 JavaScript test script.
@@ -85,6 +108,110 @@ func GenerateK6Script(cfg LoadConfig) string {
 	sb.WriteString("}\n")
 
 	return sb.String()
+}
+
+// IsK6Installed checks if the k6 binary is present in PATH.
+func IsK6Installed() bool {
+	_, err := exec.LookPath("k6")
+	return err == nil
+}
+
+// ParseK6SummaryJSON parses k6's summary JSON output.
+func ParseK6SummaryJSON(data []byte, p95Target time.Duration) (*K6ExecutionResult, error) {
+	var raw struct {
+		Metrics struct {
+			HTTPReqDuration struct {
+				Values struct {
+					Med float64 `json:"med"`
+					P95 float64 `json:"p(95)"`
+					P99 float64 `json:"p(99)"`
+					Avg float64 `json:"avg"`
+				} `json:"values"`
+			} `json:"http_req_duration"`
+			HTTPReqFailed struct {
+				Values struct {
+					Rate float64 `json:"rate"`
+				} `json:"values"`
+			} `json:"http_req_failed"`
+			HTTPReqs struct {
+				Values struct {
+					Count float64 `json:"count"`
+				} `json:"values"`
+			} `json:"http_reqs"`
+		} `json:"metrics"`
+	}
+
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("failed to parse k6 summary: %w", err)
+	}
+
+	p50 := time.Duration(raw.Metrics.HTTPReqDuration.Values.Med * float64(time.Millisecond))
+	p95 := time.Duration(raw.Metrics.HTTPReqDuration.Values.P95 * float64(time.Millisecond))
+	p99 := time.Duration(raw.Metrics.HTTPReqDuration.Values.P99 * float64(time.Millisecond))
+	errRate := raw.Metrics.HTTPReqFailed.Values.Rate
+	totalReqs := int(raw.Metrics.HTTPReqs.Values.Count)
+
+	passedSLA := (p95Target <= 0 || p95 <= p95Target) && errRate < 0.01
+
+	return &K6ExecutionResult{
+		P50Latency:  p50,
+		P95Latency:  p95,
+		P99Latency:  p99,
+		ErrorRate:   errRate,
+		TotalReqs:   totalReqs,
+		PassedSLA:   passedSLA,
+		SummaryJSON: string(data),
+	}, nil
+}
+
+// ExecuteK6Script runs a generated k6 script using the live k6 executable.
+func ExecuteK6Script(ctx context.Context, scriptContent string, p95Target time.Duration) (*K6ExecutionResult, error) {
+	if !IsK6Installed() {
+		return nil, ErrK6NotInstalled
+	}
+
+	tmpScript, err := os.CreateTemp("", "k6-script-*.js")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(tmpScript.Name())
+
+	if _, err := tmpScript.WriteString(scriptContent); err != nil {
+		return nil, err
+	}
+	_ = tmpScript.Close()
+
+	tmpSummary, err := os.CreateTemp("", "k6-summary-*.json")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(tmpSummary.Name())
+	_ = tmpSummary.Close()
+
+	cmd := exec.CommandContext(ctx, "k6", "run", "--summary-export", tmpSummary.Name(), tmpScript.Name())
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	runErr := cmd.Run()
+
+	summaryBytes, err := os.ReadFile(tmpSummary.Name())
+	if err != nil || len(summaryBytes) == 0 {
+		if runErr != nil {
+			return nil, fmt.Errorf("%w: %v, stderr: %s", ErrK6Execution, runErr, stderr.String())
+		}
+		return nil, fmt.Errorf("k6 produced no summary: %s", stderr.String())
+	}
+
+	result, err := ParseK6SummaryJSON(summaryBytes, p95Target)
+	if err != nil {
+		return nil, err
+	}
+
+	if runErr != nil && !result.PassedSLA {
+		return result, ErrSLAViolation
+	}
+
+	return result, nil
 }
 
 // EvaluateLatency checks whether observed response times violate the configured SLA.

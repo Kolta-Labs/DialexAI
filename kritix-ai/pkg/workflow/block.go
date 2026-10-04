@@ -18,6 +18,7 @@ const (
 	StatusFailed            BlockStatus = "FAILED"
 	StatusQuarantined       BlockStatus = "QUARANTINED"
 	StatusSkipped           BlockStatus = "SKIPPED"
+	StatusSimulated         BlockStatus = "SIMULATED"
 	// Legacy alias
 	StatusSuccess BlockStatus = "PASSED"
 )
