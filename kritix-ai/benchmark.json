@@ -5,9 +5,13 @@
   "monorepo_loc": 29789,
   "runs_count": 2,
   "total_evaluations": 210,
-  "raw_tokens_avg": 971,
-  "optimized_tokens_avg": 8,
-  "token_savings_percent": 99.22,
+  "synthetic_corpus": {
+    "corpus_name": "testdata/regressions",
+    "raw_tokens_avg": 971,
+    "optimized_tokens_avg": 8,
+    "token_savings_percent": 99.22
+  },
+  "tree_clean": true,
   "total_regressions_tested": 42,
   "semantic_swaps_tested": 21,
   "false_negatives_detected": 0,
@@ -26,7 +30,7 @@
   ],
   "execution_timestamp": "2026-10-04T18:45:05Z",
   "reproducer_command": "kritix benchmark --corpus testdata/regressions --runs 2",
-  "commit": "6244630",
+  "commit": "22e419a",
   "dataset": "testdata/regressions (105 mutation cases across 5 categories; 21 semantic swaps tested across 2 runs = 42 evaluations)",
   "raw_log_path": ".dev/kritix-ai/evidence/round1/benchmark_corpus_harness-1791139505105178000.jsonl",
   "raw_log_sha256": "8405b64c1626f9506770235dedaaf260af5fcae7c71f6804d69156e8ceebe41a"

@@ -13,8 +13,8 @@ func TestReproducibleBenchmark(t *testing.T) {
 		t.Fatalf("failed to run benchmark on corpus: %v", err)
 	}
 
-	if suite.TokenSavingsPercent < 80.0 {
-		t.Errorf("expected token savings >= 80.0%%, got %.2f%%", suite.TokenSavingsPercent)
+	if suite.SyntheticCorpus == nil || suite.SyntheticCorpus.TokenSavingsPercent < 80.0 {
+		t.Errorf("expected synthetic corpus token savings >= 80.0%%, got %v", suite.SyntheticCorpus)
 	}
 
 	// Invariant: false negative rate MUST be 0.0% on semantic bugs

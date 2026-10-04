@@ -139,19 +139,90 @@ func (a *Auditor) CheckProvenance() ([]Violation, error) {
 		})
 	}
 
-	// Must match git commit (short or full HEAD or immediate parent HEAD~1)
+	// Must have tree_clean flag set to true
+	treeClean, hasTreeClean := m["tree_clean"].(bool)
+	if !hasTreeClean || !treeClean {
+		violations = append(violations, Violation{
+			Gate:        "Provenance",
+			File:        "benchmark.json",
+			Description: "missing required 'tree_clean: true' flag in benchmark.json",
+		})
+	}
+
+	// Classifier metrics must NOT sit unlabelled at top level; must be nested under synthetic_corpus
+	if _, ok := m["raw_tokens_avg"]; ok {
+		violations = append(violations, Violation{
+			Gate:        "Label Honesty",
+			File:        "benchmark.json",
+			Description: "raw_tokens_avg must not sit at top-level; must be nested under synthetic_corpus",
+		})
+	}
+	if _, ok := m["optimized_tokens_avg"]; ok {
+		violations = append(violations, Violation{
+			Gate:        "Label Honesty",
+			File:        "benchmark.json",
+			Description: "optimized_tokens_avg must not sit at top-level; must be nested under synthetic_corpus",
+		})
+	}
+	if _, ok := m["token_savings_percent"]; ok {
+		violations = append(violations, Violation{
+			Gate:        "Label Honesty",
+			File:        "benchmark.json",
+			Description: "token_savings_percent must not sit at top-level; must be nested under synthetic_corpus",
+		})
+	}
+
+	synthCorpus, hasSynth := m["synthetic_corpus"].(map[string]interface{})
+	if !hasSynth || synthCorpus == nil {
+		violations = append(violations, Violation{
+			Gate:        "Label Honesty",
+			File:        "benchmark.json",
+			Description: "missing required synthetic_corpus object containing classifier metrics",
+		})
+	}
+
+	// Exact commit rule + evidence-only-diff rule (No HEAD~1 / parent allowance)
 	commit, _ := m["commit"].(string)
 	headCommit := getGitHead(a.KritixDir)
-	parentCommit := getGitParent(a.KritixDir)
 	if headCommit != "" && commit != "" {
-		matchesHead := strings.HasPrefix(headCommit, commit) || strings.HasPrefix(commit, headCommit)
-		matchesParent := parentCommit != "" && (strings.HasPrefix(parentCommit, commit) || strings.HasPrefix(commit, parentCommit))
-		if !matchesHead && !matchesParent {
-			violations = append(violations, Violation{
-				Gate:        "Provenance",
-				File:        "benchmark.json",
-				Description: fmt.Sprintf("stale git commit in benchmark.json: recorded %q vs actual HEAD %q", commit, headCommit),
-			})
+		matchesExact := strings.HasPrefix(headCommit, commit) || strings.HasPrefix(commit, headCommit)
+		if !matchesExact {
+			// Check if only evidence/summary files have changed between the recorded commit and HEAD
+			diffCmd := exec.Command("git", "diff", "--name-only", commit, "HEAD")
+			diffCmd.Dir = a.KritixDir
+			diffOut, err := diffCmd.Output()
+			if err != nil {
+				violations = append(violations, Violation{
+					Gate:        "Provenance",
+					File:        "benchmark.json",
+					Description: fmt.Sprintf("stale git commit in benchmark.json: recorded %q vs actual HEAD %q (git diff error: %v)", commit, headCommit, err),
+				})
+			} else {
+				diffFiles := strings.Split(strings.TrimSpace(string(diffOut)), "\n")
+				onlyEvidenceDiff := true
+				var nonEvidenceFiles []string
+				for _, df := range diffFiles {
+					df = strings.TrimSpace(df)
+					if df == "" {
+						continue
+					}
+					isEvidence := strings.HasSuffix(df, "benchmark.json") ||
+						strings.Contains(df, "evidence/") ||
+						strings.Contains(df, ".dev/") ||
+						strings.Contains(df, "capture_log")
+					if !isEvidence {
+						onlyEvidenceDiff = false
+						nonEvidenceFiles = append(nonEvidenceFiles, df)
+					}
+				}
+				if !onlyEvidenceDiff {
+					violations = append(violations, Violation{
+						Gate:        "Provenance",
+						File:        "benchmark.json",
+						Description: fmt.Sprintf("stale git commit in benchmark.json: recorded %q vs HEAD %q; non-evidence files modified: %v", commit, headCommit, nonEvidenceFiles),
+					})
+				}
+			}
 		}
 	}
 

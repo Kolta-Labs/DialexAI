@@ -22,6 +22,14 @@ type AppBenchmarkResult struct {
 	DockerDigest        string  `json:"docker_digest,omitempty"`
 }
 
+// SyntheticCorpusMetrics records classifier token savings on synthetic offline corpora.
+type SyntheticCorpusMetrics struct {
+	CorpusName          string  `json:"corpus_name"`
+	RawTokensAvg        float64 `json:"raw_tokens_avg"`
+	OptimizedTokensAvg  float64 `json:"optimized_tokens_avg"`
+	TokenSavingsPercent float64 `json:"token_savings_percent"`
+}
+
 // BenchmarkSuite aggregates reproducible enterprise test runs verifying core performance and safety claims.
 type BenchmarkSuite struct {
 	HarnessRunID                string               `json:"harness_run_id"`
@@ -30,12 +38,11 @@ type BenchmarkSuite struct {
 	TargetApplications          []AppBenchmarkResult `json:"target_applications,omitempty"`
 	DockerImageDigests          []string             `json:"docker_image_digests,omitempty"`
 	MonorepoLOC                 int                  `json:"monorepo_loc,omitempty"`
-	RunsCount                   int                  `json:"runs_count"`
-	TotalEvaluations            int                  `json:"total_evaluations,omitempty"`
-	RawTokensAvg                float64              `json:"raw_tokens_avg"`
-	OptimizedTokensAvg          float64              `json:"optimized_tokens_avg"`
-	TokenSavingsPercent         float64              `json:"token_savings_percent"`
-	TotalRegressionsTested      int                  `json:"total_regressions_tested"`
+	RunsCount                   int                     `json:"runs_count"`
+	TotalEvaluations            int                     `json:"total_evaluations,omitempty"`
+	SyntheticCorpus             *SyntheticCorpusMetrics `json:"synthetic_corpus,omitempty"`
+	TreeClean                   bool                    `json:"tree_clean"`
+	TotalRegressionsTested      int                     `json:"total_regressions_tested"`
 	SemanticSwapsTested         int                  `json:"semantic_swaps_tested,omitempty"`
 	FalseNegativesDetected      int                  `json:"false_negatives_detected"`
 	FalseNegativeRate           float64              `json:"false_negative_rate"` // Invariant: 0.0% on true semantic bugs
@@ -127,15 +134,15 @@ func FormatBenchmarkMarkdown(suite BenchmarkSuite) string {
 	}
 	sb.WriteString("\n")
 
-	sb.WriteString("## 2. Token Savings & Compression Efficiency\n")
-	sb.WriteString("| Metric | Raw Full DOM | Kritix AXTree Pruned | Compression Savings |\n")
-	sb.WriteString("| :--- | :--- | :--- | :--- |\n")
-	sb.WriteString(fmt.Sprintf("| **Avg Tokens / Test Suite** | `%.0f` | `%.0f` | **%.2f%%** |\n",
-		suite.RawTokensAvg, suite.OptimizedTokensAvg, suite.TokenSavingsPercent))
-	sb.WriteString(fmt.Sprintf("| **Local Model Tokens (Qwen2.5-Coder-32B)** | `%.0f` | `%s` | - |\n",
-		suite.RawTokensAvg, suite.LocalModelTokenCountAvg))
-	sb.WriteString(fmt.Sprintf("| **API Model Tokens (Claude 3.5 / Gemini 1.5)** | `%.0f` | `%s` | - |\n\n",
-		suite.RawTokensAvg, suite.APIModelTokenCountAvg))
+	sb.WriteString("## 2. Token Savings & Compression Efficiency (Synthetic Corpus)\n")
+	if suite.SyntheticCorpus != nil {
+		sb.WriteString("| Metric | Raw Full DOM | Kritix AXTree Pruned | Compression Savings |\n")
+		sb.WriteString("| :--- | :--- | :--- | :--- |\n")
+		sb.WriteString(fmt.Sprintf("| **Avg Tokens / Test Suite** | `%.0f` | `%.0f` | **%.2f%%** |\n\n",
+			suite.SyntheticCorpus.RawTokensAvg, suite.SyntheticCorpus.OptimizedTokensAvg, suite.SyntheticCorpus.TokenSavingsPercent))
+	} else {
+		sb.WriteString("> *Token reduction unmeasured on active run.*\n\n")
+	}
 
 	sb.WriteString("## 3. Regression Integrity & Semantic Swap Safety Gate\n")
 	sb.WriteString("| Injected Regression Corpus | Semantic Swaps Tested | False Negatives | False Pass Rate | Safety Threshold (0.00%) |\n")
