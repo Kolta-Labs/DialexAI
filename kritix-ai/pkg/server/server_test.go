@@ -24,6 +24,11 @@ func createTestServerAndTokens(t *testing.T) (*Server, string, string, string) {
 		Port:           0,
 		AllowedOrigins: []string{"http://localhost:3000", "http://127.0.0.1:9090"},
 		AuthManager:    am,
+		OIDCClient: auth.NewOIDCClient(auth.OIDCProviderConfig{
+			IssuerURL:       "https://sso.enterprise.internal",
+			ClientID:        "kritix-enterprise",
+			AllowMockTokens: true,
+		}),
 	})
 
 	// Mint tokens

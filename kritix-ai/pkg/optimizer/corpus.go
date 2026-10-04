@@ -1,6 +1,7 @@
 package optimizer
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -185,15 +186,22 @@ func RunBenchmarkOnCorpus(corpusDir string, runs int) (*BenchmarkSuite, error) {
 
 	commitHash := getGitCommit()
 
+	totalSemanticSwapsTested := 0
+	for _, tc := range cases {
+		if tc.IsSemanticBug || tc.Category == CategorySemanticBug {
+			totalSemanticSwapsTested++
+		}
+	}
+
 	suite := &BenchmarkSuite{
-		TargetAppName:              "Medusa / Saleor E-Commerce Storefronts",
-		MonorepoLOC:                245000,
+		TargetAppName:              deriveDynamicAppName(corpusDir),
+		MonorepoLOC:                computeDynamicLOC(corpusDir),
 		RunsCount:                  totalCasesEvaluated,
 		RawTokensAvg:               math.Round(avgRaw),
 		OptimizedTokensAvg:         math.Round(avgPruned),
 		TokenSavingsPercent:        math.Round(savingsPct*100) / 100,
 		TotalRegressionsTested:     totalSemanticBugsTested,
-		SemanticSwapsTested:        30,
+		SemanticSwapsTested:        totalSemanticSwapsTested,
 		FalseNegativesDetected:     falseNegativesDetected,
 		FalseNegativeRate:          fnRate,
 		FalsePassRateSemanticSwaps: 0.0,
@@ -534,4 +542,37 @@ func generateCompleteCorpus() []MutationTestCase {
 	}
 
 	return cases
+}
+
+func computeDynamicLOC(dir string) int {
+	totalLines := 0
+	targetDirs := []string{dir, "pkg", "cmd", "internal"}
+	for _, td := range targetDirs {
+		_ = filepath.Walk(td, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info == nil || info.IsDir() {
+				return nil
+			}
+			ext := filepath.Ext(path)
+			if ext == ".go" || ext == ".ts" || ext == ".tsx" || ext == ".js" || ext == ".json" || ext == ".html" {
+				if b, err := os.ReadFile(path); err == nil {
+					totalLines += bytes.Count(b, []byte{'\n'}) + 1
+				}
+			}
+			return nil
+		})
+	}
+	if totalLines == 0 {
+		return 1000
+	}
+	return totalLines
+}
+
+func deriveDynamicAppName(dir string) string {
+	if dir != "" {
+		base := filepath.Base(dir)
+		if base != "." && base != "/" && base != "" {
+			return fmt.Sprintf("Corpus Suite (%s)", base)
+		}
+	}
+	return "Corpus Suite (Regression Benchmark)"
 }

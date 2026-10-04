@@ -59,6 +59,7 @@ type ServerConfig struct {
 	MaxRequestBodyBytes int64
 	ReadTimeout         time.Duration
 	WriteTimeout        time.Duration
+	OIDCClient          *auth.OIDCClient
 }
 
 // Server provides the HTTP API and embedded Web UI for Kritix AI with strict RBAC,
@@ -74,6 +75,7 @@ type Server struct {
 	authManager  *auth.EnterpriseAuthManager
 	store        StateStore
 	rateLimiter  *RateLimiter
+	oidcClient   *auth.OIDCClient
 }
 
 func defaultSigningSecret() string {
@@ -129,6 +131,27 @@ func NewServerWithConfig(cfg ServerConfig) *Server {
 	if cfg.RateLimitRPS <= 0 {
 		cfg.RateLimitRPS = 100.0 // default 100 req/sec
 	}
+	if cfg.OIDCClient == nil {
+		issuer := os.Getenv("KRITIX_OIDC_ISSUER")
+		clientID := os.Getenv("KRITIX_OIDC_CLIENT_ID")
+		clientSecret := os.Getenv("KRITIX_OIDC_CLIENT_SECRET")
+		tokenEndpoint := os.Getenv("KRITIX_OIDC_TOKEN_ENDPOINT")
+		allowMock := os.Getenv("KRITIX_OIDC_ALLOW_MOCK") == "true"
+		if issuer == "" {
+			issuer = "https://sso.enterprise.internal"
+		}
+		if clientID == "" {
+			clientID = "kritix-enterprise"
+		}
+		cfg.OIDCClient = auth.NewOIDCClient(auth.OIDCProviderConfig{
+			IssuerURL:       issuer,
+			ClientID:        clientID,
+			ClientSecret:    clientSecret,
+			TokenEndpoint:   tokenEndpoint,
+			RedirectURI:     "/api/v1/auth/oidc/callback",
+			AllowMockTokens: allowMock,
+		})
+	}
 
 	routerCfg := model.DefaultRouterConfig()
 	r := model.NewRouter(routerCfg)
@@ -141,6 +164,7 @@ func NewServerWithConfig(cfg ServerConfig) *Server {
 		authManager:  cfg.AuthManager,
 		store:        cfg.Store,
 		rateLimiter:  NewRateLimiter(cfg.RateLimitRPS),
+		oidcClient:   cfg.OIDCClient,
 	}
 
 	return s
@@ -939,29 +963,30 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims := auth.OIDCClaims{
-		Issuer:   "https://sso.enterprise.internal",
-		Subject:  "usr-" + code,
-		Email:    fmt.Sprintf("user-%s@enterprise.internal", code),
-		Name:     "Enterprise SSO User",
-		Groups:   []string{"engineering", "qa-automation", "squad-checkout"},
-		TenantID: "squad-checkout",
+	user, tokenResp, err := s.oidcClient.ExchangeCode(r.Context(), code)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"oidc exchange rejected: %v"}`, err), http.StatusUnauthorized)
+		return
 	}
 
-	user := auth.MapOIDCClaimsToIdentity(claims)
 	token, err := s.authManager.GenerateToken(*user, 8*time.Hour)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"failed to generate enterprise token: %v"}`, err), http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	respPayload := map[string]any{
 		"access_token": token,
 		"token_type":   "Bearer",
 		"expires_in":   28800,
 		"user":         user,
-	})
+	}
+	if tokenResp != nil && tokenResp.IDToken != "" {
+		respPayload["id_token"] = tokenResp.IDToken
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(respPayload)
 }
 
 func (s *Server) handleStudioSynthesize(w http.ResponseWriter, r *http.Request) {

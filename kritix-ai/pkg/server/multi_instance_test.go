@@ -92,7 +92,7 @@ func TestOIDC_LoginAndCallbackFlow(t *testing.T) {
 	}
 
 	// 2. Test OIDC Callback & Token Generation
-	callbackReq := httptest.NewRequest("GET", "/api/v1/auth/oidc/callback?code=alice-1234&state=test-state", nil)
+	callbackReq := httptest.NewRequest("GET", "/api/v1/auth/oidc/callback?code=mock_alice-1234&state=test-state", nil)
 	callbackRec := httptest.NewRecorder()
 	srv.handleOIDCCallback(callbackRec, callbackReq)
 
@@ -115,7 +115,7 @@ func TestOIDC_LoginAndCallbackFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("minted OIDC token failed validation: %v", err)
 	}
-	if user.Email != "user-alice-1234@enterprise.internal" {
+	if user.Email != "alice-1234@enterprise.internal" {
 		t.Errorf("unexpected user email from OIDC: %s", user.Email)
 	}
 }
