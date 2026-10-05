@@ -1,3 +1,12 @@
+// ==============================================================================
+// scripts/generate_heal_corpus.go
+// DEV-TEST FIXTURE ONLY:
+// This generator script is a development-test fixture and is EXCLUDED from all
+// production safety, diversity, and false-pass rate claims.
+// Production safety claims require independently authored corpora with real
+// live-DOM extraction via the CDP driver (spec stored in .dev/kritix-ai/corpus-author/).
+// ==============================================================================
+
 package main
 
 import (
