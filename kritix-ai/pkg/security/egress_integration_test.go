@@ -65,14 +65,24 @@ func TestIntegration_ZeroEgressProof(t *testing.T) {
 		hasUnshare = true
 	}
 
+	if !hasUnshare && !hasDocker {
+		if os.Getenv("KRITIX_HARNESS") == "1" {
+			t.Fatalf("PREREQUISITE_MISSING: netns|docker (external network namespace or docker required for true isolated egress proof; running un-isolated is strictly forbidden)")
+		}
+		t.Skip("PREREQUISITE_MISSING: netns|docker (external network namespace or docker required for true isolated egress proof; running un-isolated is strictly forbidden)")
+	}
+
 	if hasUnshare {
 		t.Log("Executing subprocess inside Linux network namespace (unshare -n)")
 		cmd1 = exec.Command("unshare", "-n", binPath, "run", "offline-contract-audit")
-	} else {
-		if !hasDocker {
-			t.Log("Note: unshare/docker not installed on host; subprocess runs with kernel socket interception and zero-egress guard")
-		}
-		cmd1 = exec.Command(binPath, "run", "offline-contract-audit")
+	} else if hasDocker {
+		t.Log("Executing subprocess inside Docker container with --network none")
+		cmd1 = exec.Command("docker", "run", "--rm", "--network", "none",
+			"-v", binPath+":/kritix:ro",
+			"-e", "KRITIX_AUTH_SECRET="+authSecret,
+			"-e", "KRITIX_TOKEN="+adminToken,
+			"-e", "KRITIX_ZERO_EGRESS=true",
+			"alpine:latest", "/kritix", "run", "offline-contract-audit")
 	}
 
 	cmd1.Dir = findRepoRoot(t)
@@ -94,6 +104,11 @@ func TestIntegration_ZeroEgressProof(t *testing.T) {
 
 	if !strings.Contains(stdout1.String(), "Blueprint completed successfully") {
 		t.Fatalf("Expected offline blueprint to complete successfully, got stdout:\n%s", stdout1.String())
+	}
+
+	// Execution path verification: verify that node ingest_openapi actually ran
+	if !strings.Contains(stdout1.String(), "ingest_openapi") {
+		t.Fatalf("EXECUTION PATH VIOLATION: offline-contract-audit did not execute node ingest_openapi!\nSTDOUT:\n%s", stdout1.String())
 	}
 
 	// Assert zero connection attempts were made during offline run
