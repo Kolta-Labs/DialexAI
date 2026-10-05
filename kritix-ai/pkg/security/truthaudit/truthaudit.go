@@ -433,41 +433,48 @@ func (a *Auditor) CheckSelfCertification() ([]Violation, error) {
 	}
 
 	// 2. Check untracked files in .dev/
-	devDir := filepath.Join(a.RepoRoot, ".dev", "kritix-ai")
-	captureLogPath := filepath.Join(devDir, "capture_log.jsonl")
-	validHashes := make(map[string]bool)
-	if logData, err := os.ReadFile(captureLogPath); err == nil {
-		for _, line := range strings.Split(string(logData), "\n") {
-			var rec map[string]interface{}
-			if json.Unmarshal([]byte(line), &rec) == nil {
-				if h, ok := rec["sha256"].(string); ok {
-					validHashes[h] = true
+	checkDevPath := func(dir string) {
+		captureLogPath := filepath.Join(dir, "capture_log.jsonl")
+		validHashes := make(map[string]bool)
+		if logData, err := os.ReadFile(captureLogPath); err == nil {
+			for _, line := range strings.Split(string(logData), "\n") {
+				var rec map[string]interface{}
+				if json.Unmarshal([]byte(line), &rec) == nil {
+					if h, ok := rec["sha256"].(string); ok {
+						validHashes[h] = true
+					}
 				}
 			}
 		}
+
+		_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info == nil || info.IsDir() {
+				return nil
+			}
+			base := filepath.Base(path)
+			inCouncilDir := strings.Contains(path, "COUNCIL_ROUND_") || strings.Contains(path, "COUNCIL_")
+			if strings.Contains(base, "ADOPT") || strings.Contains(base, "VERDICT") || inCouncilDir {
+				fileBytes, err := os.ReadFile(path)
+				if err == nil {
+					h := sha256.Sum256(fileBytes)
+					hashStr := hex.EncodeToString(h[:])
+					if !validHashes[hashStr] {
+						violations = append(violations, Violation{
+							Gate:        "Self Certification",
+							File:        relPath(a.RepoRoot, path),
+							Description: fmt.Sprintf("orphan council/verdict file %q hash %q absent from capture log", base, hashStr),
+						})
+					}
+				}
+			}
+			return nil
+		})
 	}
 
-	_ = filepath.Walk(devDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info == nil || info.IsDir() {
-			return nil
-		}
-		base := filepath.Base(path)
-		if strings.Contains(base, "ADOPT") || strings.Contains(base, "VERDICT") {
-			fileBytes, err := os.ReadFile(path)
-			if err == nil {
-				h := sha256.Sum256(fileBytes)
-				hashStr := hex.EncodeToString(h[:])
-				if !validHashes[hashStr] {
-					violations = append(violations, Violation{
-						Gate:        "Self Certification",
-						File:        relPath(a.RepoRoot, path),
-						Description: fmt.Sprintf("verdict file %q hash %q absent from capture log", base, hashStr),
-					})
-				}
-			}
-		}
-		return nil
-	})
+	checkDevPath(filepath.Join(a.RepoRoot, ".dev", "kritix-ai"))
+	if a.KritixDir != a.RepoRoot {
+		checkDevPath(filepath.Join(a.KritixDir, ".dev", "kritix-ai"))
+	}
 
 	return violations, nil
 }
