@@ -26,8 +26,9 @@ if ! git -C "$KRITIX_DIR" diff --quiet -- go.mod go.sum; then
 fi
 
 # 2. Mechanical Ledger Check
-echo "📋 [2/4] Verifying per-round mechanical ledger..."
-bash "$KRITIX_DIR/scripts/ledger-check.sh" 6
+ROUND="${1:-7}"
+echo "📋 [2/4] Verifying per-round mechanical ledger (Round ${ROUND})..."
+bash "$KRITIX_DIR/scripts/ledger-check.sh" "${ROUND}"
 
 # 3. Integration Vet
 echo "🔬 [3/4] Verifying integration-tagged source compilation..."
