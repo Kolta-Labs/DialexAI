@@ -89,3 +89,24 @@ func TestVirtualDriverActionsAndSemanticMatch(t *testing.T) {
 		t.Errorf("expected console log recorded for click action")
 	}
 }
+
+func TestDetectUnsupportedSurfaces_Classification(t *testing.T) {
+	// 1. Canvas
+	f1 := ClassifyUnsupportedSurface("canvas", "", "")
+	if f1 == nil || f1.Type != "CANVAS_WEBGL" {
+		t.Errorf("expected CANVAS_WEBGL, got %+v", f1)
+	}
+
+	// 2. Cross-origin Stripe iframe
+	f2 := ClassifyUnsupportedSurface("iframe", "https://js.stripe.com/v3/elements-inner-card.html", "")
+	if f2 == nil || f2.Type != "CROSS_ORIGIN_IFRAME" {
+		t.Errorf("expected CROSS_ORIGIN_IFRAME, got %+v", f2)
+	}
+
+	// 3. Cloudflare Turnstile CAPTCHA
+	f3 := ClassifyUnsupportedSurface("div", "", "cf-turnstile")
+	if f3 == nil || f3.Type != "CAPTCHA_TURNSTILE" {
+		t.Errorf("expected CAPTCHA_TURNSTILE, got %+v", f3)
+	}
+}
+

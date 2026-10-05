@@ -1,0 +1,13 @@
+diff --git a/kritix-ai/pkg/auth/rbac.go b/kritix-ai/pkg/auth/rbac.go
+index 2454b80..4b01047 100644
+--- a/kritix-ai/pkg/auth/rbac.go
++++ b/kritix-ai/pkg/auth/rbac.go
+@@ -206,7 +206,7 @@ func (m *EnterpriseAuthManager) SetAuditFile(path string) error {
+ 
+ // record chains and stores an entry. Caller holds m.mu.
+ func (m *EnterpriseAuthManager) record(e AuditLogEntry) {
+-	e.PrevHash = m.lastHash
++	e.PrevHash = ""
+ 	e.Hash = e.computeHash()
+ 	m.lastHash = e.Hash
+ 	m.auditLogs = append(m.auditLogs, e)

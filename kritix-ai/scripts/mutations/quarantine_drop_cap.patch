@@ -1,0 +1,13 @@
+diff --git a/kritix-ai/pkg/quarantine/quarantine.go b/kritix-ai/pkg/quarantine/quarantine.go
+index a7b0ab1..1f3dcdf 100644
+--- a/kritix-ai/pkg/quarantine/quarantine.go
++++ b/kritix-ai/pkg/quarantine/quarantine.go
+@@ -209,7 +209,7 @@ func (r *QuarantineRegistry) AddQuarantineWithOwner(analysis FlakeAnalysis, squa
+ 			teamCount++
+ 		}
+ 	}
+-	if teamCount >= r.maxPerTeam {
++	if false && teamCount >= r.maxPerTeam {
+ 		return fmt.Errorf("%w (%d active in squad %q, max allowed: %d)",
+ 			ErrQuarantineCapExceeded, teamCount, squad, r.maxPerTeam)
+ 	}

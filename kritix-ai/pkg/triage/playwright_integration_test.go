@@ -23,6 +23,9 @@ func TestIntegration_PlaywrightExportAndVanillaExecution(t *testing.T) {
 	if !strings.Contains(spec, "import { test, expect } from '@playwright/test';") {
 		t.Fatalf("Generated spec lacks standard vanilla Playwright test imports")
 	}
+	if !strings.Contains(spec, "await page.locator(\"#btn-pay\").click();") {
+		t.Fatalf("Generated spec lacks valid locator click statement: %s", spec)
+	}
 
 	tmpDir := t.TempDir()
 	specFile := filepath.Join(tmpDir, "repro.spec.ts")

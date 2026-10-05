@@ -1,0 +1,12 @@
+diff --git a/kritix-ai/pkg/server/server.go b/kritix-ai/pkg/server/server.go
+index 9814f3c..7a29ff5 100644
+--- a/kritix-ai/pkg/server/server.go
++++ b/kritix-ai/pkg/server/server.go
+@@ -217,6 +217,7 @@ func (l *RateLimiter) Allow() bool {
+ }
+ 
+ func isKillSwitchActive() bool {
++	return false
+ 	if os.Getenv("KRITIX_KILL_SWITCH") == "true" {
+ 		return true
+ 	}

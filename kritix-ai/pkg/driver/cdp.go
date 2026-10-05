@@ -644,6 +644,37 @@ func (c *CDPDriver) Stabilize(ctx context.Context, opts AnimationStabilizationOp
 	return nil
 }
 
+// ClassifyUnsupportedSurface evaluates element characteristics to detect unsupported surfaces offline.
+func ClassifyUnsupportedSurface(tag, src, class string) *UnsupportedSurfaceFinding {
+	if strings.EqualFold(tag, "canvas") {
+		return &UnsupportedSurfaceFinding{
+			Type:        "CANVAS_WEBGL",
+			Selector:    "canvas",
+			Description: "HTML5 Canvas / WebGL rendering surface",
+			Reason:      "Canvas elements render pixels without semantic DOM nodes; pixel-diff inspection only.",
+		}
+	}
+	srcLower := strings.ToLower(src)
+	if strings.EqualFold(tag, "iframe") && (strings.Contains(srcLower, "stripe.com") || strings.Contains(srcLower, "paypal.com") || strings.Contains(srcLower, "adyen.com") || strings.Contains(srcLower, "braintree")) {
+		return &UnsupportedSurfaceFinding{
+			Type:        "CROSS_ORIGIN_IFRAME",
+			Selector:    "iframe[src*=\"payment\"]",
+			Description: "Cross-origin payment iframe (" + src + ")",
+			Reason:      "Browser same-origin policy blocks CDP inspection; requires test-mode bypass tokens or mock webhooks.",
+		}
+	}
+	classLower := strings.ToLower(class)
+	if strings.Contains(classLower, "cf-turnstile") || strings.Contains(srcLower, "cloudflare.com") || strings.Contains(srcLower, "recaptcha") || strings.Contains(srcLower, "hcaptcha") {
+		return &UnsupportedSurfaceFinding{
+			Type:        "CAPTCHA_TURNSTILE",
+			Selector:    "iframe[captcha]",
+			Description: "Anti-bot CAPTCHA / Cloudflare Turnstile challenge",
+			Reason:      "Automated clicking prohibited; requires staging IP allowlisting or CAPTCHA bypass flag.",
+		}
+	}
+	return nil
+}
+
 // DetectUnsupportedSurfaces inspects the DOM for Canvas/WebGL, cross-origin payment iframes, and CAPTCHAs.
 func (c *CDPDriver) DetectUnsupportedSurfaces(ctx context.Context) ([]UnsupportedSurfaceFinding, error) {
 	c.mu.RLock()

@@ -87,6 +87,15 @@ func TestParseK6SummaryJSON(t *testing.T) {
 	if res.ErrorRate != 0.002 {
 		t.Errorf("expected 0.002 error rate, got %f", res.ErrorRate)
 	}
+
+	// Threshold failure path: target 100ms < 180.5ms p95 must fail SLA
+	strictRes, err := ParseK6SummaryJSON([]byte(summary), 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("ParseK6SummaryJSON strict failed: %v", err)
+	}
+	if strictRes.PassedSLA {
+		t.Errorf("expected PassedSLA = false when p95 (180.5ms) exceeds target (100ms)")
+	}
 }
 
 func TestExecuteK6_NotInstalledOrRun(t *testing.T) {

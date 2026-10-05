@@ -1,0 +1,11 @@
+diff --git a/kritix-ai/pkg/triage/bundle.go b/kritix-ai/pkg/triage/bundle.go
+index 1111111..2222222 100644
+--- a/kritix-ai/pkg/triage/bundle.go
++++ b/kritix-ai/pkg/triage/bundle.go
+@@ -140,5 +140,5 @@ func GeneratePlaywrightRepro(targetURL string, actions []driver.Action, expected
+ 		case driver.ActionClick:
+ 			if a.TargetXPath != "" {
+-				sb.WriteString(fmt.Sprintf("  await page.locator(%q).click();\n", a.TargetXPath))
++				sb.WriteString(fmt.Sprintf("  await page.locator(BROKEN_SYNTAX %q).click();\n", a.TargetXPath))
+ 			} else if a.TargetRole != "" && a.TargetText != "" {
+ 				sb.WriteString(fmt.Sprintf("  await page.getByRole(%q, { name: %q }).click();\n", a.TargetRole, a.TargetText))
