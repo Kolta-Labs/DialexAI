@@ -312,16 +312,6 @@ func TestHealCorpus_FrozenIntegrityAndEvaluation(t *testing.T) {
 		CorpusSHA256  string    `json:"corpus_sha256"`
 	}
 
-	type HealTestCase struct {
-		ID             string           `json:"id"`
-		Category       string           `json:"category"`
-		IsSemanticBug  bool             `json:"is_semantic_bug"`
-		Original       driver.Element   `json:"original"`
-		LiveCandidates []driver.Element `json:"live_candidates"`
-		ExpectedTarget string           `json:"expected_target"`
-		Description    string           `json:"description"`
-	}
-
 	type IndependentHealCorpus struct {
 		Metadata CorpusMetadata `json:"metadata"`
 		Cases    []HealTestCase `json:"cases"`
@@ -344,11 +334,16 @@ func TestHealCorpus_FrozenIntegrityAndEvaluation(t *testing.T) {
 	if corpus.Metadata.TotalCases < 400 {
 		t.Fatalf("Corpus total cases %d < 400 requirement", corpus.Metadata.TotalCases)
 	}
-	if corpus.Metadata.SemanticSwaps < 300 {
-		t.Fatalf("Corpus semantic swaps %d < 300 requirement (n_effective insufficient)", corpus.Metadata.SemanticSwaps)
+
+	// 2. Compute structural n_effective directly from data (never trust metadata field)
+	nEffective, _ := ComputeNEffectiveClusters(corpus.Cases)
+	if nEffective < 300 {
+		cpBoundOnNEff, _ := ClopperPearsonUpper95(0, nEffective)
+		t.Fatalf("STATISTICAL DIVERSITY VIOLATION: Computed n_effective = %d < 300 required for ≤1.00%% bound (templated cases collapse into %d semantic clusters; true Clopper-Pearson 95%% upper bound is %.2f%%, exceeding ≤1.00%% gate)",
+			nEffective, nEffective, cpBoundOnNEff*100.0)
 	}
 
-	// 2. Evaluate all cases across the registry
+	// 3. Evaluate all cases across the registry
 	registry := NewSelfHealingLocatorRegistry()
 	var totalSemanticBugs int
 	var falsePasses int
@@ -388,20 +383,20 @@ func TestHealCorpus_FrozenIntegrityAndEvaluation(t *testing.T) {
 		t.Fatalf("Observed %d false passes on independent corpus", falsePasses)
 	}
 
-	// 3. Statistical bound validation
-	cpBound, err := ClopperPearsonUpper95(falsePasses, totalSemanticBugs)
+	// 4. Statistical bound validation
+	cpBound, err := ClopperPearsonUpper95(falsePasses, nEffective)
 	if err != nil {
 		t.Fatalf("Clopper-Pearson computation failed: %v", err)
 	}
 
 	if cpBound > 0.0100001 {
-		t.Fatalf("SAFETY THRESHOLD EXCEEDED: Clopper-Pearson 95%% upper bound is %.4f%% (> 1.0%%) with n=%d",
-			cpBound*100.0, totalSemanticBugs)
+		t.Fatalf("SAFETY THRESHOLD EXCEEDED: Clopper-Pearson 95%% upper bound is %.4f%% (> 1.0%%) with n_effective=%d",
+			cpBound*100.0, nEffective)
 	}
 
 	t.Logf("Independent Frozen Corpus Study Results:")
 	t.Logf("  Total Cases:          %d", len(corpus.Cases))
-	t.Logf("  Semantic Swap Trials: %d (n_effective)", totalSemanticBugs)
+	t.Logf("  Semantic Swap Clusters: %d (n_effective)", nEffective)
 	t.Logf("  False Passes:         %d", falsePasses)
 	t.Logf("  Clopper-Pearson 95%%:  %.4f%% (≤ 1.00%% SAFETY GATE GREEN)", cpBound*100.0)
 	t.Logf("  Benign Healed Rate:   %.1f%% (%d/%d)", float64(benignHealed)*100.0/float64(benignTotal), benignHealed, benignTotal)
