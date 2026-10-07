@@ -168,3 +168,50 @@ func TestLSPServer_FullLifecycle(t *testing.T) {
 	_ = clientInW.Close()
 	_ = serverOutW.Close()
 }
+
+func TestLSPServer_CancelRequest(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "artix-lsp-cancel-*")
+	if err != nil {
+		t.Fatalf("tempDir failed: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	clientInR, clientInW := io.Pipe()
+	serverOutR, serverOutW := io.Pipe()
+	bufReader := bufio.NewReader(serverOutR)
+
+	server := NewServer(tempDir, clientInR, serverOutW)
+	go func() {
+		_ = server.Serve()
+	}()
+
+	// Send cancel request for request ID 99
+	cancelReq := LSPRequest{
+		JSONRPC: "2.0",
+		Method:  "$/cancelRequest",
+		Params:  json.RawMessage(`{"id": 99}`),
+	}
+	_, _ = clientInW.Write(formatLSPMessage(cancelReq))
+
+	// Verify server remains healthy and responds to subsequent requests
+	initReq := LSPRequest{
+		JSONRPC: "2.0",
+		ID:      100,
+		Method:  "initialize",
+		Params:  json.RawMessage(`{}`),
+	}
+	_, _ = clientInW.Write(formatLSPMessage(initReq))
+
+	resp, err := readLSPMessage(bufReader)
+	if err != nil {
+		t.Fatalf("failed to read initialize response after cancel: %v", err)
+	}
+	if resp["id"].(float64) != 100 {
+		t.Errorf("unexpected id in response: %+v", resp)
+	}
+
+	exitReq := LSPRequest{JSONRPC: "2.0", Method: "exit"}
+	_, _ = clientInW.Write(formatLSPMessage(exitReq))
+	_ = clientInW.Close()
+	_ = serverOutW.Close()
+}

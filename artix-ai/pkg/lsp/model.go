@@ -118,3 +118,10 @@ type LSPError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
+
+// CancelParams payload for $/cancelRequest notification.
+type CancelParams struct {
+	ID interface{} `json:"id"`
+}
+
+const CodeRequestCancelled = -32800

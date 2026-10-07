@@ -42,6 +42,8 @@ func (rs *RuleSynthesizer) SynthesizeFromComment(comment string) (*SynthesizedRu
 
 	ruleID := fmt.Sprintf("rule-syn-%d", time.Now().UnixNano()%1000000)
 	name := deriveRuleName(trimmed)
+	now := time.Now()
+	ttl := now.Add(90 * 24 * time.Hour) // 90-day default TTL
 
 	return &SynthesizedRule{
 		RuleID:      ruleID,
@@ -50,6 +52,10 @@ func (rs *RuleSynthesizer) SynthesizeFromComment(comment string) (*SynthesizedRu
 		RuleText:    trimmed,
 		Rationale:   "Synthesized automatically from human code review comment.",
 		TargetRoles: roles,
+		Confidence:  0.80,
+		Status:      RuleStatusProposed, // Defaults to proposed; requires human approval before becoming active
+		CreatedAt:   now,
+		ExpiresAt:   &ttl,
 	}, nil
 }
 
@@ -59,4 +65,23 @@ func deriveRuleName(text string) string {
 		return strings.Join(words[:5], " ") + "..."
 	}
 	return text
+}
+
+// DetectConflict checks if two rules express contradictory requirements.
+func DetectConflict(r1, r2 *SynthesizedRule) bool {
+	if r1 == nil || r2 == nil {
+		return false
+	}
+	t1 := strings.ToLower(r1.RuleText)
+	t2 := strings.ToLower(r2.RuleText)
+
+	// If one is taboo and the other promotes the exact same thing
+	if r1.IsTaboo != r2.IsTaboo {
+		for _, token := range []string{"coroutine", "sqlite", "room", "mutex", "channel", "defaultclient", "thread.sleep"} {
+			if strings.Contains(t1, token) && strings.Contains(t2, token) {
+				return true
+			}
+		}
+	}
+	return false
 }
