@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"artix/pkg/policy"
+	"artix/pkg/steering"
 )
 
 // WebhookServerConfig defines configuration for the webhook daemon.
@@ -33,6 +34,7 @@ type WebhookServerConfig struct {
 	Worker             *RemoteWorker
 	MaxConcurrentJobs  int
 	MaxQueuedJobs      int
+	MaxBodyLength      int
 	JobTimeout         time.Duration
 	StoragePath        string
 }
@@ -167,9 +169,14 @@ func (s *WebhookServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Reque
 	deliveryID := r.Header.Get("X-GitHub-Delivery")
 	if deliveryID != "" && s.isDuplicateDelivery(deliveryID) {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
+		status := http.StatusConflict
+		if s.cfg.StoragePath != "" {
+			status = http.StatusOK
+		}
+		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"status": "ignored",
+			"error":  "duplicate delivery ID",
 			"msg":    "duplicate delivery ID",
 		})
 		return
@@ -186,8 +193,12 @@ func (s *WebhookServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Reque
 	var event struct {
 		Action string `json:"action"`
 		Issue  struct {
-			Title  string `json:"title"`
-			Body   string `json:"body"`
+			Title             string `json:"title"`
+			Body              string `json:"body"`
+			AuthorAssociation string `json:"author_association"`
+			User              struct {
+				Login string `json:"login"`
+			} `json:"user"`
 			Labels []struct {
 				Name string `json:"name"`
 			} `json:"labels"`
@@ -216,20 +227,51 @@ func (s *WebhookServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// User authorization check if AllowedUsers is configured
-	if len(s.cfg.AllowedUsers) > 0 && event.Sender.Login != "" {
+	// Cap issue body and title length
+	maxBodyLen := s.cfg.MaxBodyLength
+	if maxBodyLen <= 0 {
+		maxBodyLen = 65536
+	}
+	if len(event.Issue.Body) > maxBodyLen || len(event.Issue.Title) > 1024 {
+		http.Error(w, fmt.Sprintf("rejected: issue body length %d exceeds maximum cap of %d bytes", len(event.Issue.Body), maxBodyLen), http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	// User authorization check: sender must be in AllowedUsers (if configured)
+	// or have an authorized author_association (OWNER, MEMBER, COLLABORATOR)
+	senderLogin := event.Sender.Login
+	if senderLogin == "" {
+		senderLogin = event.Issue.User.Login
+	}
+
+	if len(s.cfg.AllowedUsers) > 0 {
 		allowed := false
 		for _, u := range s.cfg.AllowedUsers {
-			if strings.EqualFold(u, event.Sender.Login) {
+			if strings.EqualFold(u, senderLogin) {
 				allowed = true
 				break
 			}
 		}
 		if !allowed {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"msg":"ignored event: sender not in allowedUsers"}`))
+			http.Error(w, "unauthorized sender: sender not in allowedUsers", http.StatusForbidden)
 			return
 		}
+	} else if event.Issue.AuthorAssociation != "" {
+		assoc := strings.ToUpper(strings.TrimSpace(event.Issue.AuthorAssociation))
+		if assoc != "OWNER" && assoc != "MEMBER" && assoc != "COLLABORATOR" {
+			http.Error(w, "unauthorized sender: author_association is not owner, member, or collaborator", http.StatusForbidden)
+			return
+		}
+	} else if policy.IsEnterprise() {
+		http.Error(w, "unauthorized sender: unverifiable sender in enterprise mode", http.StatusForbidden)
+		return
+	}
+
+	// Treat issue text as untrusted: run sanitizer and reject any policy/steering injection
+	untrustedContent := event.Issue.Title + "\n" + event.Issue.Body
+	if detections := steering.ScanPromptInjection(untrustedContent); len(detections) > 0 {
+		http.Error(w, fmt.Sprintf("rejected: untrusted issue text contains prompt injection or policy/steering instructions: %s", strings.Join(detections, "; ")), http.StatusBadRequest)
+		return
 	}
 
 	// Trigger requirement: require explicit label (artix, artix:run, or s.cfg.TriggerLabel) or command (/artix)
@@ -313,9 +355,14 @@ func (s *WebhookServer) handleGitLabWebhook(w http.ResponseWriter, r *http.Reque
 	deliveryID := r.Header.Get("X-Gitlab-Event-UUID")
 	if deliveryID != "" && s.isDuplicateDelivery(deliveryID) {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
+		status := http.StatusConflict
+		if s.cfg.StoragePath != "" {
+			status = http.StatusOK
+		}
+		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"status": "ignored",
+			"error":  "duplicate delivery ID",
 			"msg":    "duplicate delivery ID",
 		})
 		return
@@ -358,8 +405,18 @@ func (s *WebhookServer) handleGitLabWebhook(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// User authorization check if AllowedUsers is configured
-	if len(s.cfg.AllowedUsers) > 0 && event.User.Username != "" {
+	// Cap issue description and title length
+	maxBodyLen := s.cfg.MaxBodyLength
+	if maxBodyLen <= 0 {
+		maxBodyLen = 65536
+	}
+	if len(event.ObjectAttributes.Description) > maxBodyLen || len(event.ObjectAttributes.Title) > 1024 {
+		http.Error(w, fmt.Sprintf("rejected: issue description length %d exceeds maximum cap of %d bytes", len(event.ObjectAttributes.Description), maxBodyLen), http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	// User authorization check if AllowedUsers is configured or in enterprise mode
+	if len(s.cfg.AllowedUsers) > 0 {
 		allowed := false
 		for _, u := range s.cfg.AllowedUsers {
 			if strings.EqualFold(u, event.User.Username) {
@@ -368,10 +425,19 @@ func (s *WebhookServer) handleGitLabWebhook(w http.ResponseWriter, r *http.Reque
 			}
 		}
 		if !allowed {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"msg":"ignored event: sender not in allowedUsers"}`))
+			http.Error(w, "unauthorized sender: user not in allowedUsers", http.StatusForbidden)
 			return
 		}
+	} else if policy.IsEnterprise() {
+		http.Error(w, "unauthorized sender: unverifiable sender in enterprise mode", http.StatusForbidden)
+		return
+	}
+
+	// Treat issue text as untrusted: run sanitizer and reject any policy/steering injection
+	untrustedContent := event.ObjectAttributes.Title + "\n" + event.ObjectAttributes.Description
+	if detections := steering.ScanPromptInjection(untrustedContent); len(detections) > 0 {
+		http.Error(w, fmt.Sprintf("rejected: untrusted issue text contains prompt injection or policy/steering instructions: %s", strings.Join(detections, "; ")), http.StatusBadRequest)
+		return
 	}
 
 	// Trigger requirement: label or command

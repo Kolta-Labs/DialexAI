@@ -7,12 +7,17 @@ import (
 )
 
 var injectionPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)(ignore|disregard|forget)\s+(all\s+)?(previous|prior|above)\s+(instructions|prompts|rules)`),
+	regexp.MustCompile(`(?i)(ignore|disregard|forget)\s+(all\s+)?(previous|prior|above)\s+(instructions|prompts|rules|taboos)`),
 	regexp.MustCompile(`(?i)system\s+prompt\s+(override|leak|injection)`),
 	regexp.MustCompile(`(?i)you\s+are\s+now\s+(in\s+)?(developer\s+mode|dan\s+mode)`),
-	regexp.MustCompile(`(?i)bypass\s+all\s+(rules|taboos|security|safety|restrictions)`),
-	regexp.MustCompile(`(?i)disregard\s+(taboo|rules|policies)`),
+	regexp.MustCompile(`(?i)bypass\s+all\s+(rules|taboos|security|safety|restrictions|policies)`),
+	regexp.MustCompile(`(?i)disregard\s+(taboo|taboos|rules|policies|security)`),
 	regexp.MustCompile(`(?i)exfiltrate\s+(secrets|env|keys|tokens)`),
+	regexp.MustCompile(`(?i)(set|override|alter|modify|disable|bypass|replace)\s+(all\s+)?(policy|policies|steering|taboo|taboos|rules)`),
+	regexp.MustCompile(`(?i)(override\s+policy|policy\s+override|steering\s+override|taboo\s+override)`),
+	regexp.MustCompile(`(?i)/etc/artix/policy\.json`),
+	regexp.MustCompile(`(?i)(require_signed_policy|allow_autonomous|allowed_approvers)\s*[:=]`),
+	regexp.MustCompile(`(?i)ARTIX_(POLICY|ENTERPRISE|AUTONOMOUS|ALLOW_AUTONOMOUS)`),
 }
 
 // ScanPromptInjection analyzes untrusted text (such as AGENTS.md, CLAUDE.md, PR review comments)
