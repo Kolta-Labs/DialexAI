@@ -383,10 +383,10 @@ func (c *ConvergenceCoordinator) Run(
 				}
 
 				if policy.IsEnterprise() || policy.Active().RequireForgeApproval {
-					if forgeApproval == nil {
+					if forgeApproval == nil || !forgeApproval.VerifiedByForge {
 						_ = activeSession.Rollback()
 						res.Success = false
-						res.Error = "autonomous commit blocked: separation of duties violation: enterprise mode requires verified forge PR approval record (opts.ForgeApproval)"
+						res.Error = "autonomous commit blocked: separation of duties violation: caller-supplied or forged approvals are strictly forbidden in enterprise mode; approval must be verified server-side from forge API"
 						return res
 					}
 					if err := policy.ValidateForgeApproval(forgeApproval, "artix-agent", "artix-agent"); err != nil {

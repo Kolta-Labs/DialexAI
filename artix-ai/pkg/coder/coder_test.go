@@ -267,6 +267,7 @@ func TestAutonomousModeBlockedInEnterpriseWithoutOptIn(t *testing.T) {
 		ApproverUsername: "security-lead",
 		AuthorUsername:   "artix-agent",
 		State:            "APPROVED",
+		VerifiedByForge:  true,
 	}
 	resWithPolicy := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
 	if !resWithPolicy.Success || resWithPolicy.CommitHash == "" {
@@ -551,6 +552,7 @@ func TestAutonomousCommitBlockedWhenSelfApprovalAttempted(t *testing.T) {
 			ApproverUsername: "alice",
 			AuthorUsername:   "alice",
 			State:            "APPROVED",
+			VerifiedByForge:  true,
 		},
 		MockPatchGen: func(round int, feedback string) string {
 			return validPatch
