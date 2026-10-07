@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"artix/pkg/persona"
@@ -146,7 +147,7 @@ func TestWebhookServer_GitHub_PingAndIssue(t *testing.T) {
 	issuePayload := map[string]interface{}{
 		"action": "opened",
 		"issue": map[string]string{
-			"title": "Implement caching",
+			"title": "/artix: Implement caching",
 			"body":  "Add Redis caching to hot query paths",
 		},
 		"repository": map[string]interface{}{
@@ -197,7 +198,7 @@ func TestWebhookServer_GitLab_Issue(t *testing.T) {
 			"default_branch":      "main",
 		},
 		"object_attributes": map[string]string{
-			"title":       "Fix auth timeout",
+			"title":       "/artix: Fix auth timeout",
 			"description": "Increase timeout from 5s to 30s",
 			"action":      "open",
 		},
@@ -224,6 +225,7 @@ func TestWebhookServer_GitLab_Issue(t *testing.T) {
 }
 
 func TestRemoteWorker_Execute_LocalSimulated(t *testing.T) {
+	t.Setenv("ARTIX_ALLOW_AUTONOMOUS", "1")
 	remoteDir, err := os.MkdirTemp("", "kritix-sim-remote-*")
 	if err != nil {
 		t.Fatalf("failed to create temp remote dir: %v", err)
@@ -269,7 +271,8 @@ func TestRemoteWorker_Execute_LocalSimulated(t *testing.T) {
 	defer forgeMock.Close()
 
 	registry := persona.NewRegistry("")
-	worker := NewRemoteWorker(workDir, registry)
+	worker := NewRemoteWorker(workDir, registry, "", "localhost", "127.0.0.1")
+	worker.SetAllowInsecureLocalCloneForTest(true)
 
 	task := &RemoteWorkerTask{
 		Target: RemoteRepoTarget{
@@ -328,7 +331,7 @@ func TestWebhookServer_ConcurrencyAndQueueCap(t *testing.T) {
 		payload := []byte(`{
 			"action": "opened",
 			"issue": {
-				"title": "Fix memory leak",
+				"title": "/artix: Fix memory leak",
 				"body": "Profile traces show unbounded slice growth"
 			},
 			"repository": {
@@ -369,4 +372,226 @@ func TestWebhookServer_ConcurrencyAndQueueCap(t *testing.T) {
 		t.Errorf("expected rate_limited status in 429 response, got: %s", rec3.Body.String())
 	}
 }
+
+func TestWebhookServer_DeliveryDeduplication(t *testing.T) {
+	ws := NewWebhookServer(WebhookServerConfig{})
+	handler := ws.Handler()
+
+	payload := []byte(`{
+		"action": "opened",
+		"issue": {"title": "/artix: Fix bug", "body": "description"},
+		"repository": {
+			"clone_url": "https://github.com/myorg/myrepo.git",
+			"name": "myrepo",
+			"owner": {"login": "myorg"},
+			"default_branch": "main"
+		}
+	}`)
+
+	// First delivery
+	req1 := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(payload))
+	req1.Header.Set("Content-Type", "application/json")
+	req1.Header.Set("X-GitHub-Event", "issues")
+	req1.Header.Set("X-GitHub-Delivery", "delivery-uuid-12345")
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 Accepted on first delivery, got %d", rec1.Code)
+	}
+
+	// Replay / redelivery with same X-GitHub-Delivery
+	req2 := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(payload))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-GitHub-Event", "issues")
+	req2.Header.Set("X-GitHub-Delivery", "delivery-uuid-12345")
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+
+	if !strings.Contains(rec2.Body.String(), "duplicate delivery ID") {
+		t.Errorf("expected 'duplicate delivery ID' message, got: %s", rec2.Body.String())
+	}
+}
+
+func TestWebhookServer_StatePersistenceAndRecovery(t *testing.T) {
+	storagePath := filepath.Join(t.TempDir(), "daemon_state.json")
+
+	// Server 1: creates a job and processes a delivery
+	ws1 := NewWebhookServer(WebhookServerConfig{
+		StoragePath: storagePath,
+	})
+	handler1 := ws1.Handler()
+
+	payload := []byte(`{
+		"action": "opened",
+		"issue": {"title": "/artix: Fix memory leak", "body": "description"},
+		"repository": {
+			"clone_url": "https://github.com/myorg/myrepo.git",
+			"name": "myrepo",
+			"owner": {"login": "myorg"},
+			"default_branch": "main"
+		}
+	}`)
+
+	req1 := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(payload))
+	req1.Header.Set("Content-Type", "application/json")
+	req1.Header.Set("X-GitHub-Event", "issues")
+	req1.Header.Set("X-GitHub-Delivery", "delivery-persist-abc")
+	rec1 := httptest.NewRecorder()
+	handler1.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 on server 1, got %d", rec1.Code)
+	}
+
+	var respBody map[string]string
+	_ = json.Unmarshal(rec1.Body.Bytes(), &respBody)
+	jobID := respBody["jobId"]
+
+	// Ensure state was saved to disk
+	if _, err := os.Stat(storagePath); err != nil {
+		t.Fatalf("expected state file to exist at %s: %v", storagePath, err)
+	}
+
+	// Server 2: restarts using the same StoragePath
+	ws2 := NewWebhookServer(WebhookServerConfig{
+		StoragePath: storagePath,
+	})
+	handler2 := ws2.Handler()
+
+	// 1. Verify job was restored
+	restoredJob, ok := ws2.GetJob(jobID)
+	if !ok || restoredJob == nil {
+		t.Fatalf("expected job %s to be restored on server 2 restart", jobID)
+	}
+	if restoredJob.Source != "github" {
+		t.Errorf("expected source 'github', got %s", restoredJob.Source)
+	}
+
+	// 2. Verify delivery deduplication was restored
+	reqDup := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(payload))
+	reqDup.Header.Set("Content-Type", "application/json")
+	reqDup.Header.Set("X-GitHub-Event", "issues")
+	reqDup.Header.Set("X-GitHub-Delivery", "delivery-persist-abc")
+	recDup := httptest.NewRecorder()
+	handler2.ServeHTTP(recDup, reqDup)
+
+	if recDup.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for persisted duplicate delivery, got %d", recDup.Code)
+	}
+	if !strings.Contains(recDup.Body.String(), "duplicate delivery ID") {
+		t.Errorf("expected duplicate delivery rejection, got: %s", recDup.Body.String())
+	}
+}
+
+func TestWebhookServer_RequiresSecretInEnterpriseMode(t *testing.T) {
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+	ws := NewWebhookServer(WebhookServerConfig{})
+	handler := ws.Handler()
+
+	payload := []byte(`{"action":"opened","issue":{"title":"/artix: test","body":"test"}}`)
+	req := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(payload))
+	req.Header.Set("X-GitHub-Event", "issues")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden when secret is missing in enterprise mode, got %d", rec.Code)
+	}
+
+	glReq := httptest.NewRequest(http.MethodPost, "/webhook/gitlab", bytes.NewReader(payload))
+	glRec := httptest.NewRecorder()
+	handler.ServeHTTP(glRec, glReq)
+	if glRec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for GitLab when token is missing in enterprise mode, got %d", glRec.Code)
+	}
+}
+
+func TestRemoteWorker_RejectsUntrustedCloneHost(t *testing.T) {
+	worker := NewRemoteWorker(t.TempDir(), nil, "github.com", "gitlab.com")
+	task := &RemoteWorkerTask{
+		Target: RemoteRepoTarget{
+			CloneURL: "https://attacker.evil.com/malicious/repo.git",
+			Owner:    "attacker",
+			Repo:     "repo",
+			Branch:   "main",
+		},
+		Auth: ForgeAuth{
+			Type:  ForgeGitHub,
+			Token: "secret-token-must-not-leak",
+		},
+		Prompt: "exfiltrate",
+	}
+
+	res := worker.Execute(context.Background(), task)
+	if res.Success {
+		t.Fatalf("expected clone to untrusted host to fail, but succeeded")
+	}
+	if !strings.Contains(res.Error, "clone refused: host \"attacker.evil.com\" is not in allowed clone hosts") {
+		t.Fatalf("expected clone refused error, got: %s", res.Error)
+	}
+}
+
+func TestWebhookServer_JobsEndpointAuthenticationAndTenantBinding(t *testing.T) {
+	ws := NewWebhookServer(WebhookServerConfig{
+		JobsAuthToken: "super-secret-admin-token",
+	})
+	handler := ws.Handler()
+
+	// 1. Unauthenticated request -> 401
+	req1 := httptest.NewRequest(http.MethodGet, "/jobs", nil)
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 Unauthorized for unauthenticated /jobs, got %d", rec1.Code)
+	}
+
+	// 2. Authenticated but missing tenant query -> 400
+	req2 := httptest.NewRequest(http.MethodGet, "/jobs", nil)
+	req2.Header.Set("Authorization", "Bearer super-secret-admin-token")
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request when tenant is omitted in authenticated mode, got %d", rec2.Code)
+	}
+
+	// 3. Authenticated with tenant query -> 200
+	req3 := httptest.NewRequest(http.MethodGet, "/jobs?tenant=myteam", nil)
+	req3.Header.Set("Authorization", "Bearer super-secret-admin-token")
+	rec3 := httptest.NewRecorder()
+	handler.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for authenticated /jobs with tenant binding, got %d", rec3.Code)
+	}
+}
+
+func TestRemoteWorker_BlocksNonHttpsAndMalformedURLs(t *testing.T) {
+	workDir := t.TempDir()
+	worker := NewRemoteWorker(workDir, nil, "", "github.com", "gitlab.com")
+
+	forbiddenURLs := []string{
+		"file:///etc/passwd",
+		"/abs/local/path",
+		"git@github.com:org/repo.git",
+		"ext::sh%20-c%20touch%20/tmp/pwn",
+		"http://github.com/org/repo.git",
+		"ftp://github.com/org/repo.git",
+	}
+
+	for _, rawURL := range forbiddenURLs {
+		task := &RemoteWorkerTask{
+			Target: RemoteRepoTarget{
+				CloneURL: rawURL,
+				Owner:    "test",
+				Repo:     "repo",
+			},
+		}
+		res := worker.Execute(context.Background(), task)
+		if res.Success {
+			t.Errorf("expected URL %q to be blocked, but clone succeeded", rawURL)
+		}
+		if !strings.Contains(res.Error, "clone refused") {
+			t.Errorf("expected 'clone refused' error for URL %q, got: %s", rawURL, res.Error)
+		}
+	}
+}
+
 
