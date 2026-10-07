@@ -128,6 +128,12 @@ func (c *ConvergenceCoordinator) Run(
 		costReport.BudgetTeamCostCap = budget.MaxTeamCost
 		costReport.BudgetDayCostCap = budget.MaxDayCost
 		costReport.TeamID = budget.TeamID
+
+		if err := budget.ValidatePricing(); err != nil {
+			res.Error = err.Error()
+			res.CostReport = costReport
+			return res
+		}
 	}
 
 	// Enterprise Autonomous Gate (ARTIX-SEC-02):
@@ -227,6 +233,54 @@ func (c *ConvergenceCoordinator) Run(
 
 		coderPatchTokens := EstimateTokens(patch)
 		totalCoderTokens := coderPromptTokens + coderPatchTokens
+
+		// Mid-round budget check: abort immediately before sandbox/critic if coder tokens exhausted cap
+		if budget != nil {
+			costPer1k := budget.CostPer1kTokens
+			if costPer1k <= 0 && len(budget.PriceTable) > 0 {
+				for _, p := range budget.PriceTable {
+					costPer1k = p
+					break
+				}
+			}
+			coderCostUSD := (float64(totalCoderTokens) / 1000.0) * costPer1k
+			budget.RecordRoundUsage(totalCoderTokens, coderCostUSD)
+			costReport.TotalTokens += totalCoderTokens
+			costReport.TotalCost += coderCostUSD
+
+			if exhausted, reason := budget.CheckExhaustion(); exhausted {
+				roundCost := RoundCost{
+					Round: round,
+					RoleTokens: map[string]int{
+						"coder": totalCoderTokens,
+					},
+					DNAOverhead: map[string]int{
+						"coder_dna": coderDNATokens,
+					},
+					TotalRoundTokens: totalCoderTokens,
+				}
+				costReport.Rounds = append(costReport.Rounds, roundCost)
+				costReport.DNAOverheadTokens += coderDNATokens
+
+				costReport.Exhausted = true
+				costReport.ExhaustionReason = reason
+				res.CostReport = costReport
+				res.Error = fmt.Sprintf("budget exhausted in round %d: %s", round, reason)
+				_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+					EventType: audit.EventType("budget.exhausted"),
+					Status:    "FAILED",
+					Details: map[string]any{
+						"storyId":          s.ID,
+						"roundsRun":        round,
+						"totalTokens":      costReport.TotalTokens,
+						"totalCost":        costReport.TotalCost,
+						"exhaustionReason": costReport.ExhaustionReason,
+						"testCommandsHash": testCommandsHash,
+					},
+				})
+				return res
+			}
+		}
 
 		// 2. Apply patch via PatchSession
 		activeSession = git.NewPatchSession(repoCtx.RootDir, patch)
@@ -343,43 +397,27 @@ func (c *ConvergenceCoordinator) Run(
 			TotalRoundTokens: totalCoderTokens + totalReviewerTokens,
 		}
 		costReport.Rounds = append(costReport.Rounds, roundCost)
-		costReport.TotalTokens += roundCost.TotalRoundTokens
 		costReport.DNAOverheadTokens += coderDNATokens + reviewerDNATokens
 
-		// Check budget exhaustion (Tokens & Financial USD Caps)
+		// Check budget exhaustion after reviewer pass
 		if budget != nil {
 			costPer1k := budget.CostPer1kTokens
-			if costPer1k <= 0 {
-				costPer1k = 0.003 // Default USD 0.003 per 1,000 tokens (frontier model blended baseline)
+			if costPer1k <= 0 && len(budget.PriceTable) > 0 {
+				for _, p := range budget.PriceTable {
+					costPer1k = p
+					break
+				}
 			}
-			roundCostUSD := (float64(roundCost.TotalRoundTokens) / 1000.0) * costPer1k
+			reviewerCostUSD := (float64(totalReviewerTokens) / 1000.0) * costPer1k
+			budget.RecordRoundUsage(totalReviewerTokens, reviewerCostUSD)
+			costReport.TotalTokens += totalReviewerTokens
+			costReport.TotalCost += reviewerCostUSD
 
-			budget.RecordRoundUsage(roundCost.TotalRoundTokens, roundCostUSD)
-			costReport.TotalCost += roundCostUSD
-
-			if budget.MaxStoryTokens > 0 && budget.UsedStoryTokens > budget.MaxStoryTokens {
+			if exhausted, reason := budget.CheckExhaustion(); exhausted {
 				costReport.Exhausted = true
-				costReport.ExhaustionReason = fmt.Sprintf("story token budget exceeded: %d used > %d max cap", budget.UsedStoryTokens, budget.MaxStoryTokens)
-			} else if budget.MaxTeamTokens > 0 && budget.UsedTeamTokens > budget.MaxTeamTokens {
-				costReport.Exhausted = true
-				costReport.ExhaustionReason = fmt.Sprintf("team token budget exceeded: %d used > %d max cap", budget.UsedTeamTokens, budget.MaxTeamTokens)
-			} else if budget.MaxDayTokens > 0 && budget.UsedDayTokens > budget.MaxDayTokens {
-				costReport.Exhausted = true
-				costReport.ExhaustionReason = fmt.Sprintf("daily token budget exceeded: %d used > %d max cap", budget.UsedDayTokens, budget.MaxDayTokens)
-			} else if budget.MaxStoryCost > 0 && budget.UsedStoryCost > budget.MaxStoryCost {
-				costReport.Exhausted = true
-				costReport.ExhaustionReason = fmt.Sprintf("story cost budget exceeded: $%.4f used > $%.4f max cap", budget.UsedStoryCost, budget.MaxStoryCost)
-			} else if budget.MaxTeamCost > 0 && budget.UsedTeamCost > budget.MaxTeamCost {
-				costReport.Exhausted = true
-				costReport.ExhaustionReason = fmt.Sprintf("team cost budget exceeded: $%.4f used > $%.4f max cap", budget.UsedTeamCost, budget.MaxTeamCost)
-			} else if budget.MaxDayCost > 0 && budget.UsedDayCost > budget.MaxDayCost {
-				costReport.Exhausted = true
-				costReport.ExhaustionReason = fmt.Sprintf("daily cost budget exceeded: $%.4f used > $%.4f max cap", budget.UsedDayCost, budget.MaxDayCost)
-			}
-
-			if costReport.Exhausted {
+				costReport.ExhaustionReason = reason
 				res.CostReport = costReport
-				res.Error = fmt.Sprintf("budget exhausted in round %d: %s", round, costReport.ExhaustionReason)
+				res.Error = fmt.Sprintf("budget exhausted in round %d: %s", round, reason)
 				if activeSession != nil {
 					_ = activeSession.Rollback()
 				}
@@ -392,17 +430,13 @@ func (c *ConvergenceCoordinator) Run(
 						"totalTokens":      costReport.TotalTokens,
 						"totalCost":        costReport.TotalCost,
 						"exhaustionReason": costReport.ExhaustionReason,
-						"budgetStoryCap":   costReport.BudgetStoryCap,
-						"budgetTeamCap":    costReport.BudgetTeamCap,
-						"budgetDayCap":     costReport.BudgetDayCap,
-						"budgetStoryCost":  costReport.BudgetStoryCostCap,
-						"budgetTeamCost":   costReport.BudgetTeamCostCap,
-						"budgetDayCost":    costReport.BudgetDayCostCap,
-						"dnaOverhead":      costReport.DNAOverheadTokens,
+						"testCommandsHash": testCommandsHash,
 					},
 				})
 				return res
 			}
+		} else {
+			costReport.TotalTokens += totalReviewerTokens
 		}
 
 		// Handle unreviewed status: fail closed and block auto-commit

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -27,21 +28,22 @@ const (
 
 // TokenBudget defines token and USD financial limits at story, team, and daily levels.
 type TokenBudget struct {
-	MaxStoryTokens  int     `json:"maxStoryTokens"`
-	MaxTeamTokens   int     `json:"maxTeamTokens"`
-	MaxDayTokens    int     `json:"maxDayTokens"`
-	MaxStoryCost    float64 `json:"maxStoryCost,omitempty"` // USD
-	MaxTeamCost     float64 `json:"maxTeamCost,omitempty"`  // USD
-	MaxDayCost      float64 `json:"maxDayCost,omitempty"`   // USD
-	CostPer1kTokens float64 `json:"costPer1kTokens,omitempty"`
-	UsedStoryTokens int     `json:"usedStoryTokens"`
-	UsedTeamTokens  int     `json:"usedTeamTokens"`
-	UsedDayTokens   int     `json:"usedDayTokens"`
-	UsedStoryCost   float64 `json:"usedStoryCost"`
-	UsedTeamCost    float64 `json:"usedTeamCost"`
-	UsedDayCost     float64 `json:"usedDayCost"`
-	TeamID          string  `json:"teamId,omitempty"`
-	LedgerPath      string  `json:"ledgerPath,omitempty"`
+	MaxStoryTokens  int                `json:"maxStoryTokens"`
+	MaxTeamTokens   int                `json:"maxTeamTokens"`
+	MaxDayTokens    int                `json:"maxDayTokens"`
+	MaxStoryCost    float64            `json:"maxStoryCost,omitempty"` // USD
+	MaxTeamCost     float64            `json:"maxTeamCost,omitempty"`  // USD
+	MaxDayCost      float64            `json:"maxDayCost,omitempty"`   // USD
+	CostPer1kTokens float64            `json:"costPer1kTokens,omitempty"`
+	PriceTable      map[string]float64 `json:"priceTable,omitempty"` // model -> cost per 1k tokens
+	UsedStoryTokens int                `json:"usedStoryTokens"`
+	UsedTeamTokens  int                `json:"usedTeamTokens"`
+	UsedDayTokens   int                `json:"usedDayTokens"`
+	UsedStoryCost   float64            `json:"usedStoryCost"`
+	UsedTeamCost    float64            `json:"usedTeamCost"`
+	UsedDayCost     float64            `json:"usedDayCost"`
+	TeamID          string             `json:"teamId,omitempty"`
+	LedgerPath      string             `json:"ledgerPath,omitempty"`
 }
 
 // LoadBudgetFromEnv loads budget limits from policy and ARTIX_BUDGET_* environment variables.
@@ -131,6 +133,61 @@ func LoadBudgetFromEnv() *TokenBudget {
 
 var ledgerMu sync.Mutex
 
+func withFileLock(path string, fn func()) {
+	ledgerMu.Lock()
+	defer ledgerMu.Unlock()
+
+	lockPath := path + ".lock"
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+	if err == nil {
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_EX)
+		defer func() {
+			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+			_ = f.Close()
+		}()
+	}
+	fn()
+}
+
+// HasFinancialCap returns true if any USD budget cap is configured.
+func (b *TokenBudget) HasFinancialCap() bool {
+	return b.MaxStoryCost > 0 || b.MaxTeamCost > 0 || b.MaxDayCost > 0
+}
+
+// ValidatePricing verifies that pricing is configured when a financial cap is active.
+func (b *TokenBudget) ValidatePricing() error {
+	if !b.HasFinancialCap() {
+		return nil
+	}
+	if b.CostPer1kTokens <= 0 && len(b.PriceTable) == 0 {
+		return fmt.Errorf("budget configuration error: USD financial cap is configured, but no model pricing or price table is provided (refusing operation to prevent silent under-reporting)")
+	}
+	return nil
+}
+
+// CheckExhaustion checks if any token or USD cap is exceeded.
+func (b *TokenBudget) CheckExhaustion() (bool, string) {
+	if b.MaxStoryTokens > 0 && b.UsedStoryTokens > b.MaxStoryTokens {
+		return true, fmt.Sprintf("story token budget exceeded: %d used > %d max cap", b.UsedStoryTokens, b.MaxStoryTokens)
+	}
+	if b.MaxTeamTokens > 0 && b.UsedTeamTokens > b.MaxTeamTokens {
+		return true, fmt.Sprintf("team token budget exceeded: %d used > %d max cap", b.UsedTeamTokens, b.MaxTeamTokens)
+	}
+	if b.MaxDayTokens > 0 && b.UsedDayTokens > b.MaxDayTokens {
+		return true, fmt.Sprintf("daily token budget exceeded: %d used > %d max cap", b.UsedDayTokens, b.MaxDayTokens)
+	}
+	if b.MaxStoryCost > 0 && b.UsedStoryCost > b.MaxStoryCost {
+		return true, fmt.Sprintf("story cost budget exceeded: $%.4f used > $%.4f max cap", b.UsedStoryCost, b.MaxStoryCost)
+	}
+	if b.MaxTeamCost > 0 && b.UsedTeamCost > b.MaxTeamCost {
+		return true, fmt.Sprintf("team cost budget exceeded: $%.4f used > $%.4f max cap", b.UsedTeamCost, b.MaxTeamCost)
+	}
+	if b.MaxDayCost > 0 && b.UsedDayCost > b.MaxDayCost {
+		return true, fmt.Sprintf("daily cost budget exceeded: $%.4f used > $%.4f max cap", b.UsedDayCost, b.MaxDayCost)
+	}
+	return false, ""
+}
+
 type sharedLedgerData struct {
 	TeamTokens map[string]int     `json:"teamTokens"`
 	TeamCost   map[string]float64 `json:"teamCost"`
@@ -149,40 +206,39 @@ func (b *TokenBudget) getEffectiveLedgerPath() string {
 }
 
 // SyncWithSharedLedger refreshes UsedTeamTokens, UsedDayTokens, UsedTeamCost, UsedDayCost
-// from the atomic shared cross-process ledger file.
+// from the atomic shared cross-process ledger file using kernel file locking.
 func (b *TokenBudget) SyncWithSharedLedger() {
-	ledgerMu.Lock()
-	defer ledgerMu.Unlock()
-
 	path := b.getEffectiveLedgerPath()
-	data, err := os.ReadFile(path)
-	if err != nil || len(data) == 0 {
-		return
-	}
+	withFileLock(path, func() {
+		data, err := os.ReadFile(path)
+		if err != nil || len(data) == 0 {
+			return
+		}
 
-	var state sharedLedgerData
-	if err := json.Unmarshal(data, &state); err != nil {
-		return
-	}
+		var state sharedLedgerData
+		if err := json.Unmarshal(data, &state); err != nil {
+			return
+		}
 
-	today := time.Now().Format("2006-01-02")
-	teamID := b.TeamID
-	if teamID == "" {
-		teamID = "default"
-	}
+		today := time.Now().Format("2006-01-02")
+		teamID := b.TeamID
+		if teamID == "" {
+			teamID = "default"
+		}
 
-	if state.TeamTokens != nil {
-		b.UsedTeamTokens = state.TeamTokens[teamID]
-	}
-	if state.TeamCost != nil {
-		b.UsedTeamCost = state.TeamCost[teamID]
-	}
-	if state.DayTokens != nil {
-		b.UsedDayTokens = state.DayTokens[today]
-	}
-	if state.DayCost != nil {
-		b.UsedDayCost = state.DayCost[today]
-	}
+		if state.TeamTokens != nil {
+			b.UsedTeamTokens = state.TeamTokens[teamID]
+		}
+		if state.TeamCost != nil {
+			b.UsedTeamCost = state.TeamCost[teamID]
+		}
+		if state.DayTokens != nil {
+			b.UsedDayTokens = state.DayTokens[today]
+		}
+		if state.DayCost != nil {
+			b.UsedDayCost = state.DayCost[today]
+		}
+	})
 }
 
 // ProviderUsage contains actual metered token consumption reported by the model provider API.
@@ -193,7 +249,8 @@ type ProviderUsage struct {
 }
 
 // RecordRoundUsage atomically records token usage into story, team, and day counters,
-// reconciling with provider-reported usage when available, and atomically updates the shared ledger.
+// reconciling with provider-reported usage when available, and atomically updates the shared ledger
+// under an OS kernel file lock.
 func (b *TokenBudget) RecordRoundUsage(roundTokens int, roundCostUSD float64, providerUsage ...*ProviderUsage) {
 	// Reconcile against provider-reported usage if present
 	if len(providerUsage) > 0 && providerUsage[0] != nil {
@@ -201,58 +258,56 @@ func (b *TokenBudget) RecordRoundUsage(roundTokens int, roundCostUSD float64, pr
 		if pu.TotalTokens > 0 {
 			roundTokens = pu.TotalTokens
 			costPer1k := b.CostPer1kTokens
-			if costPer1k <= 0 {
-				costPer1k = 0.003
+			if costPer1k > 0 {
+				roundCostUSD = (float64(roundTokens) / 1000.0) * costPer1k
 			}
-			roundCostUSD = (float64(roundTokens) / 1000.0) * costPer1k
 		}
 	}
 
 	b.UsedStoryTokens += roundTokens
 	b.UsedStoryCost += roundCostUSD
 
-	ledgerMu.Lock()
-	defer ledgerMu.Unlock()
-
 	path := b.getEffectiveLedgerPath()
-	var state sharedLedgerData
-	data, err := os.ReadFile(path)
-	if err == nil && len(data) > 0 {
-		_ = json.Unmarshal(data, &state)
-	}
+	withFileLock(path, func() {
+		var state sharedLedgerData
+		data, err := os.ReadFile(path)
+		if err == nil && len(data) > 0 {
+			_ = json.Unmarshal(data, &state)
+		}
 
-	if state.TeamTokens == nil {
-		state.TeamTokens = make(map[string]int)
-	}
-	if state.TeamCost == nil {
-		state.TeamCost = make(map[string]float64)
-	}
-	if state.DayTokens == nil {
-		state.DayTokens = make(map[string]int)
-	}
-	if state.DayCost == nil {
-		state.DayCost = make(map[string]float64)
-	}
+		if state.TeamTokens == nil {
+			state.TeamTokens = make(map[string]int)
+		}
+		if state.TeamCost == nil {
+			state.TeamCost = make(map[string]float64)
+		}
+		if state.DayTokens == nil {
+			state.DayTokens = make(map[string]int)
+		}
+		if state.DayCost == nil {
+			state.DayCost = make(map[string]float64)
+		}
 
-	today := time.Now().Format("2006-01-02")
-	teamID := b.TeamID
-	if teamID == "" {
-		teamID = "default"
-	}
+		today := time.Now().Format("2006-01-02")
+		teamID := b.TeamID
+		if teamID == "" {
+			teamID = "default"
+		}
 
-	state.TeamTokens[teamID] += roundTokens
-	state.TeamCost[teamID] += roundCostUSD
-	state.DayTokens[today] += roundTokens
-	state.DayCost[today] += roundCostUSD
+		state.TeamTokens[teamID] += roundTokens
+		state.TeamCost[teamID] += roundCostUSD
+		state.DayTokens[today] += roundTokens
+		state.DayCost[today] += roundCostUSD
 
-	b.UsedTeamTokens = state.TeamTokens[teamID]
-	b.UsedTeamCost = state.TeamCost[teamID]
-	b.UsedDayTokens = state.DayTokens[today]
-	b.UsedDayCost = state.DayCost[today]
+		b.UsedTeamTokens = state.TeamTokens[teamID]
+		b.UsedTeamCost = state.TeamCost[teamID]
+		b.UsedDayTokens = state.DayTokens[today]
+		b.UsedDayCost = state.DayCost[today]
 
-	if marshaled, err := json.MarshalIndent(state, "", "  "); err == nil {
-		_ = os.WriteFile(path, marshaled, 0600)
-	}
+		if marshaled, err := json.MarshalIndent(state, "", "  "); err == nil {
+			_ = os.WriteFile(path, marshaled, 0600)
+		}
+	})
 }
 
 func getEnv(keys ...string) string {
