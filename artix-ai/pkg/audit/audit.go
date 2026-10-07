@@ -181,11 +181,19 @@ type Logger struct {
 	asymSigningKey ed25519.PrivateKey
 	remoteSinks    []policy.RemoteSinkConfig
 	lastHash       string
+	initError      error
 	mu             sync.Mutex
 	httpClient     *http.Client
 	spoolChan      chan spooledSinkItem
 	stopChan       chan struct{}
 	spoolWg        sync.WaitGroup
+}
+
+// InitError returns any fatal error encountered during logger initialization.
+func (l *Logger) InitError() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.initError
 }
 
 var (
@@ -231,6 +239,25 @@ func NewLogger(workspaceDir string) *Logger {
 		httpClient:   &http.Client{Timeout: 5 * time.Second},
 		spoolChan:    make(chan spooledSinkItem, 1024),
 		stopChan:     make(chan struct{}),
+	}
+
+	// G7: Asymmetric audit signing wired by default in enterprise mode.
+	// Enterprise mode must require an ed25519 key path outside sandbox-readable paths and refuse otherwise.
+	if policy.IsEnterprise() {
+		keyPath := pol.AuditPrivateKeyPath
+		if keyPath == "" {
+			keyPath = os.Getenv("ARTIX_AUDIT_PRIVATE_KEY_PATH")
+		}
+		if keyPath == "" {
+			keyPath = os.Getenv("ARTIX_AUDIT_KEY_PATH")
+		}
+		if keyPath == "" {
+			l.initError = fmt.Errorf("enterprise audit policy violation: ed25519 private key path is required in enterprise mode (set pol.AuditPrivateKeyPath or ARTIX_AUDIT_PRIVATE_KEY_PATH outside sandbox-readable paths)")
+		} else {
+			if err := l.SetPrivateKeyPath(keyPath); err != nil {
+				l.initError = fmt.Errorf("enterprise audit policy violation: %w", err)
+			}
+		}
 	}
 
 	// Initialize lastHash from existing log file if available
@@ -336,6 +363,13 @@ func (l *Logger) Emit(event AuditEvent) error {
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	if l.initError != nil {
+		return fmt.Errorf("audit logging refused: %w", l.initError)
+	}
+	if policy.IsEnterprise() && l.asymSigningKey == nil {
+		return fmt.Errorf("audit logging refused: ed25519 asymmetric signing key is required in enterprise mode")
+	}
 
 	// Hash Chaining
 	if l.lastHash == "" {
@@ -483,6 +517,10 @@ func VerifyLog(logPath string, signingKey ...string) (*VerificationResult, error
 		return &VerificationResult{TotalRecords: 0, ValidRecords: 0}, nil
 	}
 
+	if policy.IsEnterprise() {
+		return nil, fmt.Errorf("enterprise audit policy violation: symmetric HMAC verification is prohibited in enterprise mode; use ed25519 asymmetric verification with public key")
+	}
+
 	expectedPrevHash := GenesisHash
 	key := ""
 	if len(signingKey) > 0 {
@@ -565,9 +603,21 @@ func VerifyLogWithPubKey(logPath string, pubKey ed25519.PublicKey) (*Verificatio
 			return nil, fmt.Errorf("tampering detected at record #%d (event ID %s): record payload altered", i+1, event.EventID)
 		}
 
-		if event.Signature != "" {
+		if policy.IsEnterprise() {
+			if event.Signature == "" {
+				return nil, fmt.Errorf("enterprise audit violation: record #%d (event ID %s) has no ed25519 signature", i+1, event.EventID)
+			}
+			if len(pubKey) == 0 {
+				return nil, fmt.Errorf("enterprise audit violation: ed25519 public key required to verify enterprise audit records")
+			}
 			if !VerifyRecordSignatureEd25519(event.RecordHash, event.Signature, pubKey) {
 				return nil, fmt.Errorf("tampering detected at record #%d (event ID %s): invalid ed25519 signature", i+1, event.EventID)
+			}
+		} else {
+			if event.Signature != "" && len(pubKey) > 0 {
+				if !VerifyRecordSignatureEd25519(event.RecordHash, event.Signature, pubKey) {
+					return nil, fmt.Errorf("tampering detected at record #%d (event ID %s): invalid ed25519 signature", i+1, event.EventID)
+				}
 			}
 		}
 

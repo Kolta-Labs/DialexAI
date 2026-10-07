@@ -348,6 +348,18 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 		return 1
 	}
 
+	// Enterprise Audit Gate
+	if policy.IsEnterprise() {
+		if err := audit.Default(cwd).InitError(); err != nil {
+			errStr := fmt.Sprintf("Error: enterprise audit configuration error: %v", err)
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
+	}
+
 	repoCtx, err := repo.DetectContext(cwd)
 	if err != nil {
 		if isJSON {
@@ -735,6 +747,14 @@ func runAudit(cwd string, args []string, human io.Writer, sendJSON func(any), is
 				if err == nil && len(raw) == ed25519.PublicKeySize {
 					pubKey = ed25519.PublicKey(raw)
 				}
+			}
+			if policy.IsEnterprise() && len(pubKey) == 0 {
+				errStr := "SECURITY ERROR: enterprise mode requires ed25519 public key in signed policy or via --pubkey; cannot verify without public key"
+				if isJSON {
+					sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+				}
+				fmt.Fprintf(stderr, "%s\n", errStr)
+				return 1
 			}
 		}
 

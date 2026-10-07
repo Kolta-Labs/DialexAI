@@ -537,6 +537,7 @@ func TestR2_6_EnterpriseMode_RequiresExternalEd25519KeyAndRefusesOtherwise(t *te
 
 	// Enable enterprise policy
 	entPol := &policy.Policy{
+		EnterpriseMode:      true,
 		RequireSignedPolicy: true,
 		IsVerified:          true,
 	}
