@@ -2,7 +2,12 @@ package coder
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"artix/pkg/audit"
@@ -144,6 +149,34 @@ func (c *ConvergenceCoordinator) Run(
 		return res
 	}
 
+	// Compute test commands hash for provenance and audit verification
+	cmdBytes := []byte(strings.Join(effectiveTestCommands, "\n"))
+	cmdHashArr := sha256.Sum256(cmdBytes)
+	testCommandsHash := hex.EncodeToString(cmdHashArr[:])
+
+	// G4: Test-command trust outside enterprise:
+	// In supervised/interactive mode outside enterprise, require explicit user confirmation and print command list
+	if !policy.IsEnterprise() && opts != nil && (opts.Autonomy == AutonomySupervised || opts.Autonomy == AutonomyInteractive) {
+		fmt.Printf("Proposed test commands (%d):\n", len(effectiveTestCommands))
+		for i, cmd := range effectiveTestCommands {
+			fmt.Printf("  [%d] %s\n", i+1, cmd)
+		}
+
+		confirmed := false
+		if opts != nil {
+			if opts.ConfirmTestCommands != nil {
+				confirmed = opts.ConfirmTestCommands(effectiveTestCommands)
+			} else if opts.TestCommandsConfirmed {
+				confirmed = true
+			}
+		}
+		if !confirmed {
+			res.Error = "unconfirmed test commands: supervised/interactive mode outside enterprise requires explicit user confirmation of test commands"
+			res.CostReport = costReport
+			return res
+		}
+	}
+
 	var lastFeedback string
 	var lastVerdictFeedback string
 	var consecutiveIdenticalCount int
@@ -211,18 +244,44 @@ func (c *ConvergenceCoordinator) Run(
 		// 4. Sandbox executes project test commands
 		var testResults []*sandbox.ExecResult
 		priorFailures = nil // only the latest round's failures are relevant to the next attempt
+
+		// Script/Makefile indirection check: refuse commands referencing modified scripts/Makefiles before execution
+		touchedByPatch := extractTouchedFilesFromDiff(diff)
+		var indirectionViolations []string
 		for _, cmdStr := range effectiveTestCommands {
-			tOpts := &sandbox.ExecOptions{
-				Cwd:     repoCtx.RootDir,
-				Timeout: 2 * time.Minute,
+			for _, tf := range touchedByPatch {
+				if isScriptOrBuildFile(tf) {
+					base := filepath.Base(tf)
+					if strings.Contains(cmdStr, tf) || strings.Contains(cmdStr, "./"+tf) || (base != "" && strings.Contains(cmdStr, base)) {
+						indirectionViolations = append(indirectionViolations, fmt.Sprintf("test execution blocked: command %q references file %q modified by patch (script/Makefile indirection forbidden)", cmdStr, tf))
+					}
+				}
 			}
-			if opts != nil && opts.TestTimeout > 0 {
-				tOpts.Timeout = opts.TestTimeout
+		}
+
+		if len(indirectionViolations) > 0 {
+			for _, iv := range indirectionViolations {
+				priorFailures = append(priorFailures, iv)
+				testResults = append(testResults, &sandbox.ExecResult{
+					Command:  effectiveTestCommands[0],
+					ExitCode: 1,
+					Stderr:   iv,
+				})
 			}
-			tRes := c.sandbox.Run(ctx, cmdStr, tOpts)
-			testResults = append(testResults, tRes)
-			if !tRes.Success() {
-				priorFailures = append(priorFailures, fmt.Sprintf("%s: exit %d\n%s", cmdStr, tRes.ExitCode, tRes.Stderr))
+		} else {
+			for _, cmdStr := range effectiveTestCommands {
+				tOpts := &sandbox.ExecOptions{
+					Cwd:     repoCtx.RootDir,
+					Timeout: 2 * time.Minute,
+				}
+				if opts != nil && opts.TestTimeout > 0 {
+					tOpts.Timeout = opts.TestTimeout
+				}
+				tRes := c.sandbox.Run(ctx, cmdStr, tOpts)
+				testResults = append(testResults, tRes)
+				if !tRes.Success() {
+					priorFailures = append(priorFailures, fmt.Sprintf("%s: exit %d\n%s", cmdStr, tRes.ExitCode, tRes.Stderr))
+				}
 			}
 		}
 
@@ -453,11 +512,12 @@ func (c *ConvergenceCoordinator) Run(
 				Status:    "SUCCESS",
 				Approver:  approverIdentity,
 				Details: map[string]any{
-					"storyId":     s.ID,
-					"roundsRun":   res.RoundsRun,
-					"success":     true,
-					"totalTokens": costReport.TotalTokens,
-					"dnaOverhead": costReport.DNAOverheadTokens,
+					"storyId":          s.ID,
+					"roundsRun":        res.RoundsRun,
+					"success":          true,
+					"totalTokens":      costReport.TotalTokens,
+					"dnaOverhead":      costReport.DNAOverheadTokens,
+					"testCommandsHash": testCommandsHash,
 				},
 			})
 			return res
@@ -491,12 +551,13 @@ func (c *ConvergenceCoordinator) Run(
 		EventType: audit.EventCodeConvergence,
 		Status:    "FAILED",
 		Details: map[string]any{
-			"storyId":     s.ID,
-			"roundsRun":   res.RoundsRun,
-			"success":     res.Success,
-			"totalTokens": costReport.TotalTokens,
-			"dnaOverhead": costReport.DNAOverheadTokens,
-			"error":       res.Error,
+			"storyId":          s.ID,
+			"roundsRun":        res.RoundsRun,
+			"success":          res.Success,
+			"totalTokens":      costReport.TotalTokens,
+			"dnaOverhead":      costReport.DNAOverheadTokens,
+			"testCommandsHash": testCommandsHash,
+			"error":            res.Error,
 		},
 	})
 
@@ -510,4 +571,33 @@ func criteriaOf(s *spec.StorySpec) []string {
 		out = append(out, fmt.Sprintf("%s: Given %s, When %s, Then %s", sc.Name, sc.Given, sc.When, sc.Then))
 	}
 	return out
+}
+
+func extractTouchedFilesFromDiff(diff string) []string {
+	var files []string
+	lines := strings.Split(diff, "\n")
+	reDiff := regexp.MustCompile(`^diff --git a/(.*) b/(.*)$`)
+	rePlus := regexp.MustCompile(`^\+\+\+ b/(.*)$`)
+	for _, line := range lines {
+		if m := reDiff.FindStringSubmatch(line); len(m) > 2 {
+			files = append(files, m[2])
+		} else if m := rePlus.FindStringSubmatch(line); len(m) > 1 {
+			if m[1] != "/dev/null" {
+				files = append(files, m[1])
+			}
+		}
+	}
+	return files
+}
+
+func isScriptOrBuildFile(path string) bool {
+	base := filepath.Base(path)
+	ext := strings.ToLower(filepath.Ext(path))
+	if base == "Makefile" || base == "makefile" || base == "GNUmakefile" {
+		return true
+	}
+	if ext == ".sh" || ext == ".bash" || ext == ".zsh" || ext == ".py" || ext == ".rb" || ext == ".pl" {
+		return true
+	}
+	return false
 }

@@ -828,7 +828,7 @@ func TestG4_AuditRecordsTestCommandsHash(t *testing.T) {
 	}
 
 	// Verify audit log has testCommandsHash
-	auditLogPath := filepath.Join(tempDir, ".artix", "audit.log")
+	auditLogPath := filepath.Join(tempDir, ".artix", "audit.jsonl")
 	logData, err := os.ReadFile(auditLogPath)
 	if err != nil {
 		t.Fatalf("read audit log: %v", err)
