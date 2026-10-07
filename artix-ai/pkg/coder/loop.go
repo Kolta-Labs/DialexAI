@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -164,9 +165,9 @@ func (c *ConvergenceCoordinator) Run(
 	// G4: Test-command trust outside enterprise:
 	// In supervised/interactive mode outside enterprise, require explicit user confirmation and print command list
 	if !policy.IsEnterprise() && opts != nil && (opts.Autonomy == AutonomySupervised || opts.Autonomy == AutonomyInteractive) {
-		fmt.Printf("Proposed test commands (%d):\n", len(effectiveTestCommands))
+		fmt.Fprintf(os.Stderr, "Proposed test commands (%d):\n", len(effectiveTestCommands))
 		for i, cmd := range effectiveTestCommands {
-			fmt.Printf("  [%d] %s\n", i+1, cmd)
+			fmt.Fprintf(os.Stderr, "  [%d] %s\n", i+1, cmd)
 		}
 
 		confirmed := false

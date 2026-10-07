@@ -41,5 +41,9 @@ func NewAPIRunnerFromEnv(providerName, modelName string, getenv func(string) str
 	}
 	agent := model.NewAgent(provider, modelName)
 	agent.RunMode = model.RunModeAPI
-	return runner.NewApiAgentRunner(keys), agent, nil
+	apiRunner := runner.NewApiAgentRunner(keys)
+	if customURL := getenv("ARTIX_API_URL"); customURL != "" {
+		apiRunner.URLs[provider] = customURL
+	}
+	return apiRunner, agent, nil
 }

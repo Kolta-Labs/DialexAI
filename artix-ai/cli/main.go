@@ -59,8 +59,25 @@ func printUsage() {
 	printUsageTo(os.Stdout)
 }
 
-// RunCLI dispatches a CLI command to allow testable execution.
+// RunCLI dispatches a CLI command to allow testable execution with default os.Stdin.
 func RunCLI(cwd string, reg *persona.Registry, rawArgs []string, stdout, stderr io.Writer) int {
+	return RunCLIWithIO(cwd, reg, rawArgs, os.Stdin, stdout, stderr)
+}
+
+func isTerminal(r io.Reader) bool {
+	file, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+	stat, err := file.Stat()
+	if err != nil {
+		return false
+	}
+	return (stat.Mode() & os.ModeCharDevice) != 0
+}
+
+// RunCLIWithIO dispatches a CLI command with customizable stdin, stdout, and stderr.
+func RunCLIWithIO(cwd string, reg *persona.Registry, rawArgs []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(rawArgs) == 0 {
 		printUsageTo(stdout)
 		return 0
@@ -128,7 +145,7 @@ func RunCLI(cwd string, reg *persona.Registry, rawArgs []string, stdout, stderr 
 		return runPlan(cwd, reg, cmdArgs, humanOut, sendJSON, isJSON, stderr)
 
 	case "code":
-		return runCode(cwd, reg, cmdArgs, humanOut, sendJSON, isJSON, stderr)
+		return runCode(cwd, reg, cmdArgs, stdin, humanOut, sendJSON, isJSON, stderr)
 
 	case "review":
 		return runReview(cwd, reg, cmdArgs, humanOut, sendJSON, isJSON, stderr)
@@ -298,7 +315,7 @@ func runPlan(cwd string, reg *persona.Registry, args []string, human io.Writer, 
 	return 0
 }
 
-func runCode(cwd string, reg *persona.Registry, args []string, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
+func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
 	fs := flag.NewFlagSet("code", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	domainFlag := fs.String("domain", "backend_engineer", "Target SWE domain persona (e.g. backend_engineer, android_engineer)")
@@ -310,6 +327,9 @@ func runCode(cwd string, reg *persona.Registry, args []string, human io.Writer, 
 	reviewModel := fs.String("review-model", "", "Model for --review-provider")
 	noModelReview := fs.Bool("no-model-review", false, "Skip the model review of acceptance criteria")
 	maxDiffKb := fs.Int("max-diff-kb", 500, "Maximum diff size in KB before critic hard rejects")
+	confirmTestsFlag := fs.Bool("confirm-tests", false, "Explicitly confirm proposed test commands without interactive prompt")
+	yesFlag := fs.Bool("yes", false, "Alias for --confirm-tests")
+	fs.BoolVar(yesFlag, "y", false, "Short alias for --confirm-tests")
 	if err := fs.Parse(args); err != nil {
 		if isJSON {
 			sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
@@ -400,6 +420,42 @@ func runCode(cwd string, reg *persona.Registry, args []string, human io.Writer, 
 	opts := &coder.LoopOptions{
 		MaxRounds: *maxRoundsFlag,
 		Autonomy:  coder.AutonomyLevel(*autonomyFlag),
+	}
+
+	// G4: Test-command trust outside enterprise:
+	// In supervised/interactive mode outside enterprise, require explicit user confirmation.
+	if !policy.IsEnterprise() && (opts.Autonomy == coder.AutonomySupervised || opts.Autonomy == coder.AutonomyInteractive) {
+		if *confirmTestsFlag || *yesFlag {
+			opts.TestCommandsConfirmed = true
+		} else if isTerminal(stdin) {
+			fmt.Fprintf(stderr, "Proposed test commands (%d):\n", len(storySpec.TestCommands))
+			for i, cmd := range storySpec.TestCommands {
+				fmt.Fprintf(stderr, "  [%d] %s\n", i+1, cmd)
+			}
+			fmt.Fprintf(stderr, "Confirm running these test commands? [y/N]: ")
+			var response string
+			if _, err := fmt.Fscanln(stdin, &response); err == nil {
+				response = strings.ToLower(strings.TrimSpace(response))
+				if response == "y" || response == "yes" {
+					opts.TestCommandsConfirmed = true
+				}
+			}
+			if !opts.TestCommandsConfirmed {
+				errStr := "Error: unconfirmed test commands: test command confirmation rejected by user"
+				if isJSON {
+					sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+				}
+				fmt.Fprintf(stderr, "%s\n", errStr)
+				return 1
+			}
+		} else {
+			errStr := "Error: unconfirmed test commands: supervised/interactive mode outside enterprise requires explicit user confirmation. Pass --confirm-tests or --yes in non-interactive environments."
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
 	}
 	if *providerFlag == "" {
 		errStr := "Error: artix code needs a model to write the patches. Pass --provider and --model"

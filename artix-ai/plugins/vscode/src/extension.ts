@@ -40,7 +40,13 @@ export function activate(ctx: vscode.ExtensionContext) {
 
   reg("artix.code", async () => {
     // Never autonomous from the IDE.
-    const r = await run(["code", "--autonomy", "supervised"]); show("Code", r);
+    const confirm = await vscode.window.showInformationMessage(
+      "Artix supervised mode will execute repository test commands to verify generated patches. Do you want to proceed?",
+      { modal: true },
+      "Confirm & Run", "Cancel"
+    );
+    if (confirm !== "Confirm & Run") return;
+    const r = await run(["code", "--autonomy", "supervised", "--confirm-tests"]); show("Code", r);
     r.json?.success ? vscode.window.showInformationMessage(`Converged in ${r.json.roundsRun} round(s). Review the diff; nothing was committed.`)
                     : vscode.window.showErrorMessage(`Artix code: ${r.json?.error ?? "failed"}`);
   });
