@@ -276,7 +276,7 @@ func TestRequireSignedPolicyFlagEnforcement(t *testing.T) {
 	// Enable compile-time / programmatic signed policy requirement
 	EnforceSignedPolicy()
 	defer func() {
-		RequireSignedPolicyFlag = false
+		RequireSignedPolicyFlag = "false"
 		ResetCache()
 	}()
 

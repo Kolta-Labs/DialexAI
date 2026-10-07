@@ -178,6 +178,46 @@ vim.api.nvim_create_autocmd("FileType", {
 
 ---
 
+### 3.5 Provider & Model Configuration in GUI-Launched IDEs (macOS)
+
+On macOS, GUI applications launched from the Dock, Spotlight, or Finder do not inherit shell profile environment variables (such as those in `~/.zshrc` or `~/.bash_profile`). Consequently, `ARTIX_PROVIDER`, `ARTIX_MODEL`, and API keys are not automatically available unless explicitly configured.
+
+To ensure `ARTIX_PROVIDER` reaches GUI-launched IDEs:
+
+#### Option 1: VS Code Settings (Recommended for VS Code)
+Configure the provider directly in your user or workspace settings (`.vscode/settings.json`):
+```json
+{
+  "artix.binary": "artix",
+  "artix.provider": "anthropic",
+  "artix.model": "claude-3-5-sonnet-20241022"
+}
+```
+
+#### Option 2: Launch IDE from Terminal
+Launch your IDE from an active terminal session where your environment variables are already exported:
+```bash
+# For VS Code:
+code .
+
+# For IntelliJ IDEA:
+idea .
+# Or via open:
+open -a "IntelliJ IDEA" .
+```
+
+#### Option 3: System-Wide GUI Environment via launchctl
+To make environment variables available to all GUI applications launched by `launchd`:
+```bash
+launchctl setenv ARTIX_PROVIDER anthropic
+launchctl setenv ANTHROPIC_API_KEY "your-api-key-here"
+```
+
+#### Option 4: IntelliJ Custom VM Options / Environment Plugin
+In IntelliJ IDEA, navigate to **Help** $\rightarrow$ **Edit Custom VM Options** or configure environment variables in the EnvFile plugin.
+
+---
+
 ## 4. Product Owner & Manager Guide: The Art of Verified Requirements
 
 As a non-technical Product Owner or Engineering Manager, your primary challenge is ensuring that AI agents do not write code based on hallucinated assumptions or ambiguous requirements.

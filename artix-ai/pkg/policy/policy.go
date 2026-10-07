@@ -250,16 +250,19 @@ func SignPolicyFileEd25519(policyPath string, privKey ed25519.PrivateKey) error 
 // RequireSignedPolicyLdflag can be set at compile time via -ldflags "-X artix/pkg/policy.RequireSignedPolicyLdflag=true"
 var RequireSignedPolicyLdflag = "false"
 
-// RequireSignedPolicyFlag can be set programmatically or via EnforceSignedPolicy.
-var RequireSignedPolicyFlag = false
+// RequireSignedPolicyFlag can be set at compile time via -ldflags "-X artix/pkg/policy.RequireSignedPolicyFlag=true"
+// or programmatically via EnforceSignedPolicy.
+var RequireSignedPolicyFlag = "false"
 
 func isSignedPolicyEnforced() bool {
-	return RequireSignedPolicyFlag || strings.EqualFold(RequireSignedPolicyLdflag, "true") || RequireSignedPolicyLdflag == "1"
+	flagBool := strings.EqualFold(RequireSignedPolicyFlag, "true") || RequireSignedPolicyFlag == "1"
+	ldflagBool := strings.EqualFold(RequireSignedPolicyLdflag, "true") || RequireSignedPolicyLdflag == "1"
+	return flagBool || ldflagBool
 }
 
 // EnforceSignedPolicy permanently mandates that policy evaluation requires a verified cryptographic signature.
 func EnforceSignedPolicy() {
-	RequireSignedPolicyFlag = true
+	RequireSignedPolicyFlag = "true"
 }
 
 // ResetCachedPolicy clears the cached policy so tests or reloads can re-evaluate fresh policy state.

@@ -31,18 +31,6 @@ import (
 
 const version = "1.0.0"
 
-// jsonOut (global --json) makes plan/code/review print one JSON object on stdout; progress text moves to stderr.
-var (
-	jsonOut bool
-	human   io.Writer = os.Stdout
-)
-
-func emitJSON(v any) {
-	if jsonOut {
-		_ = json.NewEncoder(os.Stdout).Encode(v)
-	}
-}
-
 func printUsageTo(w io.Writer) {
 	fmt.Fprintf(w, `Artix AI - Dialectic Software Engineering & Autonomous Coding (v%s)
 
@@ -72,37 +60,98 @@ func printUsage() {
 }
 
 // RunCLI dispatches a CLI command to allow testable execution.
-func RunCLI(cwd string, reg *persona.Registry, args []string, stdout, stderr io.Writer) int {
+func RunCLI(cwd string, reg *persona.Registry, rawArgs []string, stdout, stderr io.Writer) int {
+	if len(rawArgs) == 0 {
+		printUsageTo(stdout)
+		return 0
+	}
+
+	// Filter out --json globally
+	args := make([]string, 0, len(rawArgs))
+	isJSON := false
+	for _, a := range rawArgs {
+		if a == "--json" {
+			isJSON = true
+		} else {
+			args = append(args, a)
+		}
+	}
+
 	if len(args) == 0 {
 		printUsageTo(stdout)
 		return 0
 	}
+
 	cmd := args[0]
 	cmdArgs := args[1:]
+
+	humanOut := stdout
+	if isJSON {
+		humanOut = stderr
+	}
+
+	sendJSON := func(v any) {
+		data, _ := json.Marshal(v)
+		fmt.Fprintf(stdout, "%s\n", string(data))
+	}
+
+	if reg == nil {
+		reg = persona.NewRegistry(cwd)
+	}
+
 	switch cmd {
 	case "version", "--version", "-v":
-		fmt.Fprintf(stdout, "Artix AI version %s\n", version)
+		if isJSON {
+			sendJSON(map[string]any{"ok": true, "version": version})
+		} else {
+			fmt.Fprintf(stdout, "Artix AI version %s\n", version)
+		}
 		return 0
+
 	case "help", "--help", "-h":
 		printUsageTo(stdout)
 		return 0
+
 	case "persona":
-		if reg == nil {
-			reg = persona.NewRegistry(cwd)
-		}
 		personas := reg.List()
-		fmt.Fprintf(stdout, "Available SWE Personas (%d):\n", len(personas))
-		for _, p := range personas {
-			fmt.Fprintf(stdout, " - %-25s | %s (%s)\n", p.ID, p.Name, p.Role)
+		if isJSON {
+			sendJSON(map[string]any{"ok": true, "personas": personas})
+		} else {
+			fmt.Fprintf(stdout, "Available SWE Personas (%d):\n", len(personas))
+			for _, p := range personas {
+				fmt.Fprintf(stdout, " - %-25s | %s (%s)\n", p.ID, p.Name, p.Role)
+			}
 		}
 		return 0
+
+	case "plan", "spec":
+		return runPlan(cwd, reg, cmdArgs, humanOut, sendJSON, isJSON, stderr)
+
+	case "code":
+		return runCode(cwd, reg, cmdArgs, humanOut, sendJSON, isJSON, stderr)
+
+	case "review":
+		return runReview(cwd, reg, cmdArgs, humanOut, sendJSON, isJSON, stderr)
+
 	case "audit":
-		if len(cmdArgs) == 0 {
-			fmt.Fprintf(stderr, "Usage: artix audit <subcommand>\n\nSubcommands:\n  verify [path] [--key <secret>]  Verify cryptographic hash-chain integrity of audit logs\n")
-			return 1
-		}
+		return runAudit(cwd, cmdArgs, humanOut, sendJSON, isJSON, stderr)
+
+	case "steering":
+		handleSteering(cwd, cmdArgs)
 		return 0
+
+	case "gc":
+		handleGC(cwd, cmdArgs)
+		return 0
+
+	case "daemon":
+		handleDaemon(cwd, reg, cmdArgs)
+		return 0
+
 	default:
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": fmt.Sprintf("Unknown command: %s", cmd)})
+		}
 		fmt.Fprintf(stderr, "Unknown command: %s. Run 'artix help' for usage.\n", cmd)
 		return 1
 	}
@@ -123,70 +172,50 @@ func main() {
 		return
 	}
 
-	cmd := os.Args[1]
-	args := make([]string, 0, len(os.Args))
-	for _, a := range os.Args[2:] {
-		if a == "--json" {
-			jsonOut, human = true, os.Stderr
-			continue
-		}
-		args = append(args, a)
-	}
-
-	switch cmd {
-	case "repl":
+	if os.Args[1] == "repl" {
 		repl := tui.NewREPL(cwd, registry, os.Stdin, os.Stdout)
 		_ = repl.Run(context.Background())
-	case "lsp":
+		return
+	}
+
+	if os.Args[1] == "lsp" {
 		server := lsp.NewServer(cwd, os.Stdin, os.Stdout)
 		if err := server.Serve(); err != nil {
 			fmt.Fprintf(os.Stderr, "LSP server error: %v\n", err)
 			os.Exit(1)
 		}
-	case "plan", "spec":
-		handlePlan(cwd, registry, args)
-	case "code":
-		handleCode(cwd, registry, args)
-	case "review":
-		handleReview(cwd, registry, args)
-	case "audit":
-		handleAudit(cwd, args)
-	case "steering":
-		handleSteering(cwd, args)
-	case "persona":
-		handlePersona(registry, args)
-	case "gc":
-		handleGC(cwd, args)
-	case "daemon":
-		handleDaemon(cwd, registry, args)
-	case "version", "--version", "-v":
-		fmt.Printf("artix version %s\n", version)
-	case "help", "--help", "-h":
-		printUsage()
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
-		printUsage()
-		os.Exit(1)
+		return
 	}
+
+	os.Exit(RunCLI(cwd, registry, os.Args[1:], os.Stdout, os.Stderr))
 }
 
-func handlePlan(cwd string, reg *persona.Registry, args []string) {
-	fs := flag.NewFlagSet("plan", flag.ExitOnError)
+func runPlan(cwd string, reg *persona.Registry, args []string, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
+	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
+	fs.SetOutput(stderr)
 	styleFlag := fs.String("style", "standard", "Spec style vector: standard, ponytail (executive), or caveman (terse)")
 	providerFlag := fs.String("provider", "", "Model provider for Stakeholder Council deliberation: anthropic, openai, gemini, grok, deepseek, mistral, ollama")
 	modelFlag := fs.String("model", "", "Model name for --provider")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
+		}
+		return 1
+	}
 
 	remaining := fs.Args()
 	if len(remaining) == 0 {
-		fmt.Fprintf(os.Stderr, "Error: User story prompt is required. Example: artix plan \"Add OAuth2 Google login\"\n")
-		os.Exit(1)
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": "User story prompt is required"})
+		}
+		fmt.Fprintf(stderr, "Error: User story prompt is required. Example: artix plan \"Add OAuth2 Google login\"\n")
+		return 1
 	}
 	prompt := strings.Join(remaining, " ")
 
 	repoCtx, err := repo.DetectContext(cwd)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to detect full repo context: %v\n", err)
+		fmt.Fprintf(stderr, "Warning: failed to detect full repo context: %v\n", err)
 	}
 
 	council := spec.NewCouncil(reg)
@@ -196,7 +225,7 @@ func handlePlan(cwd string, reg *persona.Registry, args []string) {
 	if *providerFlag != "" {
 		mRunner, agent, rerr := coder.NewAPIRunnerFromEnv(*providerFlag, *modelFlag, os.Getenv)
 		if rerr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to initialize model runner (%v), falling back to structured template\n", rerr)
+			fmt.Fprintf(stderr, "Warning: failed to initialize model runner (%v), falling back to structured template\n", rerr)
 		} else {
 			council.SetRunner(mRunner, agent)
 			method = "multi_persona_deliberation"
@@ -215,8 +244,11 @@ func handlePlan(cwd string, reg *persona.Registry, args []string) {
 
 	storySpec, err := council.Plan(context.Background(), pCtx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Council deliberation failed: %v\n", err)
-		os.Exit(1)
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
+		}
+		fmt.Fprintf(stderr, "Council deliberation failed: %v\n", err)
+		return 1
 	}
 
 	prov := spec.BuildStoryProvenance(storySpec, pCtx, *providerFlag, *modelFlag, council.Members())
@@ -224,8 +256,11 @@ func handlePlan(cwd string, reg *persona.Registry, args []string) {
 	specsDir := filepath.Join(cwd, "docs", "specs")
 	specPath, provPath, err := spec.WriteSpecWithProvenance(specsDir, storySpec, prov)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to persist spec and provenance: %v\n", err)
-		os.Exit(1)
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
+		}
+		fmt.Fprintf(stderr, "Failed to persist spec and provenance: %v\n", err)
+		return 1
 	}
 
 	// Emit audit event
@@ -242,38 +277,63 @@ func handlePlan(cwd string, reg *persona.Registry, args []string) {
 		},
 	})
 
-	emitJSON(map[string]any{"ok": true, "specId": storySpec.ID, "title": storySpec.Title, "specPath": specPath,
-		"provenancePath": provPath, "scenarios": len(storySpec.AcceptanceCriteria), "testCommands": storySpec.TestCommands})
+	if isJSON {
+		sendJSON(map[string]any{
+			"ok":             true,
+			"status":         "success",
+			"specId":         storySpec.ID,
+			"title":          storySpec.Title,
+			"specPath":       specPath,
+			"provenancePath": provPath,
+			"scenarios":      len(storySpec.AcceptanceCriteria),
+			"testCommands":   storySpec.TestCommands,
+		})
+	}
+
 	fmt.Fprintf(human, "\nGenerated Verified Story Spec: %s\n", specPath)
 	fmt.Fprintf(human, "Generated Provenance Sidecar: %s\n", provPath)
 	fmt.Fprintf(human, "Title: %s\n", storySpec.Title)
 	fmt.Fprintf(human, "Acceptance Criteria: %d scenarios\n", len(storySpec.AcceptanceCriteria))
 	fmt.Fprintf(human, "Verification Commands: %v\n", storySpec.TestCommands)
+	return 0
 }
 
-func handleCode(cwd string, reg *persona.Registry, args []string) {
-	fs := flag.NewFlagSet("code", flag.ExitOnError)
+func runCode(cwd string, reg *persona.Registry, args []string, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
+	fs := flag.NewFlagSet("code", flag.ContinueOnError)
+	fs.SetOutput(stderr)
 	domainFlag := fs.String("domain", "backend_engineer", "Target SWE domain persona (e.g. backend_engineer, android_engineer)")
 	autonomyFlag := fs.String("autonomy", "supervised", "Autonomy gate: supervised, interactive, or autonomous")
 	maxRoundsFlag := fs.Int("rounds", 3, "Maximum convergence rounds")
-	providerFlag := fs.String("provider", "", "Model provider that writes the patches: anthropic, openai, gemini, grok, deepseek, mistral, ollama (API key from ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, XAI_API_KEY, DEEPSEEK_API_KEY, MISTRAL_API_KEY)")
+	providerFlag := fs.String("provider", "", "Model provider that writes the patches: anthropic, openai, gemini, grok, deepseek, mistral, ollama")
 	modelFlag := fs.String("model", "", "Model name for --provider")
-	reviewProvider := fs.String("review-provider", "", "Provider for the model reviewer (default: same as --provider; use a different one for a truly adversarial review)")
-	reviewModel := fs.String("review-model", "", "Model for --review-provider (default: same as --model)")
-	noModelReview := fs.Bool("no-model-review", false, "Skip the model review of acceptance criteria (rule-based checks only)")
-	maxDiffKb := fs.Int("max-diff-kb", 500, "Maximum diff size in KB before critic hard rejects with truncation error")
-	fs.Parse(args)
+	reviewProvider := fs.String("review-provider", "", "Provider for the model reviewer")
+	reviewModel := fs.String("review-model", "", "Model for --review-provider")
+	noModelReview := fs.Bool("no-model-review", false, "Skip the model review of acceptance criteria")
+	maxDiffKb := fs.Int("max-diff-kb", 500, "Maximum diff size in KB before critic hard rejects")
+	if err := fs.Parse(args); err != nil {
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
+		}
+		return 1
+	}
 
-	// Enterprise Safety Gate: Autonomous commits require explicit policy / opt-in
+	// Enterprise Safety Gate
 	if *autonomyFlag == "autonomous" && !policy.IsAutonomousAllowed() {
-		fmt.Fprintf(os.Stderr, "Error: Enterprise safety violation: --autonomy autonomous is disabled by default in enterprise/CI environments or disallowed by enterprise policy.\nSet ARTIX_ALLOW_AUTONOMOUS=1 or configure enterprise policy to explicitly permit unattended autonomous commits.\n")
-		os.Exit(1)
+		errStr := "Error: Enterprise safety violation: --autonomy autonomous is disabled by default in enterprise/CI environments or disallowed by enterprise policy.\nSet ARTIX_ALLOW_AUTONOMOUS=1 or configure enterprise policy to explicitly permit unattended autonomous commits."
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+		}
+		fmt.Fprintf(stderr, "%s\n", errStr)
+		return 1
 	}
 
 	repoCtx, err := repo.DetectContext(cwd)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error detecting repository context: %v\n", err)
-		os.Exit(1)
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": fmt.Sprintf("Error detecting repository context: %v", err)})
+		}
+		fmt.Fprintf(stderr, "Error detecting repository context: %v\n", err)
+		return 1
 	}
 
 	var specFile string
@@ -287,26 +347,39 @@ func handleCode(cwd string, reg *persona.Registry, args []string) {
 	}
 
 	if specFile == "" {
-		fmt.Fprintf(os.Stderr, "Error: No story spec specified and none found in docs/specs/.\nRun 'artix plan' first.\n")
-		os.Exit(1)
+		errStr := "Error: No story spec specified and none found in docs/specs/.\nRun 'artix plan' first."
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+		}
+		fmt.Fprintf(stderr, "%s\n", errStr)
+		return 1
 	}
 
 	rawSpec, err := os.ReadFile(specFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading spec %s: %v\n", specFile, err)
-		os.Exit(1)
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": fmt.Sprintf("Error reading spec %s: %v", specFile, err)})
+		}
+		fmt.Fprintf(stderr, "Error reading spec %s: %v\n", specFile, err)
+		return 1
 	}
 
 	storySpec, err := spec.ParseFromMarkdown(string(rawSpec))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing spec: %v\n", err)
-		os.Exit(1)
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": fmt.Sprintf("Error parsing spec: %v", err)})
+		}
+		fmt.Fprintf(stderr, "Error parsing spec: %v\n", err)
+		return 1
 	}
 
 	domainCoder, err := coder.NewDomainCoder(*domainFlag, reg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating domain coder: %v\n", err)
-		os.Exit(1)
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
+		}
+		fmt.Fprintf(stderr, "Error creating domain coder: %v\n", err)
+		return 1
 	}
 
 	advReviewer := reviewer.NewAdversarialReviewer(reg)
@@ -329,13 +402,21 @@ func handleCode(cwd string, reg *persona.Registry, args []string) {
 		Autonomy:  coder.AutonomyLevel(*autonomyFlag),
 	}
 	if *providerFlag == "" {
-		fmt.Fprintf(os.Stderr, "Error: artix code needs a model to write the patches. Pass --provider and --model (e.g. --provider anthropic --model <model-name>) and set the provider's API key in your environment.\n")
-		os.Exit(1)
+		errStr := "Error: artix code needs a model to write the patches. Pass --provider and --model"
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+		}
+		fmt.Fprintf(stderr, "%s\n", errStr)
+		return 1
 	}
+
 	modelRunner, agent, err := coder.NewAPIRunnerFromEnv(*providerFlag, *modelFlag, os.Getenv)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
+		}
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
 	}
 	if !*noModelReview {
 		rp, rm, rRunner, rAgent := *providerFlag, *modelFlag, modelRunner, agent
@@ -346,8 +427,11 @@ func handleCode(cwd string, reg *persona.Registry, args []string) {
 			}
 			var rerr error
 			if rRunner, rAgent, rerr = coder.NewAPIRunnerFromEnv(rp, rm, os.Getenv); rerr != nil {
-				fmt.Fprintf(os.Stderr, "Error: reviewer: %v\n", rerr)
-				os.Exit(1)
+				if isJSON {
+					sendJSON(map[string]any{"ok": false, "status": "error", "error": fmt.Sprintf("reviewer: %v", rerr)})
+				}
+				fmt.Fprintf(stderr, "Error: reviewer: %v\n", rerr)
+				return 1
 			}
 		}
 		advReviewer.SetCritic(reviewer.RunnerCritic(rRunner, rAgent))
@@ -359,7 +443,6 @@ func handleCode(cwd string, reg *persona.Registry, args []string) {
 	fmt.Fprintf(human, "Starting convergence loop for Spec: %s (%s)...\n", storySpec.ID, storySpec.Title)
 	res := coord.Run(context.Background(), storySpec, repoCtx, coderSteering, revSteering, opts)
 
-	// Emit audit event
 	auditStatus := "SUCCESS"
 	if !res.Success {
 		auditStatus = "FAILED"
@@ -377,43 +460,77 @@ func handleCode(cwd string, reg *persona.Registry, args []string) {
 		},
 	})
 
-	emitJSON(res)
+	if isJSON {
+		statusStr := "success"
+		if !res.Success {
+			if strings.Contains(strings.ToLower(res.Error), "unreviewed") {
+				statusStr = "unreviewed"
+			} else {
+				statusStr = "rejected"
+			}
+		}
+		sendJSON(map[string]any{
+			"ok":           res.Success,
+			"status":       statusStr,
+			"roundsRun":    res.RoundsRun,
+			"commitHash":   res.CommitHash,
+			"error":        res.Error,
+			"finalVerdict": res.FinalVerdict,
+			"costReport":   res.CostReport,
+		})
+	}
+
 	if res.Success {
 		fmt.Fprintf(human, "\nSUCCESS: Convergence achieved in round %d!\n", res.RoundsRun)
 		if res.CommitHash != "" {
 			fmt.Fprintf(human, "Committed: %s\n", res.CommitHash)
 		}
+		return 0
 	} else {
 		fmt.Fprintf(human, "\nFAILED to converge: %s\n", res.Error)
-		os.Exit(1)
+		return 1
 	}
 }
 
-func handleReview(cwd string, reg *persona.Registry, args []string) {
-	fs := flag.NewFlagSet("review", flag.ExitOnError)
+func runReview(cwd string, reg *persona.Registry, args []string, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
+	fs := flag.NewFlagSet("review", flag.ContinueOnError)
+	fs.SetOutput(stderr)
 	providerFlag := fs.String("provider", "", "Model provider for the Critic (omit for rule-based pre-filter only, which yields 'unreviewed')")
 	modelFlag := fs.String("model", "", "Model name for --provider")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
+		}
+		return 1
+	}
 
 	driver := git.NewDriver(cwd)
 	diff, err := driver.Diff(false)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading git diff: %v\n", err)
-		os.Exit(1)
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": fmt.Sprintf("Error reading git diff: %v", err)})
+		}
+		fmt.Fprintf(stderr, "Error reading git diff: %v\n", err)
+		return 1
 	}
 
 	if strings.TrimSpace(diff) == "" {
-		emitJSON(map[string]any{"status": "approved", "approved": true, "summary": "Working tree clean; nothing to review."})
+		if isJSON {
+			sendJSON(map[string]any{"ok": true, "status": "approved", "approved": true, "summary": "Working tree clean; nothing to review."})
+		}
 		fmt.Fprintln(human, "Working tree clean; nothing to review.")
-		return
+		return 0
 	}
 
 	advReviewer := reviewer.NewAdversarialReviewer(reg)
 	if *providerFlag != "" {
 		rRunner, rAgent, rerr := coder.NewAPIRunnerFromEnv(*providerFlag, *modelFlag, os.Getenv)
 		if rerr != nil {
-			fmt.Fprintf(os.Stderr, "Error: reviewer: %v\n", rerr)
-			os.Exit(1)
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": fmt.Sprintf("reviewer: %v", rerr)})
+			}
+			fmt.Fprintf(stderr, "Error: reviewer: %v\n", rerr)
+			return 1
 		}
 		advReviewer.SetCritic(reviewer.RunnerCritic(rRunner, rAgent))
 	}
@@ -437,12 +554,122 @@ func handleReview(cwd string, reg *persona.Registry, args []string) {
 		},
 	})
 
-	emitJSON(verdict)
+	if isJSON {
+		reviewStatus := "approved"
+		ok := true
+		if verdict.Status == reviewer.StatusUnreviewed {
+			reviewStatus = "unreviewed"
+			ok = false
+		} else if !verdict.Approved {
+			reviewStatus = "rejected"
+			ok = false
+		}
+		sendJSON(map[string]any{
+			"ok":             ok,
+			"status":         reviewStatus,
+			"approved":       verdict.Approved,
+			"summary":        verdict.Summary,
+			"blockingIssues": verdict.BlockingIssues,
+			"warnings":       verdict.Warnings,
+		})
+	}
+
 	if verdict.Approved {
 		fmt.Fprintf(human, "REVIEW PASSED: %s\n", verdict.Summary)
+		return 0
+	} else if verdict.Status == reviewer.StatusUnreviewed {
+		fmt.Fprintf(human, "REVIEW UNREVIEWED: %s\n", verdict.Summary)
+		return 1
 	} else {
 		fmt.Fprintf(human, "REVIEW REJECTED: %s\n\n%s\n", verdict.Summary, verdict.ActionableFeedback)
-		os.Exit(1)
+		return 1
+	}
+}
+
+func runAudit(cwd string, args []string, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintf(stderr, "Usage: artix audit <subcommand>\n\nSubcommands:\n  verify [path] [--key <secret>]  Verify cryptographic hash-chain integrity of audit logs\n")
+		return 1
+	}
+
+	subcmd := args[0]
+	subargs := args[1:]
+
+	switch subcmd {
+	case "verify":
+		fs := flag.NewFlagSet("audit verify", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		keyFlag := fs.String("key", "", "HMAC signing key for cryptographic signature verification")
+		pubKeyFlag := fs.String("pubkey", "", "Hex-encoded Ed25519 public key for asymmetric verification")
+		expectedCountFlag := fs.Int("expected-count", 0, "Expected minimum record count to detect tail truncation")
+		expectedHashFlag := fs.String("expected-hash", "", "Expected last record hash to detect tail truncation")
+		if err := fs.Parse(subargs); err != nil {
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
+			}
+			return 1
+		}
+
+		logPath := policy.EffectiveAuditLogPath(cwd)
+		if len(fs.Args()) > 0 {
+			logPath = fs.Args()[0]
+		}
+
+		if policy.IsEnterprise() && *keyFlag != "" {
+			errStr := "SECURITY ERROR: enterprise mode requires ed25519 public key verification; symmetric HMAC key verification is disallowed"
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
+
+		var pubKey ed25519.PublicKey
+		if *pubKeyFlag != "" {
+			raw, err := hex.DecodeString(strings.TrimSpace(*pubKeyFlag))
+			if err != nil || len(raw) != ed25519.PublicKeySize {
+				errStr := fmt.Sprintf("Invalid ed25519 public key hex: %v", err)
+				if isJSON {
+					sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+				}
+				fmt.Fprintf(stderr, "%s\n", errStr)
+				return 1
+			}
+			pubKey = ed25519.PublicKey(raw)
+		} else if policy.IsEnterprise() || policy.Active().AuditPublicKey != "" {
+			if polKey := policy.Active().AuditPublicKey; polKey != "" {
+				raw, err := hex.DecodeString(strings.TrimSpace(polKey))
+				if err == nil && len(raw) == ed25519.PublicKeySize {
+					pubKey = ed25519.PublicKey(raw)
+				}
+			}
+		}
+
+		fmt.Fprintf(human, "Verifying audit log integrity: %s\n", logPath)
+		opts := audit.VerifyOptions{
+			PubKey:           pubKey,
+			SigningKey:       *keyFlag,
+			ExpectedCount:    *expectedCountFlag,
+			ExpectedLastHash: *expectedHashFlag,
+		}
+		res, err := audit.VerifyLogWithOptions(logPath, opts)
+		if err != nil {
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "tampered", "error": err.Error()})
+			}
+			fmt.Fprintf(stderr, "\nAUDIT INTEGRITY VIOLATION: %v\n", err)
+			return 1
+		}
+
+		if isJSON {
+			sendJSON(map[string]any{"ok": true, "status": "verified", "validRecords": res.ValidRecords, "lastHash": res.LastHash})
+		}
+		fmt.Fprintf(human, "AUDIT LOG VERIFIED: %d record(s) valid, hash chain intact (LastHash: %s).\n", res.ValidRecords, res.LastHash[:16]+"...")
+		return 0
+
+	default:
+		fmt.Fprintf(stderr, "Unknown audit subcommand: %s. Supported: verify\n", subcmd)
+		return 1
 	}
 }
 
@@ -545,14 +772,6 @@ func handleSteering(cwd string, args []string) {
 	fmt.Fprintf(os.Stderr, "Unknown steering subcommand: %s. Supported: list, pending, approve <hash> [role], reject <hash>, sync, bind <persona> <rule>\n", args[0])
 }
 
-func handlePersona(reg *persona.Registry, args []string) {
-	personas := reg.List()
-	fmt.Printf("Available SWE Personas (%d):\n", len(personas))
-	for _, p := range personas {
-		fmt.Printf(" - %-25s | %s (%s)\n", p.ID, p.Name, p.Role)
-	}
-}
-
 func handleGC(cwd string, args []string) {
 	fs := flag.NewFlagSet("gc", flag.ExitOnError)
 	maxAgeFlag := fs.Duration("max-age", 24*time.Hour, "Maximum age threshold for orphaned shadow worktrees (e.g. 24h, 1h)")
@@ -593,73 +812,6 @@ func handleDaemon(cwd string, reg *persona.Registry, args []string) {
 	fmt.Printf("Artix Daemon listening on %s (Endpoints: /healthz, /webhook/github, /webhook/gitlab)...\n", *addr)
 	if err := http.ListenAndServe(*addr, server.Handler()); err != nil {
 		fmt.Fprintf(os.Stderr, "Daemon server error: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func handleAudit(cwd string, args []string) {
-	if len(args) == 0 {
-		fmt.Fprintf(os.Stderr, "Usage: artix audit <subcommand>\n\nSubcommands:\n  verify [path] [--key <secret>]  Verify cryptographic hash-chain integrity of audit logs\n")
-		os.Exit(1)
-	}
-
-	subcmd := args[0]
-	subargs := args[1:]
-
-	switch subcmd {
-	case "verify":
-		fs := flag.NewFlagSet("audit verify", flag.ExitOnError)
-		keyFlag := fs.String("key", "", "HMAC signing key for cryptographic signature verification")
-		pubKeyFlag := fs.String("pubkey", "", "Hex-encoded Ed25519 public key for asymmetric verification")
-		expectedCountFlag := fs.Int("expected-count", 0, "Expected minimum record count to detect tail truncation")
-		expectedHashFlag := fs.String("expected-hash", "", "Expected last record hash to detect tail truncation")
-		fs.Parse(subargs)
-
-		logPath := policy.EffectiveAuditLogPath(cwd)
-		if len(fs.Args()) > 0 {
-			logPath = fs.Args()[0]
-		}
-
-		// In enterprise mode, fail closed if attempting to verify using an HMAC symmetric key
-		if policy.IsEnterprise() && *keyFlag != "" {
-			fmt.Fprintf(os.Stderr, "SECURITY ERROR: enterprise mode requires ed25519 public key verification; symmetric HMAC key verification is disallowed\n")
-			os.Exit(1)
-		}
-
-		var pubKey ed25519.PublicKey
-		if *pubKeyFlag != "" {
-			raw, err := hex.DecodeString(strings.TrimSpace(*pubKeyFlag))
-			if err != nil || len(raw) != ed25519.PublicKeySize {
-				fmt.Fprintf(os.Stderr, "Invalid ed25519 public key hex: %v\n", err)
-				os.Exit(1)
-			}
-			pubKey = ed25519.PublicKey(raw)
-		} else if policy.IsEnterprise() || policy.Active().AuditPublicKey != "" {
-			if polKey := policy.Active().AuditPublicKey; polKey != "" {
-				raw, err := hex.DecodeString(strings.TrimSpace(polKey))
-				if err == nil && len(raw) == ed25519.PublicKeySize {
-					pubKey = ed25519.PublicKey(raw)
-				}
-			}
-		}
-
-		fmt.Printf("Verifying audit log integrity: %s\n", logPath)
-		opts := audit.VerifyOptions{
-			PubKey:           pubKey,
-			SigningKey:       *keyFlag,
-			ExpectedCount:    *expectedCountFlag,
-			ExpectedLastHash: *expectedHashFlag,
-		}
-		res, err := audit.VerifyLogWithOptions(logPath, opts)
-
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "\nAUDIT INTEGRITY VIOLATION: %v\n", err)
-			os.Exit(1)
-		}
-
-		fmt.Printf("AUDIT LOG VERIFIED: %d record(s) valid, hash chain intact (LastHash: %s).\n", res.ValidRecords, res.LastHash[:16]+"...")
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown audit subcommand: %s. Supported: verify\n", subcmd)
 		os.Exit(1)
 	}
 }
