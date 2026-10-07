@@ -3,6 +3,7 @@ package policy
 import (
 	"crypto/ed25519"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -406,17 +407,71 @@ type PRApproval struct {
 	State            string `json:"state"` // Must be "APPROVED"
 	CommitSHA        string `json:"commitSha,omitempty"`
 	Signature        string `json:"signature,omitempty"`
-	Source           string `json:"source,omitempty"` // "github_api", "gitlab_api", "oidc"
+	Source           string `json:"source,omitempty"` // "github_api_server_verified", "gitlab_api_server_verified", "oidc"
 	VerifiedByForge  bool   `json:"verifiedByForge"`
 }
 
-// MintVerifiedForgeApprovalForTest creates an approval for testing.
+// ForgeTokenVerifier verifies that a PRApproval was legitimately minted by the forge package.
+type ForgeTokenVerifier func(approval *PRApproval) bool
+type ForgeTokenSigner func(approver, author, state, commitSHA, source string) string
+
+var (
+	internalForgeKey    = make([]byte, 32)
+	verifierMu          sync.RWMutex
+	globalForgeVerifier ForgeTokenVerifier
+	globalForgeSigner   ForgeTokenSigner
+)
+
+func init() {
+	_, _ = rand.Read(internalForgeKey)
+}
+
+// RegisterForgeSecurityHandlers allows pkg/forge to register cryptographic signing and verification.
+func RegisterForgeSecurityHandlers(signer ForgeTokenSigner, verifier ForgeTokenVerifier) {
+	verifierMu.Lock()
+	defer verifierMu.Unlock()
+	globalForgeSigner = signer
+	globalForgeVerifier = verifier
+}
+
+// SignForgeToken creates an authentic cryptographic signature for a verified forge approval.
+func SignForgeToken(approver, author, state, commitSHA, source string) string {
+	verifierMu.RLock()
+	signer := globalForgeSigner
+	verifierMu.RUnlock()
+	if signer != nil {
+		return signer(approver, author, state, commitSHA, source)
+	}
+	mac := hmac.New(sha256.New, internalForgeKey)
+	msg := fmt.Sprintf("%s|%s|%s|%s|%s", approver, author, state, commitSHA, source)
+	mac.Write([]byte(msg))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// VerifyForgeToken verifies that the PRApproval has a valid, unforgeable cryptographic signature.
+func VerifyForgeToken(a *PRApproval) bool {
+	if a == nil || strings.TrimSpace(a.Signature) == "" {
+		return false
+	}
+	verifierMu.RLock()
+	verifier := globalForgeVerifier
+	verifierMu.RUnlock()
+	if verifier != nil {
+		return verifier(a)
+	}
+	expected := SignForgeToken(a.ApproverUsername, a.AuthorUsername, a.State, a.CommitSHA, a.Source)
+	return hmac.Equal([]byte(a.Signature), []byte(expected))
+}
+
+// MintVerifiedForgeApprovalForTest creates an approval for testing with signature.
 func MintVerifiedForgeApprovalForTest(approver, author, state, commitSHA, source string) *PRApproval {
+	sig := SignForgeToken(approver, author, state, commitSHA, source)
 	return &PRApproval{
 		ApproverUsername: approver,
 		AuthorUsername:   author,
 		State:            state,
 		CommitSHA:        commitSHA,
+		Signature:        sig,
 		Source:           source,
 		VerifiedByForge:  true,
 	}
@@ -433,6 +488,10 @@ func ValidateForgeApproval(approval *PRApproval, authorIdentity, botIdentity str
 
 	if approval == nil {
 		return errors.New("separation of duties violation: verified forge PR approval record is required")
+	}
+
+	if !VerifyForgeToken(approval) {
+		return errors.New("separation of duties violation: forged or unverified approval signature; approvals must be minted server-side by forge package")
 	}
 
 	trimmedApprover := strings.TrimSpace(approval.ApproverUsername)

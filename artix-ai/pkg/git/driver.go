@@ -127,6 +127,15 @@ func (d *Driver) CreateWorkingBranch(taskID string) (string, error) {
 	return branchName, nil
 }
 
+// HeadHash returns the full commit hash of HEAD.
+func (d *Driver) HeadHash() (string, error) {
+	out, err := d.runGit("rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
 func (d *Driver) runGit(args ...string) (string, error) {
 	cmd := exec.Command("git", append([]string{"-C", d.repoDir}, args...)...)
 	var stdout, stderr bytes.Buffer

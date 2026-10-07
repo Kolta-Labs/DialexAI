@@ -300,51 +300,31 @@ func TestValidateForgeApproval_EnforcesFourEyes(t *testing.T) {
 	}
 
 	// 2. Empty approver -> error
-	recEmpty := &PRApproval{
-		ApproverUsername: "",
-		AuthorUsername:   "artix-agent",
-		State:            "APPROVED",
-	}
+	recEmpty := MintVerifiedForgeApprovalForTest("", "artix-agent", "APPROVED", "sha1", "forge")
 	if err := ValidateForgeApproval(recEmpty, "artix-agent", "artix-agent"); err == nil {
 		t.Errorf("expected error for empty approver")
 	}
 
 	// 3. Status not APPROVED -> error
-	recPending := &PRApproval{
-		ApproverUsername: "human-lead",
-		AuthorUsername:   "artix-agent",
-		State:            "CHANGES_REQUESTED",
-	}
+	recPending := MintVerifiedForgeApprovalForTest("human-lead", "artix-agent", "CHANGES_REQUESTED", "sha1", "forge")
 	if err := ValidateForgeApproval(recPending, "artix-agent", "artix-agent"); err == nil {
 		t.Errorf("expected error for non-approved review state")
 	}
 
 	// 4. Author self-approval -> error
-	recSelf := &PRApproval{
-		ApproverUsername: "alice",
-		AuthorUsername:   "alice",
-		State:            "APPROVED",
-	}
+	recSelf := MintVerifiedForgeApprovalForTest("alice", "alice", "APPROVED", "sha1", "forge")
 	if err := ValidateForgeApproval(recSelf, "alice", "artix-agent"); err == nil {
 		t.Errorf("expected error for author self-approval")
 	}
 
 	// 5. Bot approval -> error
-	recBot := &PRApproval{
-		ApproverUsername: "dependabot[bot]",
-		AuthorUsername:   "artix-agent",
-		State:            "APPROVED",
-	}
+	recBot := MintVerifiedForgeApprovalForTest("dependabot[bot]", "artix-agent", "APPROVED", "sha1", "forge")
 	if err := ValidateForgeApproval(recBot, "artix-agent", "artix-agent"); err == nil {
 		t.Errorf("expected error for bot approver")
 	}
 
 	// 6. Valid human review -> success
-	recValid := &PRApproval{
-		ApproverUsername: "security-lead",
-		AuthorUsername:   "artix-agent",
-		State:            "APPROVED",
-	}
+	recValid := MintVerifiedForgeApprovalForTest("security-lead", "artix-agent", "APPROVED", "sha1", "forge")
 	if err := ValidateForgeApproval(recValid, "artix-agent", "artix-agent"); err != nil {
 		t.Errorf("unexpected error for valid human approval: %v", err)
 	}

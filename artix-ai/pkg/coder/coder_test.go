@@ -264,11 +264,9 @@ func TestAutonomousModeBlockedInEnterpriseWithoutOptIn(t *testing.T) {
 	_ = os.WriteFile(file, []byte("0\n"), 0644)
 	_, _ = driver.CommitAll("reset counter")
 	opts.Approver = "security-lead" // Provide valid approver for SoD
-	opts.ForgeApproval = &policy.PRApproval{
-		ApproverUsername: "security-lead",
-		AuthorUsername:   "artix-agent",
-		State:            "APPROVED",
-		VerifiedByForge:  true,
+	opts.ForgeApproval = nil
+	opts.ForgeVerifier = func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+		return policy.MintVerifiedForgeApprovalForTest("security-lead", "artix-agent", "APPROVED", commitSHA, "github_api_server_verified"), nil
 	}
 	resWithPolicy := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
 	if !resWithPolicy.Success || resWithPolicy.CommitHash == "" {
@@ -549,11 +547,8 @@ func TestAutonomousCommitBlockedWhenSelfApprovalAttempted(t *testing.T) {
 	opts := &LoopOptions{
 		MaxRounds: 1,
 		Autonomy:  AutonomyAutonomous,
-		ForgeApproval: &policy.PRApproval{
-			ApproverUsername: "alice",
-			AuthorUsername:   "alice",
-			State:            "APPROVED",
-			VerifiedByForge:  true,
+		ForgeVerifier: func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+			return policy.MintVerifiedForgeApprovalForTest("alice", "alice", "APPROVED", commitSHA, "forge"), nil
 		},
 		MockPatchGen: func(round int, feedback string) string {
 			return validPatch

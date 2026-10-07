@@ -1196,6 +1196,10 @@ func TestR2_2_GitLab_VerifyMRApproval(t *testing.T) {
 }
 
 func TestR2_2_Policy_ValidateForgeApproval_RejectsForgedApprovalWithoutSignature(t *testing.T) {
+	policy.ResetCache()
+	defer policy.ResetCache()
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+
 	// Construct caller-supplied forged struct with VerifiedByForge=true
 	forged := &policy.PRApproval{
 		ApproverUsername: "bob",

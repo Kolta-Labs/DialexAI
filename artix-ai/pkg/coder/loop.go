@@ -467,18 +467,40 @@ func (c *ConvergenceCoordinator) Run(
 			res.AppliedPatch = patch
 			res.CostReport = costReport
 
+			var forgeApproval *policy.PRApproval
 			// Autonomous commit gate: only reached when ARTIX_ALLOW_AUTONOMOUS=1 has already been
 			// confirmed at loop entry (enterprise gate fires before the first round). The guard
 			// below exists solely to require at least one verified test command before committing.
 			if autonomy == AutonomyAutonomous {
 				approver := ""
-				var forgeApproval *policy.PRApproval
 				if opts != nil {
 					approver = opts.Approver
-					forgeApproval = opts.ForgeApproval
 				}
 
 				if policy.IsEnterprise() || policy.Active().RequireForgeApproval {
+					if opts != nil && opts.ForgeApproval != nil {
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = "autonomous commit blocked: separation of duties violation: caller-supplied ForgeApproval is strictly forbidden in enterprise mode; approvals must be verified server-side from forge API"
+						return res
+					}
+					if opts == nil || opts.ForgeVerifier == nil {
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = "autonomous commit blocked: separation of duties violation: server-side forge verification is required in enterprise mode"
+						return res
+					}
+
+					var err error
+					headCommitSHA, _ := c.driver.HeadHash()
+					forgeApproval, err = opts.ForgeVerifier(ctx, headCommitSHA)
+					if err != nil {
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = fmt.Sprintf("autonomous commit blocked: %v", err)
+						return res
+					}
+
 					if forgeApproval == nil || !forgeApproval.VerifiedByForge {
 						_ = activeSession.Rollback()
 						res.Success = false
@@ -492,6 +514,9 @@ func (c *ConvergenceCoordinator) Run(
 						return res
 					}
 				} else {
+					if opts != nil && opts.ForgeApproval != nil {
+						forgeApproval = opts.ForgeApproval
+					}
 					// Validate approver unconditionally under Separation of Duties
 					if err := policy.ValidateApprover("artix-agent", approver); err != nil {
 						_ = activeSession.Rollback()
@@ -535,12 +560,10 @@ func (c *ConvergenceCoordinator) Run(
 			}
 
 			approverIdentity := ""
-			if opts != nil {
-				if opts.ForgeApproval != nil {
-					approverIdentity = opts.ForgeApproval.ApproverUsername
-				} else {
-					approverIdentity = opts.Approver
-				}
+			if forgeApproval != nil {
+				approverIdentity = forgeApproval.ApproverUsername
+			} else if opts != nil {
+				approverIdentity = opts.Approver
 			}
 			_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
 				EventType: audit.EventCodeConvergence,
