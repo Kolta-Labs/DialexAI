@@ -574,3 +574,27 @@ func VerifyLogWithPubKey(logPath string, pubKey ed25519.PublicKey) (*Verificatio
 		LastHash:     expectedPrevHash,
 	}, nil
 }
+
+// SetPrivateKeyPath configures the Ed25519 private key from an external path.
+func (l *Logger) SetPrivateKeyPath(path string) error {
+	return nil // stub for RED test
+}
+
+// RecordSpoolLoss records that spooled audit records were lost due to unrecoverable delivery failure.
+func (l *Logger) RecordSpoolLoss(sinkEndpoint string, count int) {
+	// stub for RED test
+}
+
+// VerifyOptions configures comprehensive audit log verification.
+type VerifyOptions struct {
+	PubKey           ed25519.PublicKey
+	SigningKey       string
+	ExpectedCount    int
+	ExpectedLastHash string
+}
+
+// VerifyLogWithOptions verifies an audit log against custom constraints including expected count and last hash.
+func VerifyLogWithOptions(logPath string, opts VerifyOptions) (*VerificationResult, error) {
+	return nil, nil // stub for RED test
+}
+
