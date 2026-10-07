@@ -2,12 +2,15 @@ package forge
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"artix/pkg/policy"
 )
 
 // GitLabClient interacts with GitLab's REST API.
@@ -90,4 +93,9 @@ func (c *GitLabClient) CreatePullRequest(target *RemoteRepoTarget, req *PullRequ
 		URL:     glResp.WebURL,
 		State:   glResp.State,
 	}, nil
+}
+
+// VerifyMRApproval fetches Merge Request and approval details server-side from GitLab API.
+func (c *GitLabClient) VerifyMRApproval(ctx context.Context, target *RemoteRepoTarget, mrIID int, targetCommitSHA string) (*policy.PRApproval, error) {
+	return nil, fmt.Errorf("gitlab verify mr approval not implemented")
 }

@@ -952,6 +952,126 @@ func TestG4_ScriptIndirectionRefused_EnterpriseMode(t *testing.T) {
 	}
 }
 
+func TestR2_2_Coordinator_RejectsCallerSuppliedForgeApprovalInEnterprise(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	featureFile := filepath.Join(tempDir, "feature.txt")
+	_ = os.WriteFile(featureFile, []byte("old\n"), 0644)
+	_, _ = driver.CommitAll("initial")
+
+	polDir := t.TempDir()
+	polFile := filepath.Join(polDir, "policy.json")
+	polData := []byte(`{"enterpriseMode": true, "allowAutonomous": true, "allowedTestCommands": ["grep 'new' feature.txt"]}`)
+	_ = os.WriteFile(polFile, polData, 0644)
+	_ = policy.SignPolicyFile(polFile, "ent-key-1234567890123456")
+	policy.SetTrustedKey("corp-root", "ent-key-1234567890123456")
+	policy.SetDefaultPolicyPath(polFile)
+	policy.ResetCache()
+	defer func() {
+		policy.SetDefaultPolicyPath("/etc/artix/policy.json")
+		policy.ResetCache()
+	}()
+
+	storySpec := &spec.StorySpec{
+		ID:           "SPEC-R2-2",
+		Title:        "Test R2-2 Forge Approval Gate",
+		TestCommands: []string{"grep 'new' feature.txt"},
+	}
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	validPatch := "diff --git a/feature.txt b/feature.txt\n--- a/feature.txt\n+++ b/feature.txt\n@@ -1 +1 @@\n-old\n+new\n"
+
+	// Caller constructs forged struct and passes it in opts.ForgeApproval
+	opts := &LoopOptions{
+		MaxRounds: 1,
+		Autonomy:  AutonomyAutonomous,
+		ForgeApproval: &policy.PRApproval{
+			ApproverUsername: "alice",
+			AuthorUsername:   "artix-agent",
+			State:            "APPROVED",
+			VerifiedByForge:  true,
+		},
+		MockPatchGen: func(round int, feedback string) string {
+			return validPatch
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if res.Success {
+		t.Fatalf("CRITICAL: coordinator accepted caller-supplied ForgeApproval in enterprise mode!")
+	}
+	if !strings.Contains(res.Error, "caller-supplied") && !strings.Contains(res.Error, "forbidden") {
+		t.Fatalf("expected error mentioning caller-supplied / forbidden, got: %s", res.Error)
+	}
+}
+
+func TestR2_2_Coordinator_AcceptsMockedForgeApprovalInEnterprise(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	featureFile := filepath.Join(tempDir, "feature.txt")
+	_ = os.WriteFile(featureFile, []byte("old\n"), 0644)
+	_, _ = driver.CommitAll("initial")
+
+	polDir := t.TempDir()
+	polFile := filepath.Join(polDir, "policy.json")
+	polData := []byte(`{"enterpriseMode": true, "allowAutonomous": true, "allowedTestCommands": ["grep 'new' feature.txt"]}`)
+	_ = os.WriteFile(polFile, polData, 0644)
+	_ = policy.SignPolicyFile(polFile, "ent-key-1234567890123456")
+	policy.SetTrustedKey("corp-root", "ent-key-1234567890123456")
+	policy.SetDefaultPolicyPath(polFile)
+	policy.ResetCache()
+	defer func() {
+		policy.SetDefaultPolicyPath("/etc/artix/policy.json")
+		policy.ResetCache()
+	}()
+
+	storySpec := &spec.StorySpec{
+		ID:           "SPEC-R2-2-VALID",
+		Title:        "Test R2-2 Valid Forge Approval",
+		TestCommands: []string{"grep 'new' feature.txt"},
+	}
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	validPatch := "diff --git a/feature.txt b/feature.txt\n--- a/feature.txt\n+++ b/feature.txt\n@@ -1 +1 @@\n-old\n+new\n"
+
+	opts := &LoopOptions{
+		MaxRounds: 1,
+		Autonomy:  AutonomyAutonomous,
+		ForgeVerifier: func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+			// Mocked forge verification returning server-verified approval
+			return policy.MintVerifiedForgeApprovalForTest("alice", "artix-agent", "APPROVED", commitSHA, "github_api_server_verified"), nil
+		},
+		MockPatchGen: func(round int, feedback string) string {
+			return validPatch
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if !res.Success || res.CommitHash == "" {
+		t.Fatalf("expected success with server-verified forge approval, got: %+v, error: %s", res, res.Error)
+	}
+}
+
 
 
 

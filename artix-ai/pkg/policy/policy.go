@@ -410,6 +410,18 @@ type PRApproval struct {
 	VerifiedByForge  bool   `json:"verifiedByForge"`
 }
 
+// MintVerifiedForgeApprovalForTest creates an approval for testing.
+func MintVerifiedForgeApprovalForTest(approver, author, state, commitSHA, source string) *PRApproval {
+	return &PRApproval{
+		ApproverUsername: approver,
+		AuthorUsername:   author,
+		State:            state,
+		CommitSHA:        commitSHA,
+		Source:           source,
+		VerifiedByForge:  true,
+	}
+}
+
 // ValidateForgeApproval enforces Separation of Duties using a verified PR review from the forge.
 // The approver must be an approved human reviewer, strictly distinct from the PR author and any bot identity.
 func ValidateForgeApproval(approval *PRApproval, authorIdentity, botIdentity string) error {

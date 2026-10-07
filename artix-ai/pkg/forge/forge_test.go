@@ -1054,3 +1054,163 @@ func TestG6_BodyContainingSteeringOrPolicyInstructions(t *testing.T) {
 		}
 	}
 }
+
+func TestR2_2_GitHub_RejectsEmptyTargetCommitSHA(t *testing.T) {
+	prJSON := `{"user":{"login":"alice","type":"User"},"head":{"sha":"commit-abc"}}`
+	reviewsJSON := `[{"id":1,"user":{"login":"bob","type":"User"},"state":"APPROVED","commit_id":"commit-abc"}]`
+	srv, client := setupMockGitHubReviewServer(prJSON, reviewsJSON, 200, 200)
+	defer srv.Close()
+
+	target := &RemoteRepoTarget{Owner: "acme", Repo: "core"}
+	approval, err := client.VerifyPRApproval(context.Background(), target, 42, "")
+	if err == nil || approval != nil {
+		t.Fatalf("expected error when targetCommitSHA is empty, got approval=%+v, err=nil", approval)
+	}
+	if !strings.Contains(err.Error(), "targetCommitSHA") && !strings.Contains(err.Error(), "empty") {
+		t.Fatalf("expected error mentioning targetCommitSHA / empty, got: %v", err)
+	}
+}
+
+func TestR2_2_GitHub_Pagination_CatchesPage2ChangesRequested(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/pulls/42") {
+			_, _ = w.Write([]byte(`{"user":{"login":"alice","type":"User"},"head":{"sha":"commit-abc"}}`))
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/pulls/42/reviews") {
+			page := r.URL.Query().Get("page")
+			if page == "1" || page == "" {
+				// Page 1 has 100 items (or full page) with an APPROVED review from bob
+				var items []map[string]any
+				for i := 1; i <= 100; i++ {
+					items = append(items, map[string]any{
+						"id":        i,
+						"user":      map[string]any{"login": "bob", "type": "User"},
+						"state":     "APPROVED",
+						"commit_id": "commit-abc",
+					})
+				}
+				_ = json.NewEncoder(w).Encode(items)
+				return
+			}
+			if page == "2" {
+				// Page 2 has a CHANGES_REQUESTED review from charlie
+				_ = json.NewEncoder(w).Encode([]map[string]any{
+					{
+						"id":        101,
+						"user":      map[string]any{"login": "charlie", "type": "User"},
+						"state":     "CHANGES_REQUESTED",
+						"commit_id": "commit-abc",
+					},
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	client := NewGitHubClient(ForgeAuth{Type: ForgeGitHub, Token: "tok", BaseURL: srv.URL})
+	target := &RemoteRepoTarget{Owner: "acme", Repo: "core"}
+	approval, err := client.VerifyPRApproval(context.Background(), target, 42, "commit-abc")
+	if err == nil || approval != nil {
+		t.Fatalf("expected error when page 2 has CHANGES_REQUESTED, got approval=%+v, err=nil", approval)
+	}
+	if !strings.Contains(err.Error(), "changes requested") && !strings.Contains(err.Error(), "CHANGES_REQUESTED") {
+		t.Fatalf("expected error mentioning changes requested on page 2, got: %v", err)
+	}
+}
+
+func TestR2_2_GitHub_AnyChangesRequestedBlocks(t *testing.T) {
+	prJSON := `{"user":{"login":"alice","type":"User"},"head":{"sha":"commit-abc"}}`
+	reviewsJSON := `[
+		{"id":1,"user":{"login":"bob","type":"User"},"state":"APPROVED","commit_id":"commit-abc"},
+		{"id":2,"user":{"login":"charlie","type":"User"},"state":"CHANGES_REQUESTED","commit_id":"commit-abc"}
+	]`
+	srv, client := setupMockGitHubReviewServer(prJSON, reviewsJSON, 200, 200)
+	defer srv.Close()
+
+	target := &RemoteRepoTarget{Owner: "acme", Repo: "core"}
+	approval, err := client.VerifyPRApproval(context.Background(), target, 42, "commit-abc")
+	if err == nil || approval != nil {
+		t.Fatalf("expected error when any reviewer requested changes, got approval=%+v, err=nil", approval)
+	}
+	if !strings.Contains(err.Error(), "changes requested") {
+		t.Fatalf("expected error mentioning changes requested, got: %v", err)
+	}
+}
+
+func TestR2_2_GitLab_VerifyMRApproval(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/merge_requests/10") {
+			_, _ = w.Write([]byte(`{
+				"id": 10,
+				"iid": 10,
+				"sha": "commit-gl-123",
+				"state": "opened",
+				"author": {"username": "alice"}
+			}`))
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/merge_requests/10/approvals") {
+			_, _ = w.Write([]byte(`{
+				"id": 10,
+				"iid": 10,
+				"approved_by": [
+					{"user": {"id": 2, "username": "bob", "name": "Bob"}}
+				]
+			}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	client := NewGitLabClient(ForgeAuth{Type: ForgeGitLab, Token: "gl-tok", BaseURL: srv.URL})
+	target := &RemoteRepoTarget{Owner: "mygroup", Repo: "myproj"}
+
+	// 1. Success case
+	appr, err := client.VerifyMRApproval(context.Background(), target, 10, "commit-gl-123")
+	if err != nil {
+		t.Fatalf("expected successful GitLab approval verification, got: %v", err)
+	}
+	if appr == nil || appr.ApproverUsername != "bob" || appr.State != "APPROVED" {
+		t.Fatalf("unexpected approval payload: %+v", appr)
+	}
+
+	// 2. Empty target commit SHA
+	_, errEmpty := client.VerifyMRApproval(context.Background(), target, 10, "")
+	if errEmpty == nil {
+		t.Fatalf("expected error with empty targetCommitSHA")
+	}
+
+	// 3. Stale commit SHA
+	_, errStale := client.VerifyMRApproval(context.Background(), target, 10, "stale-commit-sha")
+	if errStale == nil {
+		t.Fatalf("expected error with stale targetCommitSHA")
+	}
+}
+
+func TestR2_2_Policy_ValidateForgeApproval_RejectsForgedApprovalWithoutSignature(t *testing.T) {
+	// Construct caller-supplied forged struct with VerifiedByForge=true
+	forged := &policy.PRApproval{
+		ApproverUsername: "bob",
+		AuthorUsername:   "alice",
+		State:            "APPROVED",
+		CommitSHA:        "commit-123",
+		VerifiedByForge:  true,
+		Signature:        "", // No cryptographic forge signature
+	}
+
+	err := policy.ValidateForgeApproval(forged, "alice", "artix-agent")
+	if err == nil {
+		t.Fatalf("expected policy.ValidateForgeApproval to reject forged struct without forge signature, got nil")
+	}
+	if !strings.Contains(err.Error(), "signature") && !strings.Contains(err.Error(), "forged") && !strings.Contains(err.Error(), "mint") {
+		t.Fatalf("expected error mentioning signature/forged/mint, got: %v", err)
+	}
+}
