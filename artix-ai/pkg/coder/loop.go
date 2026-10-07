@@ -36,7 +36,10 @@ type LoopOptions struct {
 	MockPatchGen     func(round int, feedback string) string // for tests and offline runs
 	// PatchGenerator produces each round's patch, typically NewRunnerPatchGenerator. Without
 	// it (or MockPatchGen) the loop cannot generate code and stops immediately.
-	PatchGenerator PatchGenerator
+	PatchGenerator                     PatchGenerator
+	Approver                           string              `json:"approver,omitempty"`
+	ForgeApproval                      *policy.PRApproval  `json:"forgeApproval,omitempty"`
+	MaxConsecutiveIdenticalRejections int                 `json:"maxConsecutiveIdenticalRejections,omitempty"`
 }
 
 // LoopResult represents the final convergence outcome.
@@ -114,6 +117,9 @@ func (c *ConvergenceCoordinator) Run(
 		costReport.BudgetStoryCap = budget.MaxStoryTokens
 		costReport.BudgetTeamCap = budget.MaxTeamTokens
 		costReport.BudgetDayCap = budget.MaxDayTokens
+		costReport.BudgetStoryCostCap = budget.MaxStoryCost
+		costReport.BudgetTeamCostCap = budget.MaxTeamCost
+		costReport.BudgetDayCostCap = budget.MaxDayCost
 		costReport.TeamID = budget.TeamID
 	}
 
@@ -128,7 +134,21 @@ func (c *ConvergenceCoordinator) Run(
 		}
 	}
 
+	// Validate test commands against signed enterprise policy before any execution
+	effectiveTestCommands, pErr := policy.ValidateTestCommands(s.TestCommands)
+	if pErr != nil {
+		res.Error = fmt.Sprintf("test execution blocked by policy: %v", pErr)
+		res.CostReport = costReport
+		return res
+	}
+
 	var lastFeedback string
+	var lastVerdictFeedback string
+	var consecutiveIdenticalCount int
+	maxIdentical := 2
+	if opts != nil && opts.MaxConsecutiveIdenticalRejections > 0 {
+		maxIdentical = opts.MaxConsecutiveIdenticalRejections
+	}
 	var priorFailures []string
 	var activeSession *git.PatchSession
 
@@ -189,7 +209,7 @@ func (c *ConvergenceCoordinator) Run(
 		// 4. Sandbox executes project test commands
 		var testResults []*sandbox.ExecResult
 		priorFailures = nil // only the latest round's failures are relevant to the next attempt
-		for _, cmdStr := range s.TestCommands {
+		for _, cmdStr := range effectiveTestCommands {
 			tOpts := &sandbox.ExecOptions{
 				Cwd:     repoCtx.RootDir,
 				Timeout: 2 * time.Minute,
@@ -265,11 +285,16 @@ func (c *ConvergenceCoordinator) Run(
 		costReport.TotalTokens += roundCost.TotalRoundTokens
 		costReport.DNAOverheadTokens += coderDNATokens + reviewerDNATokens
 
-		// Check budget exhaustion
+		// Check budget exhaustion (Tokens & Financial USD Caps)
 		if budget != nil {
-			budget.UsedStoryTokens += roundCost.TotalRoundTokens
-			budget.UsedTeamTokens += roundCost.TotalRoundTokens
-			budget.UsedDayTokens += roundCost.TotalRoundTokens
+			costPer1k := budget.CostPer1kTokens
+			if costPer1k <= 0 {
+				costPer1k = 0.003 // Default USD 0.003 per 1,000 tokens (frontier model blended baseline)
+			}
+			roundCostUSD := (float64(roundCost.TotalRoundTokens) / 1000.0) * costPer1k
+
+			budget.RecordRoundUsage(roundCost.TotalRoundTokens, roundCostUSD)
+			costReport.TotalCost += roundCostUSD
 
 			if budget.MaxStoryTokens > 0 && budget.UsedStoryTokens > budget.MaxStoryTokens {
 				costReport.Exhausted = true
@@ -280,6 +305,15 @@ func (c *ConvergenceCoordinator) Run(
 			} else if budget.MaxDayTokens > 0 && budget.UsedDayTokens > budget.MaxDayTokens {
 				costReport.Exhausted = true
 				costReport.ExhaustionReason = fmt.Sprintf("daily token budget exceeded: %d used > %d max cap", budget.UsedDayTokens, budget.MaxDayTokens)
+			} else if budget.MaxStoryCost > 0 && budget.UsedStoryCost > budget.MaxStoryCost {
+				costReport.Exhausted = true
+				costReport.ExhaustionReason = fmt.Sprintf("story cost budget exceeded: $%.4f used > $%.4f max cap", budget.UsedStoryCost, budget.MaxStoryCost)
+			} else if budget.MaxTeamCost > 0 && budget.UsedTeamCost > budget.MaxTeamCost {
+				costReport.Exhausted = true
+				costReport.ExhaustionReason = fmt.Sprintf("team cost budget exceeded: $%.4f used > $%.4f max cap", budget.UsedTeamCost, budget.MaxTeamCost)
+			} else if budget.MaxDayCost > 0 && budget.UsedDayCost > budget.MaxDayCost {
+				costReport.Exhausted = true
+				costReport.ExhaustionReason = fmt.Sprintf("daily cost budget exceeded: $%.4f used > $%.4f max cap", budget.UsedDayCost, budget.MaxDayCost)
 			}
 
 			if costReport.Exhausted {
@@ -295,10 +329,14 @@ func (c *ConvergenceCoordinator) Run(
 						"storyId":          s.ID,
 						"roundsRun":        round,
 						"totalTokens":      costReport.TotalTokens,
+						"totalCost":        costReport.TotalCost,
 						"exhaustionReason": costReport.ExhaustionReason,
 						"budgetStoryCap":   costReport.BudgetStoryCap,
 						"budgetTeamCap":    costReport.BudgetTeamCap,
 						"budgetDayCap":     costReport.BudgetDayCap,
+						"budgetStoryCost":  costReport.BudgetStoryCostCap,
+						"budgetTeamCost":   costReport.BudgetTeamCostCap,
+						"budgetDayCost":    costReport.BudgetDayCostCap,
 						"dnaOverhead":      costReport.DNAOverheadTokens,
 					},
 				})
@@ -337,6 +375,36 @@ func (c *ConvergenceCoordinator) Run(
 			// confirmed at loop entry (enterprise gate fires before the first round). The guard
 			// below exists solely to require at least one verified test command before committing.
 			if autonomy == AutonomyAutonomous {
+				approver := ""
+				var forgeApproval *policy.PRApproval
+				if opts != nil {
+					approver = opts.Approver
+					forgeApproval = opts.ForgeApproval
+				}
+
+				if policy.IsEnterprise() || policy.Active().RequireForgeApproval {
+					if forgeApproval == nil {
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = "autonomous commit blocked: separation of duties violation: enterprise mode requires verified forge PR approval record (opts.ForgeApproval)"
+						return res
+					}
+					if err := policy.ValidateForgeApproval(forgeApproval, "artix-agent", "artix-agent"); err != nil {
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = fmt.Sprintf("autonomous commit blocked: %v", err)
+						return res
+					}
+				} else {
+					// Validate approver unconditionally under Separation of Duties
+					if err := policy.ValidateApprover("artix-agent", approver); err != nil {
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = fmt.Sprintf("autonomous commit blocked: %v", err)
+						return res
+					}
+				}
+
 				if len(testResults) == 0 {
 					res.Error = "autonomous commit refused: the spec defines no test commands, so nothing verified the change"
 					return res
@@ -344,7 +412,7 @@ func (c *ConvergenceCoordinator) Run(
 
 				// Post-merge test re-verification: Ensure all test commands pass against the final
 				// state before committing (double-checks race conditions vs. the mid-loop run).
-				for _, cmdStr := range s.TestCommands {
+				for _, cmdStr := range effectiveTestCommands {
 					tOpts := &sandbox.ExecOptions{
 						Cwd:     repoCtx.RootDir,
 						Timeout: 2 * time.Minute,
@@ -370,9 +438,18 @@ func (c *ConvergenceCoordinator) Run(
 				}
 			}
 
+			approverIdentity := ""
+			if opts != nil {
+				if opts.ForgeApproval != nil {
+					approverIdentity = opts.ForgeApproval.ApproverUsername
+				} else {
+					approverIdentity = opts.Approver
+				}
+			}
 			_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
 				EventType: audit.EventCodeConvergence,
 				Status:    "SUCCESS",
+				Approver:  approverIdentity,
 				Details: map[string]any{
 					"storyId":     s.ID,
 					"roundsRun":   res.RoundsRun,
@@ -387,6 +464,20 @@ func (c *ConvergenceCoordinator) Run(
 		// If failed, rollback this round's patch before trying next round
 		_ = activeSession.Rollback()
 		lastFeedback = verdict.ActionableFeedback
+
+		if !verdict.Approved {
+			if verdict.ActionableFeedback == lastVerdictFeedback && verdict.ActionableFeedback != "" {
+				consecutiveIdenticalCount++
+				if consecutiveIdenticalCount >= maxIdentical && round < maxRounds {
+					res.Error = fmt.Sprintf("early convergence loop termination: %d consecutive identical rejections encountered", consecutiveIdenticalCount)
+					res.CostReport = costReport
+					return res
+				}
+			} else {
+				consecutiveIdenticalCount = 1
+				lastVerdictFeedback = verdict.ActionableFeedback
+			}
+		}
 	}
 
 	res.CostReport = costReport
