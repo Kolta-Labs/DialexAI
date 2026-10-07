@@ -3,6 +3,7 @@ package reviewer
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"artix/pkg/persona"
@@ -164,6 +165,45 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 		verdict.Approved = false
 		verdict.Status = StatusRejected
 		verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("test coverage gate violation: test coverage decreased from %.2f%% to %.2f%%", ctx.CoverageBefore*100, ctx.CoverageAfter*100))
+	}
+
+	// 2d. Deterministic Pre-Filter: Script/Makefile Indirection Detection
+	touchedFiles := extractTouchedFiles(ctx.Diff)
+	for _, tr := range ctx.TestResults {
+		for _, tf := range touchedFiles {
+			base := filepath.Base(tf)
+			if strings.Contains(tr.Command, tf) || strings.Contains(tr.Command, "./"+tf) || (base != "" && strings.Contains(tr.Command, base) && (strings.HasSuffix(base, ".sh") || base == "Makefile" || strings.HasSuffix(base, ".py") || strings.HasSuffix(base, ".bash"))) {
+				verdict.Approved = false
+				verdict.Status = StatusRejected
+				verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("test integrity violation: test command %q calls modified script/Makefile %q", tr.Command, tf))
+			}
+		}
+	}
+
+	// 2e. Deterministic Pre-Filter: Whole-File Post-Patch Test Integrity
+	if ctx.WorkspaceDir != "" {
+		wholeFileViolations := CheckTestIntegrityWholeFile(ctx.WorkspaceDir, ctx.Diff)
+		if len(wholeFileViolations) > 0 {
+			verdict.Approved = false
+			verdict.Status = StatusRejected
+			verdict.BlockingIssues = append(verdict.BlockingIssues, wholeFileViolations...)
+		}
+	}
+
+	// 2f. Deterministic Pre-Filter: Fail Closed for Non-Go Languages without Semantic Runner
+	hasNonGo := false
+	for _, tf := range touchedFiles {
+		ext := filepath.Ext(tf)
+		if ext == ".kt" || ext == ".swift" || ext == ".ts" || ext == ".py" || ext == ".js" {
+			hasNonGo = true
+			break
+		}
+	}
+	if hasNonGo && len(ctx.AnalyzerFindings) == 0 {
+		verdict.Approved = false
+		verdict.Status = StatusUnreviewed
+		verdict.BlockingIssues = append(verdict.BlockingIssues, "UNREVIEWED: diff touches non-Go files (.kt, .swift, .ts, .py) and no semantic rule runner (Konsist/Detekt/Semgrep/SwiftLint) is configured; fail-closed")
+		return verdict
 	}
 
 	// 3. Deterministic Pre-Filter: Static Analyzer Findings

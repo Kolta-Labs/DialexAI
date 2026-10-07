@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -225,6 +226,7 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 	checkDefaultTransport := strings.Contains(taboosJoined, "defaulttransport")
 	checkInsecureTLS := strings.Contains(taboosJoined, "insecureskipverify") || strings.Contains(taboosJoined, "tls")
 	checkShellExec := strings.Contains(taboosJoined, "exec.command") || strings.Contains(taboosJoined, "shell") || strings.Contains(taboosJoined, "raw shell")
+	checkReflection := strings.Contains(taboosJoined, "reflection") || strings.Contains(taboosJoined, "reflect")
 
 	// Multi-strategy parsing: handles imports, package-level declarations, function bodies, and bare statements
 	var parsedFiles []*ast.File
@@ -253,8 +255,32 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 	}
 
 	for _, node := range parsedFiles {
+		// Track import aliases: map of local identifier -> package path
+		importAliases := make(map[string]string)
+		for _, imp := range node.Imports {
+			pkgPath := strings.Trim(imp.Path.Value, `"`)
+			alias := filepath.Base(pkgPath)
+			if imp.Name != nil {
+				alias = imp.Name.Name
+			}
+			importAliases[alias] = pkgPath
+
+			// Check if import itself violates package taboo
+			for _, taboo := range taboos {
+				tLower := strings.ToLower(taboo)
+				if strings.Contains(tLower, strings.ToLower(pkgPath)) || (pkgPath == "net/http" && strings.Contains(tLower, "net/http")) {
+					violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden import of package %q (alias %q)", pkgPath, alias))
+				}
+			}
+
+			// Check reflection import
+			if checkReflection && (pkgPath == "reflect" || strings.Contains(pkgPath, "reflect")) {
+				violations = append(violations, "AST Taboo Violation: forbidden import of reflect package (reflection taboo)")
+			}
+		}
+
 		ast.Inspect(node, func(n ast.Node) bool {
-			// 1. Selector expressions: DefaultClient, DefaultServeMux, DefaultTransport
+			// 1. Selector expressions: DefaultClient, DefaultServeMux, DefaultTransport, or aliased taboo package usage
 			if sel, ok := n.(*ast.SelectorExpr); ok {
 				name := sel.Sel.Name
 				if checkDefaultClient && name == "DefaultClient" {
@@ -265,6 +291,25 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 				}
 				if checkDefaultTransport && name == "DefaultTransport" {
 					violations = append(violations, "AST Taboo Violation: forbidden reference to DefaultTransport (net/http.DefaultTransport)")
+				}
+
+				// Check reflection calls
+				if checkReflection {
+					if id, ok := sel.X.(*ast.Ident); ok && id.Name == "reflect" {
+						violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden reflection call (reflect.%s)", name))
+					}
+				}
+
+				// Check if selector target is an aliased taboo package
+				if id, ok := sel.X.(*ast.Ident); ok {
+					if pkgPath, exists := importAliases[id.Name]; exists {
+						for _, taboo := range taboos {
+							tLower := strings.ToLower(taboo)
+							if strings.Contains(tLower, strings.ToLower(pkgPath)) || (pkgPath == "net/http" && strings.Contains(tLower, "net/http")) {
+								violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden reference to taboo package %q via alias %s.%s", pkgPath, id.Name, name))
+							}
+						}
+					}
 				}
 			}
 
@@ -377,6 +422,127 @@ func deduplicateStrings(in []string) []string {
 
 // CheckTestIntegrityWholeFile performs post-patch whole-file AST analysis on test files.
 func CheckTestIntegrityWholeFile(workspaceDir, diff string) []string {
-	return nil // STUB for red tests
+	var violations []string
+
+	// 1. Rename / deletion detection from diff
+	lines := strings.Split(diff, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "-") {
+			trimmed := strings.TrimSpace(line[1:])
+			if strings.HasPrefix(trimmed, "func Test") {
+				// Check if subsequent addition is a rename to non-test
+				for j := i + 1; j < len(lines) && j <= i+4; j++ {
+					if strings.HasPrefix(lines[j], "+") {
+						added := strings.TrimSpace(lines[j][1:])
+						if strings.HasPrefix(added, "func ") && !strings.HasPrefix(added, "func Test") {
+							violations = append(violations, fmt.Sprintf("test integrity violation: test %s renamed to non-test %s", trimmed, added))
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Discover test files touched
+	touched := extractTouchedFiles(diff)
+	testFiles := make(map[string]bool)
+	for _, f := range touched {
+		if strings.HasSuffix(f, "_test.go") {
+			testFiles[f] = true
+		}
+	}
+	// Also check if any _test.go exists directly in workspaceDir if touched didn't have paths
+	if len(testFiles) == 0 && workspaceDir != "" {
+		entries, _ := os.ReadDir(workspaceDir)
+		for _, e := range entries {
+			if strings.HasSuffix(e.Name(), "_test.go") {
+				testFiles[e.Name()] = true
+			}
+		}
+	}
+
+	fset := token.NewFileSet()
+	for f := range testFiles {
+		fullPath := f
+		if workspaceDir != "" && !filepath.IsAbs(f) {
+			fullPath = filepath.Join(workspaceDir, f)
+		}
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			continue
+		}
+		content := string(data)
+
+		// Check build tags: //go:build ignore or // +build ignore
+		if strings.Contains(content, "//go:build ignore") || strings.Contains(content, "+build ignore") {
+			violations = append(violations, fmt.Sprintf("test integrity violation: test file %s excluded by build tag (//go:build ignore)", f))
+		}
+
+		node, err := parser.ParseFile(fset, fullPath, data, parser.ParseComments)
+		if err != nil {
+			continue
+		}
+
+		var helperFuncs []*ast.FuncDecl
+		calledFuncs := make(map[string]bool)
+
+		for _, decl := range node.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			if strings.HasPrefix(fn.Name.Name, "Test") {
+				// 2a. Early return at top of test
+				if len(fn.Body.List) > 0 {
+					if _, isRet := fn.Body.List[0].(*ast.ReturnStmt); isRet {
+						violations = append(violations, fmt.Sprintf("test integrity violation: early return at top of test function %s in %s", fn.Name.Name, f))
+					}
+				}
+
+				// 2b. Empty t.Run body & track calls
+				ast.Inspect(fn.Body, func(n ast.Node) bool {
+					if call, ok := n.(*ast.CallExpr); ok {
+						if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Run" {
+							for _, arg := range call.Args {
+								if lit, ok := arg.(*ast.FuncLit); ok {
+									if lit.Body == nil || len(lit.Body.List) == 0 {
+										violations = append(violations, fmt.Sprintf("test integrity violation: empty t.Run body in %s in %s", fn.Name.Name, f))
+									}
+								}
+							}
+						}
+						// Track calls
+						if ident, ok := call.Fun.(*ast.Ident); ok {
+							calledFuncs[ident.Name] = true
+						}
+					}
+					return true
+				})
+			} else if !strings.HasPrefix(fn.Name.Name, "Benchmark") && !strings.HasPrefix(fn.Name.Name, "Example") {
+				helperFuncs = append(helperFuncs, fn)
+			}
+		}
+
+		// 2c. Check helpers with assertions that are never called
+		for _, helper := range helperFuncs {
+			hasAssertion := false
+			ast.Inspect(helper.Body, func(n ast.Node) bool {
+				if call, ok := n.(*ast.CallExpr); ok {
+					if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+						name := strings.ToLower(sel.Sel.Name)
+						if name == "fatal" || name == "error" || name == "fail" || strings.HasPrefix(name, "assert") || strings.HasPrefix(name, "require") {
+							hasAssertion = true
+						}
+					}
+				}
+				return true
+			})
+			if hasAssertion && !calledFuncs[helper.Name.Name] {
+				violations = append(violations, fmt.Sprintf("test integrity violation: assertions hidden in uncalled helper function %s in %s", helper.Name.Name, f))
+			}
+		}
+	}
+
+	return deduplicateStrings(violations)
 }
 
