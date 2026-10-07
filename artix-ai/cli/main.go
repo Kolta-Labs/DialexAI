@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -27,8 +29,20 @@ import (
 
 const version = "1.0.0"
 
-func printUsage() {
-	fmt.Printf(`Artix AI - Dialectic Software Engineering & Autonomous Coding (v%s)
+// jsonOut (global --json) makes plan/code/review print one JSON object on stdout; progress text moves to stderr.
+var (
+	jsonOut bool
+	human   io.Writer = os.Stdout
+)
+
+func emitJSON(v any) {
+	if jsonOut {
+		_ = json.NewEncoder(os.Stdout).Encode(v)
+	}
+}
+
+func printUsageTo(w io.Writer) {
+	fmt.Fprintf(w, `Artix AI - Dialectic Software Engineering & Autonomous Coding (v%s)
 
 Usage:
   artix [command] [options] [arguments]
@@ -51,6 +65,47 @@ Use "artix <command> -h" for detailed options on any command.
 `, version)
 }
 
+func printUsage() {
+	printUsageTo(os.Stdout)
+}
+
+// RunCLI dispatches a CLI command to allow testable execution.
+func RunCLI(cwd string, reg *persona.Registry, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		printUsageTo(stdout)
+		return 0
+	}
+	cmd := args[0]
+	cmdArgs := args[1:]
+	switch cmd {
+	case "version", "--version", "-v":
+		fmt.Fprintf(stdout, "Artix AI version %s\n", version)
+		return 0
+	case "help", "--help", "-h":
+		printUsageTo(stdout)
+		return 0
+	case "persona":
+		if reg == nil {
+			reg = persona.NewRegistry(cwd)
+		}
+		personas := reg.List()
+		fmt.Fprintf(stdout, "Available SWE Personas (%d):\n", len(personas))
+		for _, p := range personas {
+			fmt.Fprintf(stdout, " - %-25s | %s (%s)\n", p.ID, p.Name, p.Role)
+		}
+		return 0
+	case "audit":
+		if len(cmdArgs) == 0 {
+			fmt.Fprintf(stderr, "Usage: artix audit <subcommand>\n\nSubcommands:\n  verify [path] [--key <secret>]  Verify cryptographic hash-chain integrity of audit logs\n")
+			return 1
+		}
+		return 0
+	default:
+		fmt.Fprintf(stderr, "Unknown command: %s. Run 'artix help' for usage.\n", cmd)
+		return 1
+	}
+}
+
 func main() {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -67,7 +122,14 @@ func main() {
 	}
 
 	cmd := os.Args[1]
-	args := os.Args[2:]
+	args := make([]string, 0, len(os.Args))
+	for _, a := range os.Args[2:] {
+		if a == "--json" {
+			jsonOut, human = true, os.Stderr
+			continue
+		}
+		args = append(args, a)
+	}
 
 	switch cmd {
 	case "repl":
@@ -137,10 +199,10 @@ func handlePlan(cwd string, reg *persona.Registry, args []string) {
 			council.SetRunner(mRunner, agent)
 			method = "multi_persona_deliberation"
 			rounds = 3
-			fmt.Printf("Assembling Stakeholder Council with AI Deliberation (%s/%s)...\n", *providerFlag, *modelFlag)
+			fmt.Fprintf(human, "Assembling Stakeholder Council with AI Deliberation (%s/%s)...\n", *providerFlag, *modelFlag)
 		}
 	} else {
-		fmt.Println("Assembling Stakeholder Council (Deterministic Template Mode)...")
+		fmt.Fprintln(human, "Assembling Stakeholder Council (Deterministic Template Mode)...")
 	}
 
 	pCtx := &spec.PlanningContext{
@@ -178,11 +240,13 @@ func handlePlan(cwd string, reg *persona.Registry, args []string) {
 		},
 	})
 
-	fmt.Printf("\nGenerated Verified Story Spec: %s\n", specPath)
-	fmt.Printf("Generated Provenance Sidecar: %s\n", provPath)
-	fmt.Printf("Title: %s\n", storySpec.Title)
-	fmt.Printf("Acceptance Criteria: %d scenarios\n", len(storySpec.AcceptanceCriteria))
-	fmt.Printf("Verification Commands: %v\n", storySpec.TestCommands)
+	emitJSON(map[string]any{"ok": true, "specId": storySpec.ID, "title": storySpec.Title, "specPath": specPath,
+		"provenancePath": provPath, "scenarios": len(storySpec.AcceptanceCriteria), "testCommands": storySpec.TestCommands})
+	fmt.Fprintf(human, "\nGenerated Verified Story Spec: %s\n", specPath)
+	fmt.Fprintf(human, "Generated Provenance Sidecar: %s\n", provPath)
+	fmt.Fprintf(human, "Title: %s\n", storySpec.Title)
+	fmt.Fprintf(human, "Acceptance Criteria: %d scenarios\n", len(storySpec.AcceptanceCriteria))
+	fmt.Fprintf(human, "Verification Commands: %v\n", storySpec.TestCommands)
 }
 
 func handleCode(cwd string, reg *persona.Registry, args []string) {
@@ -290,7 +354,7 @@ func handleCode(cwd string, reg *persona.Registry, args []string) {
 		Spec: storySpec, RepoContext: repoCtx, SteeringContext: coderSteering,
 	})
 
-	fmt.Printf("Starting convergence loop for Spec: %s (%s)...\n", storySpec.ID, storySpec.Title)
+	fmt.Fprintf(human, "Starting convergence loop for Spec: %s (%s)...\n", storySpec.ID, storySpec.Title)
 	res := coord.Run(context.Background(), storySpec, repoCtx, coderSteering, revSteering, opts)
 
 	// Emit audit event
@@ -311,18 +375,24 @@ func handleCode(cwd string, reg *persona.Registry, args []string) {
 		},
 	})
 
+	emitJSON(res)
 	if res.Success {
-		fmt.Printf("\nSUCCESS: Convergence achieved in round %d!\n", res.RoundsRun)
+		fmt.Fprintf(human, "\nSUCCESS: Convergence achieved in round %d!\n", res.RoundsRun)
 		if res.CommitHash != "" {
-			fmt.Printf("Committed: %s\n", res.CommitHash)
+			fmt.Fprintf(human, "Committed: %s\n", res.CommitHash)
 		}
 	} else {
-		fmt.Printf("\nFAILED to converge: %s\n", res.Error)
+		fmt.Fprintf(human, "\nFAILED to converge: %s\n", res.Error)
 		os.Exit(1)
 	}
 }
 
 func handleReview(cwd string, reg *persona.Registry, args []string) {
+	fs := flag.NewFlagSet("review", flag.ExitOnError)
+	providerFlag := fs.String("provider", "", "Model provider for the Critic (omit for rule-based pre-filter only, which yields 'unreviewed')")
+	modelFlag := fs.String("model", "", "Model name for --provider")
+	fs.Parse(args)
+
 	driver := git.NewDriver(cwd)
 	diff, err := driver.Diff(false)
 	if err != nil {
@@ -331,11 +401,20 @@ func handleReview(cwd string, reg *persona.Registry, args []string) {
 	}
 
 	if strings.TrimSpace(diff) == "" {
-		fmt.Println("Working tree clean; nothing to review.")
+		emitJSON(map[string]any{"status": "approved", "approved": true, "summary": "Working tree clean; nothing to review."})
+		fmt.Fprintln(human, "Working tree clean; nothing to review.")
 		return
 	}
 
 	advReviewer := reviewer.NewAdversarialReviewer(reg)
+	if *providerFlag != "" {
+		rRunner, rAgent, rerr := coder.NewAPIRunnerFromEnv(*providerFlag, *modelFlag, os.Getenv)
+		if rerr != nil {
+			fmt.Fprintf(os.Stderr, "Error: reviewer: %v\n", rerr)
+			os.Exit(1)
+		}
+		advReviewer.SetCritic(reviewer.RunnerCritic(rRunner, rAgent))
+	}
 	rCtx := &reviewer.ReviewContext{
 		Diff: diff,
 	}
@@ -356,10 +435,11 @@ func handleReview(cwd string, reg *persona.Registry, args []string) {
 		},
 	})
 
+	emitJSON(verdict)
 	if verdict.Approved {
-		fmt.Printf("REVIEW PASSED: %s\n", verdict.Summary)
+		fmt.Fprintf(human, "REVIEW PASSED: %s\n", verdict.Summary)
 	} else {
-		fmt.Printf("REVIEW REJECTED: %s\n\n%s\n", verdict.Summary, verdict.ActionableFeedback)
+		fmt.Fprintf(human, "REVIEW REJECTED: %s\n\n%s\n", verdict.Summary, verdict.ActionableFeedback)
 		os.Exit(1)
 	}
 }
@@ -432,10 +512,10 @@ func handleSteering(cwd string, args []string) {
 			EventType: audit.EventSteeringBind,
 			Status:    "SUCCESS",
 			Details: map[string]any{
-				"ruleId":     rule.ID,
-				"action":     "approve",
-				"approver":   approver,
-				"ruleHash":   hash,
+				"ruleId":   rule.ID,
+				"action":   "approve",
+				"approver": approver,
+				"ruleHash": hash,
 			},
 		})
 		fmt.Printf("Successfully approved rule %q (%s) as %s.\n", rule.ID, rule.Name, approver)
@@ -555,4 +635,3 @@ func handleAudit(cwd string, args []string) {
 		os.Exit(1)
 	}
 }
-
