@@ -247,24 +247,34 @@ func TestR2_5_ReconciliationThroughCoordinatorRunAndDeterministicModelPrice(t *t
 		MaxStoryCost: 10.0,
 	}
 
-	// Provider reports 8500 tokens (diff text is only ~10 tokens)
-	reportedProviderTokens := 8500
-	mockUsage := &ProviderUsage{
+	reportedCoderTokens := 8500
+	mockCoderUsage := &ProviderUsage{
 		PromptTokens:     7000,
 		CompletionTokens: 1500,
-		TotalTokens:      reportedProviderTokens,
+		TotalTokens:      reportedCoderTokens,
 	}
+	reportedReviewerTokens := 500
+	mockReviewerUsage := &ProviderUsage{
+		PromptTokens:     400,
+		CompletionTokens: 100,
+		TotalTokens:      reportedReviewerTokens,
+	}
+	totalReportedTokens := reportedCoderTokens + reportedReviewerTokens
 
 	opts := &LoopOptions{
 		MaxRounds:             1,
 		Budget:                budget,
 		Model:                 "gpt-4o-targeted",
+		ReviewerModel:         "gpt-4o-targeted",
 		TestCommandsConfirmed: true,
 		MockPatchGen: func(round int, feedback string) string {
 			return "--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+1\n"
 		},
 		CoderUsageTracker: func() *ProviderUsage {
-			return mockUsage
+			return mockCoderUsage
+		},
+		ReviewerUsageTracker: func() *ProviderUsage {
+			return mockReviewerUsage
 		},
 	}
 
@@ -274,12 +284,12 @@ func TestR2_5_ReconciliationThroughCoordinatorRunAndDeterministicModelPrice(t *t
 	}
 
 	// 1. Budget's in-memory counters must reflect provider tokens, NOT estimate
-	if budget.UsedStoryTokens != reportedProviderTokens {
-		t.Fatalf("expected in-memory budget to record provider tokens %d, got: %d", reportedProviderTokens, budget.UsedStoryTokens)
+	if budget.UsedStoryTokens != totalReportedTokens {
+		t.Fatalf("expected in-memory budget to record provider tokens %d, got: %d", totalReportedTokens, budget.UsedStoryTokens)
 	}
 
-	// Expected cost: 8500 tokens * (0.020 / 1000) = $0.170
-	expectedCost := (float64(reportedProviderTokens) / 1000.0) * 0.020
+	// Expected cost: 9000 tokens * (0.020 / 1000) = $0.180
+	expectedCost := (float64(totalReportedTokens) / 1000.0) * 0.020
 	if budget.UsedStoryCost < expectedCost-0.0001 || budget.UsedStoryCost > expectedCost+0.0001 {
 		t.Fatalf("expected cost $%.4f using model gpt-4o-targeted, got: $%.4f", expectedCost, budget.UsedStoryCost)
 	}
@@ -293,8 +303,8 @@ func TestR2_5_ReconciliationThroughCoordinatorRunAndDeterministicModelPrice(t *t
 	if err := json.Unmarshal(ledgerBytes, &ledgerData); err != nil {
 		t.Fatalf("failed to parse ledger json: %v", err)
 	}
-	if ledgerData.TeamTokens["team-recon"] != reportedProviderTokens {
-		t.Fatalf("expected team tokens in on-disk ledger to be %d, got: %d", reportedProviderTokens, ledgerData.TeamTokens["team-recon"])
+	if ledgerData.TeamTokens["team-recon"] != totalReportedTokens {
+		t.Fatalf("expected team tokens in on-disk ledger to be %d, got: %d", totalReportedTokens, ledgerData.TeamTokens["team-recon"])
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"artix/pkg/audit"
@@ -474,6 +475,15 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
 	}
+	opts.Model = *modelFlag
+	if *reviewModel != "" {
+		opts.ReviewerModel = *reviewModel
+	} else {
+		opts.ReviewerModel = *modelFlag
+	}
+
+	var revUsageMu sync.Mutex
+	var lastRevUsage *coder.ProviderUsage
 	if !*noModelReview {
 		rp, rm, rRunner, rAgent := *providerFlag, *modelFlag, modelRunner, agent
 		if *reviewProvider != "" {
@@ -490,11 +500,34 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 				return 1
 			}
 		}
-		advReviewer.SetCritic(reviewer.RunnerCritic(rRunner, rAgent))
+		advReviewer.SetCritic(reviewer.RunnerCriticWithTracker(rRunner, rAgent, func(tin, tout, total int) {
+			revUsageMu.Lock()
+			lastRevUsage = &coder.ProviderUsage{
+				PromptTokens: tin, CompletionTokens: tout, TotalTokens: total,
+			}
+			revUsageMu.Unlock()
+		}))
+		opts.ReviewerUsageTracker = func() *coder.ProviderUsage {
+			revUsageMu.Lock()
+			defer revUsageMu.Unlock()
+			return lastRevUsage
+		}
 	}
-	opts.PatchGenerator = coder.NewRunnerPatchGenerator(modelRunner, agent, domainCoder, coder.PromptContext{
+
+	var coderUsageMu sync.Mutex
+	var lastCoderUsage *coder.ProviderUsage
+	opts.PatchGenerator = coder.NewRunnerPatchGeneratorWithTracker(modelRunner, agent, domainCoder, coder.PromptContext{
 		Spec: storySpec, RepoContext: repoCtx, SteeringContext: coderSteering,
+	}, func(pu *coder.ProviderUsage) {
+		coderUsageMu.Lock()
+		lastCoderUsage = pu
+		coderUsageMu.Unlock()
 	})
+	opts.CoderUsageTracker = func() *coder.ProviderUsage {
+		coderUsageMu.Lock()
+		defer coderUsageMu.Unlock()
+		return lastCoderUsage
+	}
 
 	fmt.Fprintf(human, "Starting convergence loop for Spec: %s (%s)...\n", storySpec.ID, storySpec.Title)
 	res := coord.Run(context.Background(), storySpec, repoCtx, coderSteering, revSteering, opts)

@@ -49,6 +49,10 @@ type LoopOptions struct {
 	MaxConsecutiveIdenticalRejections int                 `json:"maxConsecutiveIdenticalRejections,omitempty"`
 	TestCommandsConfirmed              bool                `json:"testCommandsConfirmed,omitempty"`
 	ConfirmTestCommands                func(commands []string) bool
+	Model                              string              `json:"model,omitempty"`
+	ReviewerModel                      string              `json:"reviewerModel,omitempty"`
+	CoderUsageTracker                  func() *ProviderUsage
+	ReviewerUsageTracker               func() *ProviderUsage
 }
 
 // LoopResult represents the final convergence outcome.
@@ -241,15 +245,22 @@ func (c *ConvergenceCoordinator) Run(
 
 		// Mid-round budget check: abort immediately before sandbox/critic if coder tokens exhausted cap
 		if budget != nil {
-			costPer1k := budget.CostPer1kTokens
-			if costPer1k <= 0 && len(budget.PriceTable) > 0 {
-				for _, p := range budget.PriceTable {
-					costPer1k = p
-					break
-				}
+			modelKey := "default"
+			if opts != nil && opts.Model != "" {
+				modelKey = opts.Model
+			}
+			costPer1k, err := budget.GetModelPrice(modelKey)
+			if err != nil {
+				res.Error = err.Error()
+				res.CostReport = costReport
+				return res
 			}
 			coderCostUSD := (float64(totalCoderTokens) / 1000.0) * costPer1k
-			budget.RecordRoundUsage(totalCoderTokens, coderCostUSD)
+			var coderUsage *ProviderUsage
+			if opts != nil && opts.CoderUsageTracker != nil {
+				coderUsage = opts.CoderUsageTracker()
+			}
+			budget.RecordRoundUsage(totalCoderTokens, coderCostUSD, coderUsage)
 			costReport.TotalTokens += totalCoderTokens
 			costReport.TotalCost += coderCostUSD
 
@@ -427,15 +438,24 @@ func (c *ConvergenceCoordinator) Run(
 
 		// Check budget exhaustion after reviewer pass
 		if budget != nil {
-			costPer1k := budget.CostPer1kTokens
-			if costPer1k <= 0 && len(budget.PriceTable) > 0 {
-				for _, p := range budget.PriceTable {
-					costPer1k = p
-					break
-				}
+			revModelKey := "default"
+			if opts != nil && opts.ReviewerModel != "" {
+				revModelKey = opts.ReviewerModel
+			} else if opts != nil && opts.Model != "" {
+				revModelKey = opts.Model
+			}
+			costPer1k, err := budget.GetModelPrice(revModelKey)
+			if err != nil {
+				res.Error = err.Error()
+				res.CostReport = costReport
+				return res
 			}
 			reviewerCostUSD := (float64(totalReviewerTokens) / 1000.0) * costPer1k
-			budget.RecordRoundUsage(totalReviewerTokens, reviewerCostUSD)
+			var revUsage *ProviderUsage
+			if opts != nil && opts.ReviewerUsageTracker != nil {
+				revUsage = opts.ReviewerUsageTracker()
+			}
+			budget.RecordRoundUsage(totalReviewerTokens, reviewerCostUSD, revUsage)
 			costReport.TotalTokens += totalReviewerTokens
 			costReport.TotalCost += reviewerCostUSD
 

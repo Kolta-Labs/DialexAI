@@ -20,10 +20,26 @@ type Critic func(ctx context.Context, prompt string) (string, error)
 
 // RunnerCritic adapts an engine AgentRunner (API or CLI) into a Critic.
 func RunnerCritic(r runner.AgentRunner, agent model.Agent) Critic {
+	return RunnerCriticWithTracker(r, agent, nil)
+}
+
+// RunnerCriticWithTracker adapts an engine AgentRunner and reports provider usage via callback.
+func RunnerCriticWithTracker(r runner.AgentRunner, agent model.Agent, onUsage func(promptTokens, completionTokens, totalTokens int)) Critic {
 	return func(ctx context.Context, prompt string) (string, error) {
 		reply, err := r.Respond(ctx, agent, "Adversarial code review", prompt, "You are an adversarial code reviewer. Reply with JSON only.", nil, "")
 		if err != nil {
 			return "", err
+		}
+		if onUsage != nil && (reply.TokensIn != nil || reply.TokensOut != nil) {
+			tin := 0
+			tout := 0
+			if reply.TokensIn != nil {
+				tin = *reply.TokensIn
+			}
+			if reply.TokensOut != nil {
+				tout = *reply.TokensOut
+			}
+			onUsage(tin, tout, tin+tout)
 		}
 		return reply.Content, nil
 	}

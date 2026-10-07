@@ -137,6 +137,11 @@ func withFileLock(path string, fn func()) {
 	ledgerMu.Lock()
 	defer ledgerMu.Unlock()
 
+	dir := filepath.Dir(path)
+	if dir != "" {
+		_ = os.MkdirAll(dir, 0755)
+	}
+
 	lockPath := path + ".lock"
 	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
 	if err == nil {
@@ -163,6 +168,35 @@ func (b *TokenBudget) ValidatePricing() error {
 		return fmt.Errorf("budget configuration error: USD financial cap is configured, but no model pricing or price table is provided (refusing operation to prevent silent under-reporting)")
 	}
 	return nil
+}
+
+// GetModelPrice returns the cost per 1k tokens for the given model key deterministically.
+// If a financial cap is active and the model key is not configured, it returns an error refusing operation.
+func (b *TokenBudget) GetModelPrice(modelKey string) (float64, error) {
+	if b == nil {
+		return 0, nil
+	}
+	trimmedKey := strings.TrimSpace(modelKey)
+	if len(b.PriceTable) > 0 {
+		if p, ok := b.PriceTable[trimmedKey]; ok && p > 0 {
+			return p, nil
+		}
+		for k, p := range b.PriceTable {
+			if strings.EqualFold(k, trimmedKey) && p > 0 {
+				return p, nil
+			}
+		}
+		if b.HasFinancialCap() {
+			return 0, fmt.Errorf("budget error: model %q missing from price table (refusing operation to prevent silent under-reporting under USD financial cap)", modelKey)
+		}
+	}
+	if b.CostPer1kTokens > 0 {
+		return b.CostPer1kTokens, nil
+	}
+	if b.HasFinancialCap() {
+		return 0, fmt.Errorf("budget error: no price table or pricing configured for model %q under active USD financial cap (refusing operation)", modelKey)
+	}
+	return 0, nil
 }
 
 // CheckExhaustion checks if any token or USD cap is exceeded.
@@ -256,10 +290,15 @@ func (b *TokenBudget) RecordRoundUsage(roundTokens int, roundCostUSD float64, pr
 	if len(providerUsage) > 0 && providerUsage[0] != nil {
 		pu := providerUsage[0]
 		if pu.TotalTokens > 0 {
+			effectiveUnitCost := 0.0
+			if roundTokens > 0 {
+				effectiveUnitCost = roundCostUSD / float64(roundTokens)
+			}
 			roundTokens = pu.TotalTokens
-			costPer1k := b.CostPer1kTokens
-			if costPer1k > 0 {
-				roundCostUSD = (float64(roundTokens) / 1000.0) * costPer1k
+			if effectiveUnitCost > 0 {
+				roundCostUSD = float64(roundTokens) * effectiveUnitCost
+			} else if b.CostPer1kTokens > 0 {
+				roundCostUSD = (float64(roundTokens) / 1000.0) * b.CostPer1kTokens
 			}
 		}
 	}
