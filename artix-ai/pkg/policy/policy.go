@@ -402,6 +402,7 @@ type PRApproval struct {
 	CommitSHA        string `json:"commitSha,omitempty"`
 	Signature        string `json:"signature,omitempty"`
 	Source           string `json:"source,omitempty"` // "github_api", "gitlab_api", "oidc"
+	VerifiedByForge  bool   `json:"verifiedByForge"`
 }
 
 // ValidateForgeApproval enforces Separation of Duties using a verified PR review from the forge.

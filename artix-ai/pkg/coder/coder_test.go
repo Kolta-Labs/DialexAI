@@ -664,5 +664,69 @@ func TestSharedCrossProcessBudgetLedger(t *testing.T) {
 	}
 }
 
+func TestAutonomousCommit_RejectsCallerSuppliedForgedApprovalInEnterprise(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	file := filepath.Join(tempDir, "feature.txt")
+	_ = os.WriteFile(file, []byte("old\n"), 0644)
+	_, _ = driver.CommitAll("initial commit")
+
+	validPatch := "diff --git a/feature.txt b/feature.txt\n--- a/feature.txt\n+++ b/feature.txt\n@@ -1 +1 @@\n-old\n+new\n"
+
+	polDir := t.TempDir()
+	polFile := filepath.Join(polDir, "policy.json")
+	polData := []byte(`{"enterpriseMode": true, "allowAutonomous": true, "requireSeparateApprover": true, "allowedTestCommands": ["grep 'new' feature.txt"]}`)
+	_ = os.WriteFile(polFile, polData, 0644)
+	_ = policy.SignPolicyFile(polFile, "ent-key-1234567890123456")
+	policy.SetTrustedKey("corp-root", "ent-key-1234567890123456")
+	policy.SetDefaultPolicyPath(polFile)
+	policy.ResetCache()
+	defer func() {
+		policy.SetDefaultPolicyPath("/etc/artix/policy.json")
+		policy.ResetCache()
+	}()
+
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+	storySpec := &spec.StorySpec{
+		ID:           "S-FORGED-APPROVAL",
+		Title:        "Forged Approval Test",
+		TestCommands: []string{"grep 'new' feature.txt"},
+	}
+
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	// Caller passes caller-supplied struct via opts (forged / not server-verified by forge)
+	opts := &LoopOptions{
+		MaxRounds: 1,
+		Autonomy:  AutonomyAutonomous,
+		ForgeApproval: &policy.PRApproval{
+			ApproverUsername: "external-lead",
+			AuthorUsername:   "artix-agent",
+			State:            "APPROVED",
+			VerifiedByForge:  false, // forged/caller-supplied
+		},
+		MockPatchGen: func(round int, feedback string) string {
+			return validPatch
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if res.Success {
+		t.Fatalf("expected autonomous commit with caller-supplied approval in enterprise mode to fail, but succeeded")
+	}
+	if !strings.Contains(res.Error, "caller-supplied") && !strings.Contains(res.Error, "server-side") {
+		t.Fatalf("expected error mentioning caller-supplied approval forbidden, got: %s", res.Error)
+	}
+}
+
+
 
 

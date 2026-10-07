@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"artix/pkg/persona"
+	"artix/pkg/policy"
 )
 
 func TestGitHubClient_CreatePullRequest(t *testing.T) {
@@ -593,5 +594,159 @@ func TestRemoteWorker_BlocksNonHttpsAndMalformedURLs(t *testing.T) {
 		}
 	}
 }
+
+func setupMockGitHubReviewServer(prJSON string, reviewsJSON string, prStatus, reviewsStatus int) (*httptest.Server, *GitHubClient) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/reviews") {
+			w.WriteHeader(reviewsStatus)
+			_, _ = w.Write([]byte(reviewsJSON))
+			return
+		}
+		if strings.Contains(r.URL.Path, "/pulls/") {
+			w.WriteHeader(prStatus)
+			_, _ = w.Write([]byte(prJSON))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	client := NewGitHubClient(ForgeAuth{
+		Type:    ForgeGitHub,
+		Token:   "dummy-token",
+		BaseURL: server.URL,
+	})
+	return server, client
+}
+
+func TestGitHub_VerifyPRApproval_RejectsAuthorAsApprover(t *testing.T) {
+	prJSON := `{"user":{"login":"alice","type":"User"},"head":{"sha":"commit-abc"}}`
+	reviewsJSON := `[{"id":1,"user":{"login":"alice","type":"User"},"state":"APPROVED","commit_id":"commit-abc"}]`
+	srv, client := setupMockGitHubReviewServer(prJSON, reviewsJSON, 200, 200)
+	defer srv.Close()
+
+	target := &RemoteRepoTarget{Owner: "acme", Repo: "core"}
+	approval, err := client.VerifyPRApproval(context.Background(), target, 42, "commit-abc")
+	if err == nil || approval != nil {
+		t.Fatalf("expected error when author approves own PR, got approval=%+v, err=nil", approval)
+	}
+	if !strings.Contains(err.Error(), "author") {
+		t.Fatalf("expected error mentioning 'author', got: %v", err)
+	}
+}
+
+func TestGitHub_VerifyPRApproval_RejectsBotAccount(t *testing.T) {
+	prJSON := `{"user":{"login":"alice","type":"User"},"head":{"sha":"commit-abc"}}`
+	reviewsJSON := `[{"id":1,"user":{"login":"security-bot","type":"Bot"},"state":"APPROVED","commit_id":"commit-abc"}]`
+	srv, client := setupMockGitHubReviewServer(prJSON, reviewsJSON, 200, 200)
+	defer srv.Close()
+
+	target := &RemoteRepoTarget{Owner: "acme", Repo: "core"}
+	approval, err := client.VerifyPRApproval(context.Background(), target, 42, "commit-abc")
+	if err == nil || approval != nil {
+		t.Fatalf("expected error when bot approves PR, got approval=%+v, err=nil", approval)
+	}
+	if !strings.Contains(err.Error(), "bot") && !strings.Contains(err.Error(), "Bot") {
+		t.Fatalf("expected error mentioning 'bot', got: %v", err)
+	}
+}
+
+func TestGitHub_VerifyPRApproval_RejectsNonApprovedState(t *testing.T) {
+	prJSON := `{"user":{"login":"alice","type":"User"},"head":{"sha":"commit-abc"}}`
+	reviewsJSON := `[{"id":1,"user":{"login":"bob","type":"User"},"state":"CHANGES_REQUESTED","commit_id":"commit-abc"}]`
+	srv, client := setupMockGitHubReviewServer(prJSON, reviewsJSON, 200, 200)
+	defer srv.Close()
+
+	target := &RemoteRepoTarget{Owner: "acme", Repo: "core"}
+	approval, err := client.VerifyPRApproval(context.Background(), target, 42, "commit-abc")
+	if err == nil || approval != nil {
+		t.Fatalf("expected error when review state is CHANGES_REQUESTED, got approval=%+v, err=nil", approval)
+	}
+	if !strings.Contains(err.Error(), "APPROVED") && !strings.Contains(err.Error(), "approval") {
+		t.Fatalf("expected error mentioning approval state, got: %v", err)
+	}
+}
+
+func TestGitHub_VerifyPRApproval_RejectsDismissedReview(t *testing.T) {
+	prJSON := `{"user":{"login":"alice","type":"User"},"head":{"sha":"commit-abc"}}`
+	reviewsJSON := `[
+		{"id":1,"user":{"login":"bob","type":"User"},"state":"APPROVED","commit_id":"commit-abc"},
+		{"id":2,"user":{"login":"bob","type":"User"},"state":"DISMISSED","commit_id":"commit-abc"}
+	]`
+	srv, client := setupMockGitHubReviewServer(prJSON, reviewsJSON, 200, 200)
+	defer srv.Close()
+
+	target := &RemoteRepoTarget{Owner: "acme", Repo: "core"}
+	approval, err := client.VerifyPRApproval(context.Background(), target, 42, "commit-abc")
+	if err == nil || approval != nil {
+		t.Fatalf("expected error when review is DISMISSED, got approval=%+v, err=nil", approval)
+	}
+}
+
+func TestGitHub_VerifyPRApproval_RejectsStaleCommit(t *testing.T) {
+	prJSON := `{"user":{"login":"alice","type":"User"},"head":{"sha":"commit-head-new"}}`
+	reviewsJSON := `[{"id":1,"user":{"login":"bob","type":"User"},"state":"APPROVED","commit_id":"commit-head-old"}]`
+	srv, client := setupMockGitHubReviewServer(prJSON, reviewsJSON, 200, 200)
+	defer srv.Close()
+
+	target := &RemoteRepoTarget{Owner: "acme", Repo: "core"}
+	// Caller is merging commit-head-new, but review was on commit-head-old
+	approval, err := client.VerifyPRApproval(context.Background(), target, 42, "commit-head-new")
+	if err == nil || approval != nil {
+		t.Fatalf("expected error when approval is on stale commit, got approval=%+v, err=nil", approval)
+	}
+	if !strings.Contains(err.Error(), "stale") && !strings.Contains(err.Error(), "differs") {
+		t.Fatalf("expected error mentioning stale commit, got: %v", err)
+	}
+}
+
+func TestGitHub_VerifyPRApproval_RejectsDisallowedApprover(t *testing.T) {
+	policy.ResetCache()
+	defer policy.ResetCache()
+
+	polDir := t.TempDir()
+	polFile := filepath.Join(polDir, "policy.json")
+	_ = os.WriteFile(polFile, []byte(`{
+		"enterpriseMode": true,
+		"allowAutonomous": true,
+		"allowedApprovers": ["security-lead", "compliance-officer"]
+	}`), 0644)
+	_ = policy.SignPolicyFile(polFile, "key-1234567890123456")
+	policy.SetTrustedKey("corp-root", "key-1234567890123456")
+	policy.SetDefaultPolicyPath(polFile)
+	defer func() {
+		policy.SetDefaultPolicyPath("/etc/artix/policy.json")
+		policy.ResetCache()
+	}()
+
+	prJSON := `{"user":{"login":"alice","type":"User"},"head":{"sha":"commit-abc"}}`
+	reviewsJSON := `[{"id":1,"user":{"login":"random-engineer","type":"User"},"state":"APPROVED","commit_id":"commit-abc"}]`
+	srv, client := setupMockGitHubReviewServer(prJSON, reviewsJSON, 200, 200)
+	defer srv.Close()
+
+	target := &RemoteRepoTarget{Owner: "acme", Repo: "core"}
+	approval, err := client.VerifyPRApproval(context.Background(), target, 42, "commit-abc")
+	if err == nil || approval != nil {
+		t.Fatalf("expected error when approver not in allowedApprovers, got approval=%+v, err=nil", approval)
+	}
+	if !strings.Contains(err.Error(), "allowedApprovers") && !strings.Contains(err.Error(), "authorized") {
+		t.Fatalf("expected error mentioning allowedApprovers, got: %v", err)
+	}
+}
+
+func TestGitHub_VerifyPRApproval_RejectsForgeAPIError(t *testing.T) {
+	// Server returns 500 error
+	srv, client := setupMockGitHubReviewServer(`{}`, `{}`, 500, 500)
+	defer srv.Close()
+
+	target := &RemoteRepoTarget{Owner: "acme", Repo: "core"}
+	approval, err := client.VerifyPRApproval(context.Background(), target, 42, "commit-abc")
+	if err == nil || approval != nil {
+		t.Fatalf("expected error on forge API failure, got approval=%+v, err=nil", approval)
+	}
+	if !strings.Contains(err.Error(), "forge api error") && !strings.Contains(err.Error(), "status 500") {
+		t.Fatalf("expected error mentioning forge api error, got: %v", err)
+	}
+}
+
 
 

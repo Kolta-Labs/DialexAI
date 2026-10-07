@@ -2,11 +2,14 @@ package forge
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
+
+	"artix/pkg/policy"
 )
 
 // GitHubClient interacts with GitHub's REST API.
@@ -89,3 +92,10 @@ func (c *GitHubClient) CreatePullRequest(target *RemoteRepoTarget, req *PullRequ
 		State:   ghResp.State,
 	}, nil
 }
+
+// VerifyPRApproval fetches PR and review details server-side from GitHub API.
+func (c *GitHubClient) VerifyPRApproval(ctx context.Context, target *RemoteRepoTarget, prNumber int, targetCommitSHA string) (*policy.PRApproval, error) {
+	// STUB: returns nil, nil so adversarial tests fail red
+	return nil, nil
+}
+
