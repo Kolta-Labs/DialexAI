@@ -29,6 +29,10 @@ func (a *Aggregator) CollectLocalRules() ([]RuleFile, error) {
 	for _, fname := range rootCandidates {
 		p := filepath.Join(a.repoRoot, fname)
 		if content, err := os.ReadFile(p); err == nil && len(content) > 0 {
+			// Injection scan for untrusted steering files
+			if err := ValidateSteeringContent(fname, string(content)); err != nil {
+				continue // Skip malicious or prompt-injected steering files
+			}
 			hash := fmt.Sprintf("%x", sha256.Sum256(content))
 			if !seen[hash] {
 				seen[hash] = true
