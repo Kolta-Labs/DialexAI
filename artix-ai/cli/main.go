@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -608,6 +610,9 @@ func handleAudit(cwd string, args []string) {
 	case "verify":
 		fs := flag.NewFlagSet("audit verify", flag.ExitOnError)
 		keyFlag := fs.String("key", "", "HMAC signing key for cryptographic signature verification")
+		pubKeyFlag := fs.String("pubkey", "", "Hex-encoded Ed25519 public key for asymmetric verification")
+		expectedCountFlag := fs.Int("expected-count", 0, "Expected minimum record count to detect tail truncation")
+		expectedHashFlag := fs.String("expected-hash", "", "Expected last record hash to detect tail truncation")
 		fs.Parse(subargs)
 
 		logPath := policy.EffectiveAuditLogPath(cwd)
@@ -615,14 +620,37 @@ func handleAudit(cwd string, args []string) {
 			logPath = fs.Args()[0]
 		}
 
-		fmt.Printf("Verifying audit log integrity: %s\n", logPath)
-		var res *audit.VerificationResult
-		var err error
-		if *keyFlag != "" {
-			res, err = audit.VerifyLog(logPath, *keyFlag)
-		} else {
-			res, err = audit.VerifyLog(logPath)
+		// In enterprise mode, fail closed if attempting to verify using an HMAC symmetric key
+		if policy.IsEnterprise() && *keyFlag != "" {
+			fmt.Fprintf(os.Stderr, "SECURITY ERROR: enterprise mode requires ed25519 public key verification; symmetric HMAC key verification is disallowed\n")
+			os.Exit(1)
 		}
+
+		var pubKey ed25519.PublicKey
+		if *pubKeyFlag != "" {
+			raw, err := hex.DecodeString(strings.TrimSpace(*pubKeyFlag))
+			if err != nil || len(raw) != ed25519.PublicKeySize {
+				fmt.Fprintf(os.Stderr, "Invalid ed25519 public key hex: %v\n", err)
+				os.Exit(1)
+			}
+			pubKey = ed25519.PublicKey(raw)
+		} else if policy.IsEnterprise() || policy.Active().AuditPublicKey != "" {
+			if polKey := policy.Active().AuditPublicKey; polKey != "" {
+				raw, err := hex.DecodeString(strings.TrimSpace(polKey))
+				if err == nil && len(raw) == ed25519.PublicKeySize {
+					pubKey = ed25519.PublicKey(raw)
+				}
+			}
+		}
+
+		fmt.Printf("Verifying audit log integrity: %s\n", logPath)
+		opts := audit.VerifyOptions{
+			PubKey:           pubKey,
+			SigningKey:       *keyFlag,
+			ExpectedCount:    *expectedCountFlag,
+			ExpectedLastHash: *expectedHashFlag,
+		}
+		res, err := audit.VerifyLogWithOptions(logPath, opts)
 
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\nAUDIT INTEGRITY VIOLATION: %v\n", err)

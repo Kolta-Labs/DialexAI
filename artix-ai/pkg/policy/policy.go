@@ -86,6 +86,8 @@ type Policy struct {
 	AllowedApprovers        []string             `json:"allowedApprovers,omitempty"`
 	AuditLogPath            string               `json:"auditLogPath,omitempty"`
 	AuditSigningKey         string               `json:"auditSigningKey,omitempty"`
+	AuditPublicKey          string               `json:"auditPublicKey,omitempty"`
+	AuditPrivateKeyPath     string               `json:"auditPrivateKeyPath,omitempty"`
 	AuditRemoteSinks        []RemoteSinkConfig   `json:"auditRemoteSinks,omitempty"`
 	Budget                     BudgetConfig         `json:"budget,omitempty"`
 	Reviewer                   ReviewerPolicyConfig `json:"reviewer,omitempty"`

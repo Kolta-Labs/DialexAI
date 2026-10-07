@@ -403,12 +403,19 @@ func (l *Logger) spoolWorker() {
 }
 
 func (l *Logger) sendToRemoteSinkWithRetry(sink policy.RemoteSinkConfig, data []byte, maxAttempts int) {
+	delivered := false
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		success := l.sendToRemoteSink(sink, data)
-		if success || attempt == maxAttempts {
+		if success {
+			delivered = true
 			break
 		}
-		time.Sleep(time.Duration(attempt*50) * time.Millisecond) // exponential backoff retry
+		if attempt < maxAttempts {
+			time.Sleep(time.Duration(attempt*50) * time.Millisecond) // exponential backoff retry
+		}
+	}
+	if !delivered {
+		l.RecordSpoolLoss(sink.Endpoint, 1)
 	}
 }
 
@@ -576,13 +583,54 @@ func VerifyLogWithPubKey(logPath string, pubKey ed25519.PublicKey) (*Verificatio
 }
 
 // SetPrivateKeyPath configures the Ed25519 private key from an external path.
+// It strictly enforces that the private key must reside outside sandbox-readable paths.
 func (l *Logger) SetPrivateKeyPath(path string) error {
-	return nil // stub for RED test
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("invalid private key path: %w", err)
+	}
+	if l.workspaceDir != "" {
+		absWs, errWs := filepath.Abs(l.workspaceDir)
+		if errWs == nil {
+			rel, errRel := filepath.Rel(absWs, absPath)
+			if errRel == nil && !strings.HasPrefix(rel, "..") {
+				return fmt.Errorf("signing key refused: private key must be located outside sandbox-readable paths (%s is inside workspace %s)", absPath, absWs)
+			}
+		}
+	}
+
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return fmt.Errorf("failed to read private key: %w", err)
+	}
+
+	raw := strings.TrimSpace(string(data))
+	if keyBytes, err := hex.DecodeString(raw); err == nil && len(keyBytes) == ed25519.PrivateKeySize {
+		l.SetAsymmetricSigningKey(ed25519.PrivateKey(keyBytes))
+		return nil
+	} else if len(data) == ed25519.PrivateKeySize {
+		l.SetAsymmetricSigningKey(ed25519.PrivateKey(data))
+		return nil
+	} else if len(data) == ed25519.SeedSize {
+		priv := ed25519.NewKeyFromSeed(data)
+		l.SetAsymmetricSigningKey(priv)
+		return nil
+	}
+
+	return nil
 }
 
 // RecordSpoolLoss records that spooled audit records were lost due to unrecoverable delivery failure.
 func (l *Logger) RecordSpoolLoss(sinkEndpoint string, count int) {
-	// stub for RED test
+	_ = l.Emit(AuditEvent{
+		EventType: EventType("audit.spool_loss"),
+		Status:    "FAILED",
+		Details: map[string]any{
+			"sink":           sinkEndpoint,
+			"droppedRecords": count,
+			"reason":         "unrecoverable delivery failure or buffer saturation",
+		},
+	})
 }
 
 // VerifyOptions configures comprehensive audit log verification.
@@ -595,6 +643,29 @@ type VerifyOptions struct {
 
 // VerifyLogWithOptions verifies an audit log against custom constraints including expected count and last hash.
 func VerifyLogWithOptions(logPath string, opts VerifyOptions) (*VerificationResult, error) {
-	return nil, nil // stub for RED test
+	var res *VerificationResult
+	var err error
+
+	if opts.PubKey != nil {
+		res, err = VerifyLogWithPubKey(logPath, opts.PubKey)
+	} else if opts.SigningKey != "" {
+		res, err = VerifyLog(logPath, opts.SigningKey)
+	} else {
+		res, err = VerifyLog(logPath)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	if opts.ExpectedCount > 0 && res.ValidRecords < opts.ExpectedCount {
+		return nil, fmt.Errorf("tampering detected: tail truncated: expected %d records, got %d", opts.ExpectedCount, res.ValidRecords)
+	}
+
+	if opts.ExpectedLastHash != "" && res.LastHash != opts.ExpectedLastHash {
+		return nil, fmt.Errorf("tampering detected: tail truncated or altered: expected last hash %s, got %s", opts.ExpectedLastHash, res.LastHash)
+	}
+
+	return res, nil
 }
 
