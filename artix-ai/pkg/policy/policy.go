@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 )
@@ -16,17 +18,38 @@ import (
 // DefaultPolicyPath is the build-time default location for enterprise policy.
 var DefaultPolicyPath = "/etc/artix/policy.json"
 
-// TrustedSigningKeys holds keys trusted for policy signature verification.
+// TrustedSigningKeys holds symmetric and asymmetric keys trusted for policy signature verification.
 var (
-	trustedKeysMu sync.RWMutex
-	trustedKeys   = make(map[string]string) // keyID -> secret / pubKey
+	trustedKeysMu     sync.RWMutex
+	trustedKeys       = make(map[string]string)            // keyID -> symmetric secret
+	trustedPublicKeys = make(map[string]ed25519.PublicKey) // keyID -> ed25519 public key
 )
 
-// SetTrustedKey registers a trusted key for verifying signed policy files.
+// SetTrustedKey registers a trusted symmetric key for verifying signed policy files.
 func SetTrustedKey(keyID, secret string) {
 	trustedKeysMu.Lock()
 	defer trustedKeysMu.Unlock()
 	trustedKeys[keyID] = secret
+}
+
+// SetTrustedPublicKey registers an Ed25519 public key trusted for verifying signed policies.
+func SetTrustedPublicKey(keyID string, pubKey ed25519.PublicKey) {
+	trustedKeysMu.Lock()
+	defer trustedKeysMu.Unlock()
+	trustedPublicKeys[keyID] = pubKey
+}
+
+// SetTrustedPublicKeyHex registers an Ed25519 public key from a hex-encoded string.
+func SetTrustedPublicKeyHex(keyID, pubKeyHex string) error {
+	raw, err := hex.DecodeString(strings.TrimSpace(pubKeyHex))
+	if err != nil {
+		return fmt.Errorf("invalid ed25519 public key hex: %w", err)
+	}
+	if len(raw) != ed25519.PublicKeySize {
+		return fmt.Errorf("invalid ed25519 public key length %d (expected %d)", len(raw), ed25519.PublicKeySize)
+	}
+	SetTrustedPublicKey(keyID, ed25519.PublicKey(raw))
+	return nil
 }
 
 // RemoteSinkConfig defines configuration for an external audit sink (HTTP or syslog).
@@ -56,15 +79,21 @@ type ReviewerPolicyConfig struct {
 
 // Policy specifies security, autonomy, audit, and resource constraints for Artix.
 type Policy struct {
-	EnterpriseMode   bool                 `json:"enterpriseMode"`
-	AllowAutonomous  bool                 `json:"allowAutonomous"`
-	AuditLogPath     string               `json:"auditLogPath,omitempty"`
-	AuditSigningKey  string               `json:"auditSigningKey,omitempty"`
-	AuditRemoteSinks []RemoteSinkConfig   `json:"auditRemoteSinks,omitempty"`
-	Budget           BudgetConfig         `json:"budget,omitempty"`
-	Reviewer         ReviewerPolicyConfig `json:"reviewer,omitempty"`
-	Source           string               `json:"-"`
-	IsVerified       bool                 `json:"-"`
+	EnterpriseMode          bool                 `json:"enterpriseMode"`
+	AllowAutonomous         bool                 `json:"allowAutonomous"`
+	RequireSignedPolicy     bool                 `json:"requireSignedPolicy,omitempty"`
+	RequireSeparateApprover bool                 `json:"requireSeparateApprover,omitempty"`
+	AllowedApprovers        []string             `json:"allowedApprovers,omitempty"`
+	AuditLogPath            string               `json:"auditLogPath,omitempty"`
+	AuditSigningKey         string               `json:"auditSigningKey,omitempty"`
+	AuditRemoteSinks        []RemoteSinkConfig   `json:"auditRemoteSinks,omitempty"`
+	Budget                     BudgetConfig         `json:"budget,omitempty"`
+	Reviewer                   ReviewerPolicyConfig `json:"reviewer,omitempty"`
+	AllowedTestCommands        []string             `json:"allowedTestCommands,omitempty"`
+	RequireSignedTestCommands  bool                 `json:"requireSignedTestCommands,omitempty"`
+	RequireForgeApproval       bool                 `json:"requireForgeApproval,omitempty"`
+	Source                     string               `json:"-"`
+	IsVerified                 bool                 `json:"-"`
 }
 
 var (
@@ -144,15 +173,39 @@ func verifyPolicySignature(policyPath string) (bool, error) {
 	trustedKeysMu.RLock()
 	defer trustedKeysMu.RUnlock()
 
+	trimmedSig := strings.TrimSpace(string(sigData))
+
+	// 1. Asymmetric Ed25519 Verification (Enterprise Trust Root)
+	if sigBytes, err := hex.DecodeString(trimmedSig); err == nil && len(sigBytes) == ed25519.SignatureSize {
+		for _, pubKey := range trustedPublicKeys {
+			if ed25519.Verify(pubKey, content, sigBytes) {
+				return true, nil
+			}
+		}
+
+		// Also check ARTIX_POLICY_TRUSTED_PUBKEY env var if present
+		if envPubHex := os.Getenv("ARTIX_POLICY_TRUSTED_PUBKEY"); envPubHex != "" {
+			if rawPub, err := hex.DecodeString(strings.TrimSpace(envPubHex)); err == nil && len(rawPub) == ed25519.PublicKeySize {
+				if ed25519.Verify(ed25519.PublicKey(rawPub), content, sigBytes) {
+					return true, nil
+				}
+			}
+		}
+	}
+
+	// 2. Symmetric HMAC Verification (Fallback)
 	if len(trustedKeys) == 0 {
 		// Check ARTIX_POLICY_SIGNING_KEY in environment for verification if available
 		if k := os.Getenv("ARTIX_POLICY_SIGNING_KEY"); k != "" {
 			mac := hmac.New(sha256.New, []byte(k))
 			mac.Write(content)
 			expected := hex.EncodeToString(mac.Sum(nil))
-			if hmac.Equal([]byte(expected), []byte(string(sigData))) {
+			if hmac.Equal([]byte(expected), []byte(trimmedSig)) {
 				return true, nil
 			}
+		}
+		if len(trustedPublicKeys) > 0 {
+			return false, errors.New("policy signature does not match any trusted ed25519 public key")
 		}
 		return false, errors.New("no trusted signing keys registered to verify policy signature")
 	}
@@ -161,7 +214,7 @@ func verifyPolicySignature(policyPath string) (bool, error) {
 		mac := hmac.New(sha256.New, []byte(secret))
 		mac.Write(content)
 		expected := hex.EncodeToString(mac.Sum(nil))
-		if hmac.Equal([]byte(expected), []byte(string(sigData))) {
+		if hmac.Equal([]byte(expected), []byte(trimmedSig)) {
 			return true, nil
 		}
 	}
@@ -169,7 +222,7 @@ func verifyPolicySignature(policyPath string) (bool, error) {
 	return false, errors.New("policy signature does not match any trusted key")
 }
 
-// SignPolicyFile signs a policy file at policyPath using the given secret and writes policyPath.sig.
+// SignPolicyFile signs a policy file at policyPath using the given symmetric secret and writes policyPath.sig.
 func SignPolicyFile(policyPath string, secret string) error {
 	content, err := os.ReadFile(policyPath)
 	if err != nil {
@@ -181,11 +234,45 @@ func SignPolicyFile(policyPath string, secret string) error {
 	return os.WriteFile(policyPath+".sig", []byte(sig), 0644)
 }
 
-// Active returns the currently active policy. If no verified system policy file exists,
-// it constructs a baseline policy from environment defaults.
+// SignPolicyFileEd25519 signs a policy file at policyPath using an asymmetric Ed25519 private key.
+func SignPolicyFileEd25519(policyPath string, privKey ed25519.PrivateKey) error {
+	content, err := os.ReadFile(policyPath)
+	if err != nil {
+		return err
+	}
+	sig := ed25519.Sign(privKey, content)
+	sigHex := hex.EncodeToString(sig)
+	return os.WriteFile(policyPath+".sig", []byte(sigHex), 0644)
+}
+
+// RequireSignedPolicyLdflag can be set at compile time via -ldflags "-X artix/pkg/policy.RequireSignedPolicyLdflag=true"
+var RequireSignedPolicyLdflag = "false"
+
+// RequireSignedPolicyFlag can be set programmatically or via EnforceSignedPolicy.
+var RequireSignedPolicyFlag = false
+
+func isSignedPolicyEnforced() bool {
+	return RequireSignedPolicyFlag || strings.EqualFold(RequireSignedPolicyLdflag, "true") || RequireSignedPolicyLdflag == "1"
+}
+
+// EnforceSignedPolicy permanently mandates that policy evaluation requires a verified cryptographic signature.
+func EnforceSignedPolicy() {
+	RequireSignedPolicyFlag = true
+}
+
+// ResetCachedPolicy clears the cached policy so tests or reloads can re-evaluate fresh policy state.
+func ResetCachedPolicy() {
+	policyMu.Lock()
+	defer policyMu.Unlock()
+	cachedPolicy = nil
+}
+
+// Active returns the currently active policy. If a verified system policy file exists,
+// it caches and returns it. If unverified, it fails closed in enterprise mode or evaluates
+// environment dynamically without poisoning the cache.
 func Active() *Policy {
 	policyMu.RLock()
-	if cachedPolicy != nil {
+	if cachedPolicy != nil && cachedPolicy.IsVerified {
 		p := *cachedPolicy
 		policyMu.RUnlock()
 		return &p
@@ -195,29 +282,42 @@ func Active() *Policy {
 	policyMu.Lock()
 	defer policyMu.Unlock()
 
-	if cachedPolicy != nil {
+	if cachedPolicy != nil && cachedPolicy.IsVerified {
 		p := *cachedPolicy
 		return &p
 	}
 
 	p, err := LoadPolicy(DefaultPolicyPath)
-	if err != nil {
-		// Fallback to environment variables when no system policy file is present
-		isEnvEnterprise := os.Getenv("ARTIX_ENTERPRISE") == "1" || os.Getenv("KRITIX_ENTERPRISE") == "1"
-		allowAuto := os.Getenv("ARTIX_ALLOW_AUTONOMOUS") == "1"
-		cachedPolicy = &Policy{
-			EnterpriseMode:  isEnvEnterprise,
-			AllowAutonomous: allowAuto,
-			Source:          "environment",
-			IsVerified:      false,
-		}
+	if err == nil && p != nil && p.IsVerified {
+		cachedPolicy = p
 		res := *cachedPolicy
 		return &res
 	}
 
-	cachedPolicy = p
-	res := *cachedPolicy
-	return &res
+	// Fallback when no system policy file is present or verification failed
+	isEnvEnterprise := os.Getenv("ARTIX_ENTERPRISE") == "1" || os.Getenv("KRITIX_ENTERPRISE") == "1"
+	if isEnvEnterprise || isSignedPolicyEnforced() {
+		// FAIL-CLOSED: Enterprise intent or compile-time flag requires verified policy.
+		// An absent or invalid policy file CANNOT grant autonomy and strictly forces
+		// EnterpriseMode, RequireSignedPolicy, and RequireSeparateApprover.
+		return &Policy{
+			EnterpriseMode:          true,
+			AllowAutonomous:         false, // FAIL CLOSED
+			RequireSignedPolicy:     true,
+			RequireSeparateApprover: true,
+			Source:                  "fail_closed_unverified",
+			IsVerified:              false,
+		}
+	}
+
+	allowAuto := os.Getenv("ARTIX_ALLOW_AUTONOMOUS") == "1"
+	return &Policy{
+		EnterpriseMode:          false,
+		AllowAutonomous:         allowAuto,
+		RequireSeparateApprover: false,
+		Source:                  "environment",
+		IsVerified:              false,
+	}
 }
 
 // IsEnterprise returns true if enterprise mode is enforced by verified policy or environment.
@@ -227,28 +327,177 @@ func IsEnterprise() bool {
 	if pol.IsVerified && pol.EnterpriseMode {
 		return true
 	}
-	return os.Getenv("ARTIX_ENTERPRISE") == "1" || os.Getenv("KRITIX_ENTERPRISE") == "1"
+	return os.Getenv("ARTIX_ENTERPRISE") == "1" || os.Getenv("KRITIX_ENTERPRISE") == "1" || isSignedPolicyEnforced()
 }
 
 // IsAutonomousAllowed returns whether autonomous commits are permitted.
-// If Enterprise Mode is active, autonomous mode is blocked unless explicitly enabled by policy.
-// If verified policy explicitly forbids autonomy (AllowAutonomous=false), ARTIX_ALLOW_AUTONOMOUS cannot loosen it.
+// If a verified policy is active, it strictly determines whether autonomy is allowed.
+// In unverified mode, enterprise intent strictly fails closed.
 func IsAutonomousAllowed() bool {
 	pol := Active()
 	if pol.IsVerified {
-		if !pol.AllowAutonomous {
-			// Policy strictly forbids autonomy; environment variables CANNOT loosen this.
-			return false
-		}
-		return true
+		return pol.AllowAutonomous
 	}
 
-	// Unverified/Environment mode:
-	isEnterprise := IsEnterprise() || os.Getenv("CI") != ""
-	if isEnterprise {
-		return os.Getenv("ARTIX_ALLOW_AUTONOMOUS") == "1"
+	// Unverified mode:
+	// If enterprise mode is signalled, require-signed-policy is set, or compile-time flag is on,
+	// strictly FAIL CLOSED: autonomy is never permitted without a verified signature.
+	if pol.RequireSignedPolicy || isSignedPolicyEnforced() || (pol.EnterpriseMode && pol.Source == "fail_closed_unverified") {
+		return false
 	}
-	return true
+
+	// In non-enterprise environments, autonomy is never default-enabled; it requires explicit opt-in
+	return os.Getenv("ARTIX_ALLOW_AUTONOMOUS") == "1"
+}
+
+// ValidateApprover enforces Separation of Duties (Four-Eyes Principle).
+// In enterprise mode or when RequireSeparateApprover is set, autonomous merges and PRs
+// must record an approver identity that is non-empty and strictly distinct from the bot's identity.
+func ValidateApprover(botIdentity, approverIdentity string) error {
+	pol := Active()
+	requiresSeparation := pol.RequireSeparateApprover || IsEnterprise()
+	if !requiresSeparation {
+		return nil
+	}
+
+	trimmedApprover := strings.TrimSpace(approverIdentity)
+	if trimmedApprover == "" {
+		return errors.New("separation of duties violation: approver identity is required for autonomous operations")
+	}
+
+	botLower := strings.ToLower(strings.TrimSpace(botIdentity))
+	approverLower := strings.ToLower(trimmedApprover)
+
+	// Block self-approval by bot
+	if (botLower != "" && approverLower == botLower) ||
+		approverLower == "artix-agent" ||
+		approverLower == "artix-bot" ||
+		approverLower == "bot" ||
+		strings.Contains(approverLower, "[bot]") {
+		return fmt.Errorf("separation of duties violation: bot identity %q cannot approve its own autonomous merge", trimmedApprover)
+	}
+
+	// If AllowedApprovers list is configured, enforce membership
+	if len(pol.AllowedApprovers) > 0 {
+		found := false
+		for _, allowed := range pol.AllowedApprovers {
+			if strings.EqualFold(allowed, trimmedApprover) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("policy violation: approver %q is not authorized in allowedApprovers list", trimmedApprover)
+		}
+	}
+
+	return nil
+}
+
+// PRApproval represents a verified pull request review record from GitHub or GitLab API.
+type PRApproval struct {
+	ApproverUsername string `json:"approverUsername"`
+	AuthorUsername   string `json:"authorUsername"`
+	State            string `json:"state"` // Must be "APPROVED"
+	CommitSHA        string `json:"commitSha,omitempty"`
+	Signature        string `json:"signature,omitempty"`
+	Source           string `json:"source,omitempty"` // "github_api", "gitlab_api", "oidc"
+}
+
+// ValidateForgeApproval enforces Separation of Duties using a verified PR review from the forge.
+// The approver must be an approved human reviewer, strictly distinct from the PR author and any bot identity.
+func ValidateForgeApproval(approval *PRApproval, authorIdentity, botIdentity string) error {
+	pol := Active()
+	requiresSeparation := pol.RequireSeparateApprover || pol.RequireForgeApproval || IsEnterprise()
+	if !requiresSeparation {
+		return nil
+	}
+
+	if approval == nil {
+		return errors.New("separation of duties violation: verified forge PR approval record is required")
+	}
+
+	trimmedApprover := strings.TrimSpace(approval.ApproverUsername)
+	if trimmedApprover == "" {
+		return errors.New("separation of duties violation: approver username in forge approval record is empty")
+	}
+
+	if !strings.EqualFold(approval.State, "APPROVED") {
+		return fmt.Errorf("separation of duties violation: forge review status is %q, expected APPROVED", approval.State)
+	}
+
+	approverLower := strings.ToLower(trimmedApprover)
+	botLower := strings.ToLower(strings.TrimSpace(botIdentity))
+	authorLower := strings.ToLower(strings.TrimSpace(authorIdentity))
+	recordAuthorLower := strings.ToLower(strings.TrimSpace(approval.AuthorUsername))
+
+	// Self-approval checks
+	if recordAuthorLower != "" && approverLower == recordAuthorLower {
+		return fmt.Errorf("separation of duties violation: PR author %q cannot approve their own PR", approval.AuthorUsername)
+	}
+	if authorLower != "" && approverLower == authorLower {
+		return fmt.Errorf("separation of duties violation: PR author %q cannot approve their own PR", authorIdentity)
+	}
+
+	// Bot denylist checks
+	if (botLower != "" && approverLower == botLower) ||
+		approverLower == "artix-agent" ||
+		approverLower == "artix-bot" ||
+		approverLower == "bot" ||
+		strings.Contains(approverLower, "[bot]") ||
+		strings.HasSuffix(approverLower, "-bot") {
+		return fmt.Errorf("separation of duties violation: bot identity %q cannot approve autonomous merge", trimmedApprover)
+	}
+
+	// Allowed approvers membership check
+	if len(pol.AllowedApprovers) > 0 {
+		found := false
+		for _, allowed := range pol.AllowedApprovers {
+			if strings.EqualFold(allowed, trimmedApprover) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("policy violation: forge approver %q is not authorized in allowedApprovers list", trimmedApprover)
+		}
+	}
+
+	return nil
+}
+
+// ValidateTestCommands validates test commands against the signed enterprise policy.
+// In enterprise mode or when RequireSignedTestCommands is active, unapproved test commands
+// from untrusted specs or repositories are strictly rejected.
+func ValidateTestCommands(commands []string) ([]string, error) {
+	pol := Active()
+	if !IsEnterprise() && !pol.RequireSignedTestCommands {
+		return commands, nil
+	}
+
+	if len(pol.AllowedTestCommands) == 0 {
+		return nil, errors.New("enterprise policy violation: allowedTestCommands list must be configured in signed policy for enterprise execution")
+	}
+
+	var verified []string
+	for _, cmd := range commands {
+		cmdTrimmed := strings.TrimSpace(cmd)
+		if cmdTrimmed == "" {
+			continue
+		}
+		allowed := false
+		for _, allowedCmd := range pol.AllowedTestCommands {
+			if cmdTrimmed == strings.TrimSpace(allowedCmd) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return nil, fmt.Errorf("enterprise policy violation: test command %q is not authorized in signed policy allowedTestCommands %v", cmd, pol.AllowedTestCommands)
+		}
+		verified = append(verified, cmdTrimmed)
+	}
+	return verified, nil
 }
 
 // EffectiveAuditLogPath returns the audit log destination.
