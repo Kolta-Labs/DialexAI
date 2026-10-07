@@ -159,15 +159,24 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 	}
 
 	// 2cc. Deterministic Pre-Filter: Test Count & Coverage Delta Gates
+	if ctx.RequiresTestGates {
+		if ctx.TestCountBefore == 0 && ctx.TestCountAfter == 0 {
+			verdict.Approved = false
+			verdict.Status = StatusRejected
+			verdict.BlockingIssues = append(verdict.BlockingIssues, "test integrity gate violation: missing test count metrics; fail-closed")
+		}
+	}
 	if ctx.TestCountBefore > 0 && ctx.TestCountAfter < ctx.TestCountBefore {
 		verdict.Approved = false
 		verdict.Status = StatusRejected
 		verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("test integrity violation: test count decreased from %d to %d (test elimination is strictly forbidden)", ctx.TestCountBefore, ctx.TestCountAfter))
 	}
-	if ctx.CoverageBefore > 0 && ctx.CoverageAfter > 0 && ctx.CoverageAfter < ctx.CoverageBefore-0.01 {
-		verdict.Approved = false
-		verdict.Status = StatusRejected
-		verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("test coverage gate violation: test coverage decreased from %.2f%% to %.2f%%", ctx.CoverageBefore*100, ctx.CoverageAfter*100))
+	if ctx.CoverageBefore > 0 {
+		if ctx.CoverageAfter < ctx.CoverageBefore-0.0001 {
+			verdict.Approved = false
+			verdict.Status = StatusRejected
+			verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("test coverage gate violation: test coverage decreased from %.2f%% to %.2f%%", ctx.CoverageBefore*100, ctx.CoverageAfter*100))
+		}
 	}
 
 	// 2d. Deterministic Pre-Filter: Script/Makefile Indirection Detection
@@ -204,11 +213,14 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 			break
 		}
 	}
-	if hasNonGo && len(ctx.AnalyzerFindings) == 0 {
-		verdict.Approved = false
-		verdict.Status = StatusUnreviewed
-		verdict.BlockingIssues = append(verdict.BlockingIssues, "UNREVIEWED: diff touches non-Go files (.kt, .swift, .ts, .py) and no semantic rule runner (Konsist/Detekt/Semgrep/SwiftLint) is configured; fail-closed")
-		return verdict
+	if hasNonGo {
+		hasRunner := ctx.SemanticRunnerConfigured || ctx.SemanticRunnerExecuted || len(ctx.AnalyzerFindings) > 0
+		if !hasRunner {
+			verdict.Approved = false
+			verdict.Status = StatusUnreviewed
+			verdict.BlockingIssues = append(verdict.BlockingIssues, "UNREVIEWED: diff touches non-Go files (.kt, .swift, .ts, .py) and no semantic rule runner (Konsist/Detekt/Semgrep/SwiftLint) is configured and executed; fail-closed")
+			return verdict
+		}
 	}
 
 	// 3. Deterministic Pre-Filter: Static Analyzer Findings

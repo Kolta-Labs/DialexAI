@@ -194,6 +194,9 @@ func (c *ConvergenceCoordinator) Run(
 	var priorFailures []string
 	var activeSession *git.PatchSession
 
+	initialTestCount := reviewer.CountTestsInWorkspace(repoCtx.RootDir)
+	initialCoverage := 0.0
+
 	for round := 1; round <= maxRounds; round++ {
 		res.RoundsRun = round
 
@@ -342,7 +345,8 @@ func (c *ConvergenceCoordinator) Run(
 
 		// 4b. Run configured static analyzers (Konsist, Detekt, Semgrep, go vet) in sandbox
 		var analyzerFindings []reviewer.AnalyzerFinding
-		if opts != nil && len(opts.AnalyzerCommands) > 0 {
+		hasAnalyzers := opts != nil && len(opts.AnalyzerCommands) > 0
+		if hasAnalyzers {
 			findings, _ := reviewer.RunAnalyzers(ctx, repoCtx.RootDir, c.sandbox, opts.AnalyzerCommands)
 			analyzerFindings = findings
 			for _, f := range findings {
@@ -352,14 +356,34 @@ func (c *ConvergenceCoordinator) Run(
 			}
 		}
 
+		currentTestCount := reviewer.CountTestsInWorkspace(repoCtx.RootDir)
+		var currentCoverage float64
+		for _, tr := range testResults {
+			if cov := reviewer.ExtractCoverage(tr.Stdout + "\n" + tr.Stderr); cov > 0 {
+				currentCoverage = cov
+				break
+			}
+		}
+		if initialCoverage == 0.0 && currentCoverage > 0.0 {
+			initialCoverage = currentCoverage
+		}
+
 		// 5. Reviewer evaluates diff + tests + analyzers + steering
 		rCtx := &reviewer.ReviewContext{
-			Diff:             diff,
-			TestResults:      testResults,
-			AnalyzerFindings: analyzerFindings,
-			SteeringContext:  revSteering,
-			Ctx:              ctx,
-			Criteria:         criteriaOf(s),
+			Diff:                     diff,
+			TestResults:              testResults,
+			AnalyzerFindings:         analyzerFindings,
+			SteeringContext:          revSteering,
+			Ctx:                      ctx,
+			Criteria:                 criteriaOf(s),
+			WorkspaceDir:             repoCtx.RootDir,
+			TestCountBefore:          initialTestCount,
+			TestCountAfter:           currentTestCount,
+			CoverageBefore:           initialCoverage,
+			CoverageAfter:            currentCoverage,
+			RequiresTestGates:        initialTestCount > 0,
+			SemanticRunnerConfigured: hasAnalyzers,
+			SemanticRunnerExecuted:   hasAnalyzers,
 		}
 		verdict := c.reviewer.Evaluate(rCtx)
 		res.FinalVerdict = verdict

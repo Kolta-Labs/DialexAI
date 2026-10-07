@@ -534,8 +534,12 @@ func runReview(cwd string, reg *persona.Registry, args []string, human io.Writer
 		}
 		advReviewer.SetCritic(reviewer.RunnerCritic(rRunner, rAgent))
 	}
+	testCount := reviewer.CountTestsInWorkspace(cwd)
 	rCtx := &reviewer.ReviewContext{
-		Diff: diff,
+		Diff:            diff,
+		WorkspaceDir:    cwd,
+		TestCountBefore: testCount,
+		TestCountAfter:  testCount,
 	}
 
 	verdict := advReviewer.Evaluate(rCtx)

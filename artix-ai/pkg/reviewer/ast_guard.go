@@ -122,9 +122,9 @@ func CheckTestIntegrity(diff string) []string {
 		}
 	}
 
-	// Flag drastic assertion destruction without replacement
-	if deletedAssertions >= 3 && addedAssertions == 0 {
-		violations = append(violations, fmt.Sprintf("test integrity violation: gutted assertions detected (%d assertion statements removed without replacement)", deletedAssertions))
+	// Flag any net assertion loss
+	if deletedAssertions > addedAssertions {
+		violations = append(violations, fmt.Sprintf("test integrity violation: net assertion loss detected (%d assertion statements removed, %d added)", deletedAssertions, addedAssertions))
 	}
 
 	return deduplicateStrings(violations)
@@ -146,7 +146,7 @@ func isAssertionStatement(s string) bool {
 // If workspaceDir is provided, whole post-patch files on disk are parsed to catch multi-statement and cross-declaration patterns.
 func CheckSemanticASTTaboos(diff string, tabooList []string, workspaceDir ...string) []string {
 	var violations []string
-	if len(tabooList) == 0 || strings.TrimSpace(diff) == "" {
+	if strings.TrimSpace(diff) == "" {
 		return violations
 	}
 
@@ -347,6 +347,15 @@ func inspectMultiLanguageSemantics(code string, taboos []string) []string {
 	var violations []string
 	diffLower := strings.ToLower(code)
 
+	// Inherent security taboos across all languages: arbitrary command execution, destructive commands
+	if strings.Contains(diffLower, "runtime.getruntime().exec") ||
+		strings.Contains(diffLower, "runtime.exec") ||
+		strings.Contains(diffLower, "processbuilder") ||
+		strings.Contains(diffLower, "rm -rf") ||
+		strings.Contains(diffLower, "child_process.exec") {
+		violations = append(violations, "Security Taboo: forbidden arbitrary shell/command execution detected")
+	}
+
 	for _, taboo := range tabooListCanonical(taboos) {
 		lowerTaboo := strings.ToLower(strings.TrimSpace(taboo))
 		if lowerTaboo == "" {
@@ -360,7 +369,7 @@ func inspectMultiLanguageSemantics(code string, taboos []string) []string {
 			matched = true
 		} else if strings.Contains(lowerTaboo, "blocking main thread") && (strings.Contains(diffLower, "thread.sleep") || strings.Contains(diffLower, "runblocking") || strings.Contains(diffLower, "dispatchers.main")) {
 			matched = true
-		} else if strings.Contains(lowerTaboo, "runtime.exec") && (strings.Contains(diffLower, "runtime.getruntime().exec") || strings.Contains(diffLower, "processbuilder")) {
+		} else if (strings.Contains(lowerTaboo, "runtime.exec") || strings.Contains(lowerTaboo, "exec") || strings.Contains(lowerTaboo, "shell")) && (strings.Contains(diffLower, "runtime.getruntime().exec") || strings.Contains(diffLower, "runtime.exec") || strings.Contains(diffLower, "processbuilder")) {
 			matched = true
 		}
 
@@ -494,12 +503,49 @@ func CheckTestIntegrityWholeFile(workspaceDir, diff string) []string {
 			if strings.HasPrefix(fn.Name.Name, "Test") {
 				// 2a. Early return at top of test
 				if len(fn.Body.List) > 0 {
-					if _, isRet := fn.Body.List[0].(*ast.ReturnStmt); isRet {
+					firstStmt := fn.Body.List[0]
+					if _, isRet := firstStmt.(*ast.ReturnStmt); isRet {
 						violations = append(violations, fmt.Sprintf("test integrity violation: early return at top of test function %s in %s", fn.Name.Name, f))
+					} else if ifStmt, ok := firstStmt.(*ast.IfStmt); ok {
+						for _, stmt := range ifStmt.Body.List {
+							if _, isRet := stmt.(*ast.ReturnStmt); isRet {
+								violations = append(violations, fmt.Sprintf("test integrity violation: conditional early return at top of test function %s in %s", fn.Name.Name, f))
+								break
+							}
+						}
 					}
 				}
 
-				// 2b. Empty t.Run body & track calls
+				// Check any if true { return } or if os.Getenv(...) == "" { return } in test body
+				ast.Inspect(fn.Body, func(n ast.Node) bool {
+					if ifStmt, ok := n.(*ast.IfStmt); ok {
+						hasReturn := false
+						for _, stmt := range ifStmt.Body.List {
+							if _, isRet := stmt.(*ast.ReturnStmt); isRet {
+								hasReturn = true
+								break
+							}
+						}
+						if hasReturn {
+							if ident, ok := ifStmt.Cond.(*ast.Ident); ok && ident.Name == "true" {
+								violations = append(violations, fmt.Sprintf("test integrity violation: if true { return } evasion in %s in %s", fn.Name.Name, f))
+							}
+							ast.Inspect(ifStmt.Cond, func(cn ast.Node) bool {
+								if call, ok := cn.(*ast.CallExpr); ok {
+									if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+										if sel.Sel.Name == "Getenv" {
+											violations = append(violations, fmt.Sprintf("test integrity violation: if os.Getenv(...) early return evasion in %s in %s", fn.Name.Name, f))
+										}
+									}
+								}
+								return true
+							})
+						}
+					}
+					return true
+				})
+
+				// 2b. Empty or no-op t.Run body & track calls
 				ast.Inspect(fn.Body, func(n ast.Node) bool {
 					if call, ok := n.(*ast.CallExpr); ok {
 						if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Run" {
@@ -507,6 +553,22 @@ func CheckTestIntegrityWholeFile(workspaceDir, diff string) []string {
 								if lit, ok := arg.(*ast.FuncLit); ok {
 									if lit.Body == nil || len(lit.Body.List) == 0 {
 										violations = append(violations, fmt.Sprintf("test integrity violation: empty t.Run body in %s in %s", fn.Name.Name, f))
+									} else {
+										hasCallOrAssertion := false
+										for _, stmt := range lit.Body.List {
+											if _, isRet := stmt.(*ast.ReturnStmt); isRet {
+												continue
+											}
+											ast.Inspect(stmt, func(sn ast.Node) bool {
+												if _, isCall := sn.(*ast.CallExpr); isCall {
+													hasCallOrAssertion = true
+												}
+												return true
+											})
+										}
+										if !hasCallOrAssertion {
+											violations = append(violations, fmt.Sprintf("test integrity violation: no-op t.Run body in %s in %s", fn.Name.Name, f))
+										}
 									}
 								}
 							}
@@ -544,5 +606,52 @@ func CheckTestIntegrityWholeFile(workspaceDir, diff string) []string {
 	}
 
 	return deduplicateStrings(violations)
+}
+
+// CountTestsInWorkspace counts all Test* functions in all Go test files within workspaceDir.
+func CountTestsInWorkspace(workspaceDir string) int {
+	if workspaceDir == "" {
+		return 0
+	}
+	count := 0
+	fset := token.NewFileSet()
+	_ = filepath.Walk(workspaceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info == nil {
+			return nil
+		}
+		if info.IsDir() {
+			name := info.Name()
+			if name == ".git" || name == "vendor" || name == "node_modules" || name == ".gradle" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, "_test.go") {
+			if node, err := parser.ParseFile(fset, path, nil, 0); err == nil {
+				for _, decl := range node.Decls {
+					if fn, ok := decl.(*ast.FuncDecl); ok {
+						if strings.HasPrefix(fn.Name.Name, "Test") {
+							count++
+						}
+					}
+				}
+			}
+		}
+		return nil
+	})
+	return count
+}
+
+// ExtractCoverage parses statement coverage percentage from test output.
+func ExtractCoverage(output string) float64 {
+	re := regexp.MustCompile(`coverage:\s*([0-9]+\.?[0-9]*)%`)
+	m := re.FindStringSubmatch(output)
+	if len(m) > 1 {
+		var val float64
+		if _, err := fmt.Sscanf(m[1], "%f", &val); err == nil {
+			return val / 100.0
+		}
+	}
+	return 0.0
 }
 
