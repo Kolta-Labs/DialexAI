@@ -171,11 +171,13 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 	touchedFiles := extractTouchedFiles(ctx.Diff)
 	for _, tr := range ctx.TestResults {
 		for _, tf := range touchedFiles {
-			base := filepath.Base(tf)
-			if strings.Contains(tr.Command, tf) || strings.Contains(tr.Command, "./"+tf) || (base != "" && strings.Contains(tr.Command, base) && (strings.HasSuffix(base, ".sh") || base == "Makefile" || strings.HasSuffix(base, ".py") || strings.HasSuffix(base, ".bash"))) {
-				verdict.Approved = false
-				verdict.Status = StatusRejected
-				verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("test integrity violation: test command %q calls modified script/Makefile %q", tr.Command, tf))
+			if isScriptOrBuildFile(tf) {
+				base := filepath.Base(tf)
+				if strings.Contains(tr.Command, tf) || strings.Contains(tr.Command, "./"+tf) || (base != "" && strings.Contains(tr.Command, base)) {
+					verdict.Approved = false
+					verdict.Status = StatusRejected
+					verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("test integrity violation: test command %q calls modified script/Makefile %q", tr.Command, tf))
+				}
 			}
 		}
 	}
@@ -276,4 +278,16 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 	}
 
 	return verdict
+}
+
+func isScriptOrBuildFile(path string) bool {
+	base := filepath.Base(path)
+	ext := strings.ToLower(filepath.Ext(path))
+	if base == "Makefile" || base == "makefile" || base == "GNUmakefile" {
+		return true
+	}
+	if ext == ".sh" || ext == ".bash" || ext == ".zsh" || ext == ".py" || ext == ".rb" || ext == ".pl" {
+		return true
+	}
+	return false
 }

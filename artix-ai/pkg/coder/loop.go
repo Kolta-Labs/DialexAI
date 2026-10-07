@@ -40,6 +40,8 @@ type LoopOptions struct {
 	Approver                           string              `json:"approver,omitempty"`
 	ForgeApproval                      *policy.PRApproval  `json:"forgeApproval,omitempty"`
 	MaxConsecutiveIdenticalRejections int                 `json:"maxConsecutiveIdenticalRejections,omitempty"`
+	TestCommandsConfirmed              bool                `json:"testCommandsConfirmed,omitempty"`
+	ConfirmTestCommands                func(commands []string) bool
 }
 
 // LoopResult represents the final convergence outcome.

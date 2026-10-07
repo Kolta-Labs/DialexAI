@@ -2,6 +2,7 @@ package coder
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -726,6 +727,228 @@ func TestAutonomousCommit_RejectsCallerSuppliedForgedApprovalInEnterprise(t *tes
 	}
 	if !strings.Contains(res.Error, "caller-supplied") && !strings.Contains(res.Error, "server-side") {
 		t.Fatalf("expected error mentioning caller-supplied approval forbidden, got: %s", res.Error)
+	}
+}
+
+func TestG4_SupervisedModeRequiresExplicitConfirmationOutsideEnterprise(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	// Ensure outside enterprise mode
+	polDir := t.TempDir()
+	polFile := filepath.Join(polDir, "policy.json")
+	_ = os.WriteFile(polFile, []byte(`{"enterpriseMode": false}`), 0644)
+	policy.SetDefaultPolicyPath(polFile)
+	policy.ResetCache()
+	defer func() {
+		policy.SetDefaultPolicyPath("/etc/artix/policy.json")
+		policy.ResetCache()
+	}()
+
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+	storySpec := &spec.StorySpec{
+		ID:           "S-G4-CONFIRM",
+		Title:        "G4 Confirmation Test",
+		TestCommands: []string{"grep '1' counter.txt"},
+	}
+
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	patch := "--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+1\n"
+
+	// Case 1: Supervised mode without confirmation -> must be refused
+	optsUnconfirmed := &LoopOptions{
+		MaxRounds:             1,
+		Autonomy:              AutonomySupervised,
+		TestCommandsConfirmed: false,
+		MockPatchGen: func(round int, feedback string) string {
+			return patch
+		},
+	}
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, optsUnconfirmed)
+	if res.Success {
+		t.Fatalf("expected unconfirmed test commands in supervised mode to fail, but succeeded")
+	}
+	if !strings.Contains(strings.ToLower(res.Error), "confirm") {
+		t.Fatalf("expected error mentioning confirmation required, got: %s", res.Error)
+	}
+}
+
+func TestG4_AuditRecordsTestCommandsHash(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	polDir := t.TempDir()
+	polFile := filepath.Join(polDir, "policy.json")
+	_ = os.WriteFile(polFile, []byte(`{"enterpriseMode": false}`), 0644)
+	policy.SetDefaultPolicyPath(polFile)
+	policy.ResetCache()
+	defer func() {
+		policy.SetDefaultPolicyPath("/etc/artix/policy.json")
+		policy.ResetCache()
+	}()
+
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+	storySpec := &spec.StorySpec{
+		ID:           "S-G4-AUDIT",
+		Title:        "G4 Audit Hash Test",
+		TestCommands: []string{"grep '1' counter.txt"},
+	}
+
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	patch := "--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+1\n"
+
+	optsConfirmed := &LoopOptions{
+		MaxRounds:             1,
+		Autonomy:              AutonomySupervised,
+		TestCommandsConfirmed: true,
+		MockPatchGen: func(round int, feedback string) string {
+			return patch
+		},
+	}
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, optsConfirmed)
+	if !res.Success {
+		t.Logf("res: %+v, verdict: %+v", res, res.FinalVerdict)
+		t.Fatalf("expected confirmed test run to succeed, got error: %s", res.Error)
+	}
+
+	// Verify audit log has testCommandsHash
+	auditLogPath := filepath.Join(tempDir, ".artix", "audit.log")
+	logData, err := os.ReadFile(auditLogPath)
+	if err != nil {
+		t.Fatalf("read audit log: %v", err)
+	}
+	if !strings.Contains(string(logData), "testCommandsHash") {
+		t.Fatalf("expected audit log to record testCommandsHash, got: %s", string(logData))
+	}
+}
+
+func TestG4_ScriptIndirectionRefused_OutsideEnterprise(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	canary := filepath.Join(tempDir, "canary.txt")
+	_ = os.Remove(canary)
+
+	_ = os.MkdirAll(filepath.Join(tempDir, "scripts"), 0755)
+	_ = os.WriteFile(filepath.Join(tempDir, "scripts", "test.sh"), []byte("#!/bin/sh\nexit 1\n"), 0755)
+	_, _ = driver.CommitAll("add script")
+
+	polDir := t.TempDir()
+	polFile := filepath.Join(polDir, "policy.json")
+	_ = os.WriteFile(polFile, []byte(`{"enterpriseMode": false}`), 0644)
+	policy.SetDefaultPolicyPath(polFile)
+	policy.ResetCache()
+	defer func() {
+		policy.SetDefaultPolicyPath("/etc/artix/policy.json")
+		policy.ResetCache()
+	}()
+
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+	storySpec := &spec.StorySpec{
+		ID:           "S-G4-INDIR-OUTSIDE",
+		Title:        "G4 Indirection Outside Enterprise",
+		TestCommands: []string{"./scripts/test.sh"},
+	}
+
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	// Patch modifies the test script to touch canary (attacker payload)
+	evasionPatch := fmt.Sprintf("diff --git a/scripts/test.sh b/scripts/test.sh\n--- a/scripts/test.sh\n+++ b/scripts/test.sh\n@@ -1,2 +1,3 @@\n #!/bin/sh\n-exit 1\n+touch %s\n+exit 0\n", canary)
+
+	opts := &LoopOptions{
+		MaxRounds:             1,
+		Autonomy:              AutonomySupervised,
+		TestCommandsConfirmed: true,
+		MockPatchGen: func(round int, feedback string) string {
+			return evasionPatch
+		},
+	}
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if res.Success {
+		t.Fatalf("expected script indirection outside enterprise to be rejected, but succeeded")
+	}
+	if _, err := os.Stat(canary); err == nil {
+		t.Fatalf("CRITICAL SECURITY DEFECT: modified script was executed in sandbox before indirection check! Canary was created.")
+	}
+}
+
+func TestG4_ScriptIndirectionRefused_EnterpriseMode(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	canary := filepath.Join(tempDir, "canary_ent.txt")
+	_ = os.Remove(canary)
+
+	_ = os.MkdirAll(filepath.Join(tempDir, "scripts"), 0755)
+	_ = os.WriteFile(filepath.Join(tempDir, "scripts", "test.sh"), []byte("#!/bin/sh\nexit 1\n"), 0755)
+	_, _ = driver.CommitAll("add script")
+
+	polDir := t.TempDir()
+	polFile := filepath.Join(polDir, "policy.json")
+	_ = os.WriteFile(polFile, []byte(`{"enterpriseMode": true, "allowAutonomous": true, "allowedTestCommands": ["./scripts/test.sh"]}`), 0644)
+	_ = policy.SignPolicyFile(polFile, "test-secret-key-1234567890123456")
+	policy.SetTrustedKey("corp-root", "test-secret-key-1234567890123456")
+	policy.SetDefaultPolicyPath(polFile)
+	policy.ResetCache()
+	defer func() {
+		policy.SetDefaultPolicyPath("/etc/artix/policy.json")
+		policy.ResetCache()
+	}()
+
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+	storySpec := &spec.StorySpec{
+		ID:           "S-G4-INDIR-ENTERPRISE",
+		Title:        "G4 Indirection Enterprise",
+		TestCommands: []string{"./scripts/test.sh"},
+	}
+
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	evasionPatch := fmt.Sprintf("diff --git a/scripts/test.sh b/scripts/test.sh\n--- a/scripts/test.sh\n+++ b/scripts/test.sh\n@@ -1,2 +1,3 @@\n #!/bin/sh\n-exit 1\n+touch %s\n+exit 0\n", canary)
+
+	opts := &LoopOptions{
+		MaxRounds: 1,
+		Autonomy:  AutonomyAutonomous,
+		MockPatchGen: func(round int, feedback string) string {
+			return evasionPatch
+		},
+	}
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if res.Success {
+		t.Fatalf("expected script indirection in enterprise mode to be rejected, but succeeded")
+	}
+	if _, err := os.Stat(canary); err == nil {
+		t.Fatalf("CRITICAL SECURITY DEFECT: modified script was executed in enterprise mode before indirection check! Canary was created.")
 	}
 }
 
