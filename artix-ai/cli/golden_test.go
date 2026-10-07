@@ -319,3 +319,122 @@ func TestR2_4_RealBinaryEndToEndWithFakeProvider(t *testing.T) {
 	}
 }
 
+// TestR2_7_PluginContract_RealBinaryOutputsExpectedJSONForPlugins verifies that all three
+// commands used by the IDE plugins ('plan', 'code', 'review') when run via the real binary
+// produce the exact JSON schema and fields parsed by the VS Code and IntelliJ plugins.
+func TestR2_7_PluginContract_RealBinaryOutputsExpectedJSONForPlugins(t *testing.T) {
+	// Compile real artix binary
+	binDir := t.TempDir()
+	binPath := filepath.Join(binDir, "artix")
+	buildCmd := exec.Command("go", "build", "-o", binPath, ".")
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build real artix binary: %v\nOutput: %s", err, string(out))
+	}
+
+	workDir := t.TempDir()
+	initCmd := exec.Command("git", "init")
+	initCmd.Dir = workDir
+	if out, err := initCmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init failed: %v\nOutput: %s", err, string(out))
+	}
+
+	// 1. Contract: plan --json produces specPath
+	planCmd := exec.Command(binPath, "plan", "--json", "Add basic ping healthcheck endpoint")
+	planCmd.Dir = workDir
+	var planOut, planErr bytes.Buffer
+	planCmd.Stdout = &planOut
+	planCmd.Stderr = &planErr
+	if err := planCmd.Run(); err != nil {
+		t.Fatalf("plan command failed: %v (stderr: %s)", err, planErr.String())
+	}
+
+	planLines := strings.Split(strings.TrimSpace(planOut.String()), "\n")
+	if len(planLines) != 1 {
+		t.Fatalf("plan --json: expected 1 line, got %d: %s", len(planLines), planOut.String())
+	}
+	var planJSON map[string]any
+	if err := json.Unmarshal([]byte(planLines[0]), &planJSON); err != nil {
+		t.Fatalf("invalid plan JSON: %v", err)
+	}
+	specPath, ok := planJSON["specPath"].(string)
+	if !ok || specPath == "" {
+		t.Fatalf("plan JSON missing 'specPath' parsed by plugins: %+v", planJSON)
+	}
+	if _, err := os.Stat(specPath); err != nil {
+		t.Fatalf("specPath %s does not exist on disk: %v", specPath, err)
+	}
+
+	// 2. Contract: review --json produces status and summary
+	revCmd := exec.Command(binPath, "review", "--json")
+	revCmd.Dir = workDir
+	var revOut, revErr bytes.Buffer
+	revCmd.Stdout = &revOut
+	revCmd.Stderr = &revErr
+	_ = revCmd.Run()
+
+	revLines := strings.Split(strings.TrimSpace(revOut.String()), "\n")
+	if len(revLines) != 1 {
+		t.Fatalf("review --json: expected 1 line, got %d: %s", len(revLines), revOut.String())
+	}
+	var revJSON map[string]any
+	if err := json.Unmarshal([]byte(revLines[0]), &revJSON); err != nil {
+		t.Fatalf("invalid review JSON: %v", err)
+	}
+	status, ok := revJSON["status"].(string)
+	if !ok || (status != "approved" && status != "unreviewed" && status != "rejected") {
+		t.Fatalf("review JSON missing valid 'status' parsed by plugins: %+v", revJSON)
+	}
+	if _, ok := revJSON["summary"].(string); !ok {
+		t.Fatalf("review JSON missing 'summary' parsed by plugins: %+v", revJSON)
+	}
+
+	// 3. Contract: code --json produces success and roundsRun
+	fakeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]any{
+						"role":    "assistant",
+						"content": "```diff\n--- /dev/null\n+++ b/result.txt\n@@ -0,0 +1 @@\n+completed\n```",
+					},
+				},
+			},
+			"usage": map[string]any{
+				"prompt_tokens":     100,
+				"completion_tokens": 50,
+				"total_tokens":      150,
+			},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer fakeServer.Close()
+
+	codeCmd := exec.Command(binPath, "code", "--json", "--autonomy", "supervised", "--confirm-tests",
+		"--provider", "openai", "--model", "gpt-4o", "--rounds", "1")
+	codeCmd.Dir = workDir
+	codeCmd.Env = append(os.Environ(),
+		"OPENAI_API_KEY=mock-key",
+		"ARTIX_API_URL="+fakeServer.URL,
+	)
+	var codeOut, codeErr bytes.Buffer
+	codeCmd.Stdout = &codeOut
+	codeCmd.Stderr = &codeErr
+	_ = codeCmd.Run()
+
+	codeLines := strings.Split(strings.TrimSpace(codeOut.String()), "\n")
+	if len(codeLines) != 1 {
+		t.Fatalf("code --json: expected 1 line, got %d: %s", len(codeLines), codeOut.String())
+	}
+	var codeJSON map[string]any
+	if err := json.Unmarshal([]byte(codeLines[0]), &codeJSON); err != nil {
+		t.Fatalf("invalid code JSON: %v", err)
+	}
+	if _, ok := codeJSON["success"].(bool); !ok {
+		t.Fatalf("code JSON missing boolean 'success' parsed by plugins: %+v", codeJSON)
+	}
+	if _, ok := codeJSON["roundsRun"].(float64); !ok {
+		t.Fatalf("code JSON missing numeric 'roundsRun' parsed by plugins: %+v", codeJSON)
+	}
+}
+
