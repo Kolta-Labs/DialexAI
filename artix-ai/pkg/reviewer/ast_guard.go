@@ -374,3 +374,9 @@ func deduplicateStrings(in []string) []string {
 	}
 	return out
 }
+
+// CheckTestIntegrityWholeFile performs post-patch whole-file AST analysis on test files.
+func CheckTestIntegrityWholeFile(workspaceDir, diff string) []string {
+	return nil // STUB for red tests
+}
+

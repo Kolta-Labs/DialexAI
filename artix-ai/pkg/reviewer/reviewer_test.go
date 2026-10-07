@@ -532,6 +532,189 @@ func Fetch() {
 	}
 }
 
+func TestAdversarial_EarlyReturnAtTopOfTest(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "service_test.go")
+	content := `package service
+import "testing"
+func TestProcess(t *testing.T) {
+	return
+	t.Fatal("should have run")
+}
+`
+	_ = os.WriteFile(sourceFile, []byte(content), 0644)
+	diff := "diff --git a/service_test.go b/service_test.go\n--- a/service_test.go\n+++ b/service_test.go\n@@ -3,1 +3,2 @@\n+ return\n"
+
+	violations := CheckTestIntegrityWholeFile(tmp, diff)
+	if len(violations) == 0 {
+		t.Fatalf("expected early return at top of test to be rejected by test integrity analysis")
+	}
+}
+
+func TestAdversarial_RenameTestToNonTestName(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "service_test.go")
+	content := `package service
+import "testing"
+func OldProcess(t *testing.T) {
+	t.Log("no longer a test")
+}
+`
+	_ = os.WriteFile(sourceFile, []byte(content), 0644)
+	diff := "diff --git a/service_test.go b/service_test.go\n--- a/service_test.go\n+++ b/service_test.go\n@@ -3,1 +3,1 @@\n-func TestProcess(t *testing.T)\n+func OldProcess(t *testing.T)\n"
+
+	violations := CheckTestIntegrityWholeFile(tmp, diff)
+	if len(violations) == 0 {
+		t.Fatalf("expected renamed test to be caught by test integrity analysis")
+	}
+}
+
+func TestAdversarial_MoveAssertionsIntoUncalledHelper(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "service_test.go")
+	content := `package service
+import "testing"
+func uncalledHelper(t *testing.T) {
+	t.Fatal("assertion hidden in uncalled helper")
+}
+func TestMainFlow(t *testing.T) {
+	// uncalledHelper is never executed
+}
+`
+	_ = os.WriteFile(sourceFile, []byte(content), 0644)
+	diff := "diff --git a/service_test.go b/service_test.go\n--- a/service_test.go\n+++ b/service_test.go\n@@ -3,2 +3,2 @@\n+func uncalledHelper(t *testing.T)\n"
+
+	violations := CheckTestIntegrityWholeFile(tmp, diff)
+	if len(violations) == 0 {
+		t.Fatalf("expected assertion hidden in uncalled helper to be rejected")
+	}
+}
+
+func TestAdversarial_EmptyTRunBody(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "service_test.go")
+	content := `package service
+import "testing"
+func TestSubtests(t *testing.T) {
+	t.Run("empty subtest", func(t *testing.T) {})
+}
+`
+	_ = os.WriteFile(sourceFile, []byte(content), 0644)
+	diff := "diff --git a/service_test.go b/service_test.go\n--- a/service_test.go\n+++ b/service_test.go\n@@ -4,1 +4,1 @@\n+ t.Run(\"empty subtest\", func(t *testing.T) {})\n"
+
+	violations := CheckTestIntegrityWholeFile(tmp, diff)
+	if len(violations) == 0 {
+		t.Fatalf("expected empty t.Run body to be rejected")
+	}
+}
+
+func TestAdversarial_BuildTagTestFileOut(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "service_test.go")
+	content := `//go:build ignore
+
+package service
+import "testing"
+func TestDisabled(t *testing.T) {
+	t.Fatal("excluded from build")
+}
+`
+	_ = os.WriteFile(sourceFile, []byte(content), 0644)
+	diff := "diff --git a/service_test.go b/service_test.go\n--- a/service_test.go\n+++ b/service_test.go\n@@ -1,1 +1,3 @@\n+//go:build ignore\n"
+
+	violations := CheckTestIntegrityWholeFile(tmp, diff)
+	if len(violations) == 0 {
+		t.Fatalf("expected //go:build ignore on test file to be rejected")
+	}
+}
+
+func TestAdversarial_AliasImportTaboo(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "client.go")
+	// The import of net/http is aliased to h. The diff only touches the function body.
+	content := `package client
+
+import h "net/http"
+
+func MakeRequest() {
+	_ = h.DefaultClient.Get("https://example.com")
+}
+`
+	_ = os.WriteFile(sourceFile, []byte(content), 0644)
+	// The diff does not mention net/http at all, only h.DefaultClient
+	diff := "diff --git a/client.go b/client.go\n--- a/client.go\n+++ b/client.go\n@@ -5,1 +5,2 @@\n+	_ = h.DefaultClient.Get(\"https://example.com\")\n"
+
+	violations := CheckSemanticASTTaboos(diff, []string{"Forbidden package net/http"}, tmp)
+	if len(violations) == 0 {
+		t.Fatalf("expected aliased import h (\"net/http\") usage to be caught by AST taboo analysis")
+	}
+}
+
+func TestAdversarial_TabooViaReflectionOrConcat(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "reflect_call.go")
+	content := `package client
+import "reflect"
+func Run() {
+	_ = reflect.ValueOf(nil)
+}
+`
+	_ = os.WriteFile(sourceFile, []byte(content), 0644)
+	diff := "diff --git a/reflect_call.go b/reflect_call.go\n--- a/reflect_call.go\n+++ b/reflect_call.go\n@@ -1,1 +1,4 @@\n+import \"reflect\"\n"
+
+	violations := CheckSemanticASTTaboos(diff, []string{"No Reflection"}, tmp)
+	if len(violations) == 0 {
+		t.Fatalf("expected reflection taboo to be caught by AST analysis")
+	}
+}
+
+func TestAdversarial_EditMakefileOrScriptUsedByTestCommand(t *testing.T) {
+	// A script used by test command (e.g. ./scripts/run_tests.sh) modified by patch
+	diffScript := "diff --git a/scripts/run_tests.sh b/scripts/run_tests.sh\n--- a/scripts/run_tests.sh\n+++ b/scripts/run_tests.sh\n@@ -1,1 +1,1 @@\n-go test ./...\n+exit 0\n"
+	
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved": true, "blocking": [], "warnings": []}`, nil
+	})
+	ctx := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diffScript,
+		TestResults: []*sandbox.ExecResult{{Command: "./scripts/run_tests.sh", ExitCode: 0}},
+	}
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected modification to test script/Makefile indirection to be rejected by Reviewer pre-filter")
+	}
+}
+
+func TestAdversarial_NonGoLanguageFailsClosedUnreviewed(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	// Configure a critic that would approve if called
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved": true, "blocking": [], "warnings": []}`, nil
+	})
+
+	ctx := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: `diff --git a/Service.kt b/Service.kt
+--- a/Service.kt
++++ b/Service.kt
+@@ -1,1 +1,2 @@
++fun doRiskyThings() {}
+`,
+		TestResults: []*sandbox.ExecResult{{Command: "echo ok", ExitCode: 0}},
+	}
+
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected non-Go file without semantic rule runner to NOT be approved")
+	}
+	if verdict.Status != StatusUnreviewed {
+		t.Fatalf("expected StatusUnreviewed when non-Go file has no semantic runner, got status: %s", verdict.Status)
+	}
+}
+
+
 
 
 
