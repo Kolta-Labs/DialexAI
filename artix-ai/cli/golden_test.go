@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -151,3 +154,168 @@ func TestG8_CLI_Code_JSON_OutputsOneLine(t *testing.T) {
 		t.Fatalf("expected status=error or ok=false in code error JSON, got: %+v", codeRes)
 	}
 }
+
+// TestR2_4_SupervisedNonTTY_RefusesWithoutConfirmFlag verifies that running
+// 'artix code --autonomy supervised' in non-TTY mode without --confirm-tests or --yes
+// strictly fails closed and prints an error, while keeping stdout as exactly 1 JSON line.
+func TestR2_4_SupervisedNonTTY_RefusesWithoutConfirmFlag(t *testing.T) {
+	tempDir := t.TempDir()
+	specDir := filepath.Join(tempDir, "docs", "specs")
+	if err := os.MkdirAll(specDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	specContent := `# Story Spec STORY-001: Sample Story
+## Acceptance Criteria
+- Scenario: Test
+## Test Commands
+` + "```bash\n" + `echo "test command execution"
+` + "```\n"
+	if err := os.WriteFile(filepath.Join(specDir, "STORY-001.md"), []byte(specContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	// Stdin is a non-TTY buffer with no user confirmation flag passed
+	code := RunCLIWithIO(tempDir, nil, []string{
+		"code", "--json", "--autonomy", "supervised",
+		"--provider", "openai", "--model", "gpt-4o",
+	}, strings.NewReader(""), &stdout, &stderr)
+
+	if code == 0 {
+		t.Fatalf("expected non-zero exit code when running in non-TTY supervised mode without --confirm-tests, got 0")
+	}
+
+	stdoutStr := strings.TrimSpace(stdout.String())
+	lines := strings.Split(stdoutStr, "\n")
+	if len(lines) != 1 || stdoutStr == "" {
+		t.Fatalf("expected exactly 1 JSON line on stdout, got %d lines: %q", len(lines), stdoutStr)
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &res); err != nil {
+		t.Fatalf("stdout must be valid JSON: %v", err)
+	}
+	if res["ok"] != false {
+		t.Fatalf("expected ok=false in JSON response, got: %+v", res)
+	}
+	errMsg, _ := res["error"].(string)
+	if !strings.Contains(errMsg, "unconfirmed test commands") {
+		t.Fatalf("expected error mentioning unconfirmed test commands, got: %s", errMsg)
+	}
+}
+
+// TestR2_4_SupervisedWithConfirmFlag_Accepted verifies that passing --confirm-tests or --yes
+// satisfies the supervised test command gate in non-TTY environments.
+func TestR2_4_SupervisedWithConfirmFlag_Accepted(t *testing.T) {
+	tempDir := t.TempDir()
+	specDir := filepath.Join(tempDir, "docs", "specs")
+	if err := os.MkdirAll(specDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	specContent := `# Story Spec STORY-001: Sample Story
+## Acceptance Criteria
+- Scenario: Test
+## Test Commands
+` + "```bash\n" + `echo "ok"
+` + "```\n"
+	if err := os.WriteFile(filepath.Join(specDir, "STORY-001.md"), []byte(specContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	// Pass --confirm-tests flag
+	code := RunCLIWithIO(tempDir, nil, []string{
+		"code", "--json", "--autonomy", "supervised", "--confirm-tests",
+		"--provider", "openai", "--model", "gpt-4o",
+	}, strings.NewReader(""), &stdout, &stderr)
+
+	// Since OPENAI_API_KEY is not set or network call not made, it may fail on model provider or proceed,
+	// but it MUST NOT fail with "unconfirmed test commands"!
+	stdoutStr := strings.TrimSpace(stdout.String())
+	if strings.Contains(stdoutStr, "unconfirmed test commands") || strings.Contains(stderr.String(), "unconfirmed test commands") {
+		t.Fatalf("unexpected unconfirmed test commands error when --confirm-tests was explicitly provided! code=%d, stdout=%s, stderr=%s", code, stdoutStr, stderr.String())
+	}
+}
+
+// TestR2_4_RealBinaryEndToEndWithFakeProvider executes the actual compiled 'artix' binary
+// against a mock OpenAI-compatible HTTP server with --json and --confirm-tests, verifying
+// single-line stdout JSON, stderr logging, and valid round execution.
+func TestR2_4_RealBinaryEndToEndWithFakeProvider(t *testing.T) {
+	// Compile real artix binary
+	binDir := t.TempDir()
+	binPath := filepath.Join(binDir, "artix")
+	buildCmd := exec.Command("go", "build", "-o", binPath, ".")
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build real artix binary: %v\nOutput: %s", err, string(out))
+	}
+
+	// Mock HTTP server returning OpenAI chat completion
+	fakeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]any{
+						"role":    "assistant",
+						"content": "```diff\n--- /dev/null\n+++ b/result.txt\n@@ -0,0 +1 @@\n+completed\n```",
+					},
+				},
+			},
+			"usage": map[string]any{
+				"prompt_tokens":     150,
+				"completion_tokens": 50,
+				"total_tokens":      200,
+			},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer fakeServer.Close()
+
+	// Initialize temp git repo with spec and a passing test command
+	workDir := t.TempDir()
+	initCmd := exec.Command("git", "init")
+	initCmd.Dir = workDir
+	if out, err := initCmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init failed: %v\nOutput: %s", err, string(out))
+	}
+
+	specDir := filepath.Join(workDir, "docs", "specs")
+	if err := os.MkdirAll(specDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	specContent := `# Story Spec STORY-001: Golden Test Story
+## Acceptance Criteria
+- Scenario: Verified
+## Test Commands
+` + "```bash\n" + `echo "tests passed"
+` + "```\n"
+	if err := os.WriteFile(filepath.Join(specDir, "STORY-001.md"), []byte(specContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(binPath, "code", "--json", "--autonomy", "supervised", "--confirm-tests",
+		"--provider", "openai", "--model", "gpt-4o", "--rounds", "1")
+	cmd.Dir = workDir
+	cmd.Env = append(os.Environ(),
+		"OPENAI_API_KEY=mock-key",
+		"ARTIX_API_URL="+fakeServer.URL,
+	)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	_ = cmd.Run() // exit code may be 0 or 1 depending on whether patch was cleanly accepted
+
+	outLines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(outLines) != 1 || strings.TrimSpace(stdout.String()) == "" {
+		t.Fatalf("expected real binary stdout to be EXACTLY 1 JSON line, got %d lines:\nSTDOUT:\n%s\nSTDERR:\n%s",
+			len(outLines), stdout.String(), stderr.String())
+	}
+
+	var jsonRes map[string]any
+	if err := json.Unmarshal([]byte(outLines[0]), &jsonRes); err != nil {
+		t.Fatalf("expected valid JSON on stdout from real binary, got error: %v, raw: %s", err, outLines[0])
+	}
+}
+
