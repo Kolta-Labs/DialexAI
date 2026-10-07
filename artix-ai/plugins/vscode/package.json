@@ -1,0 +1,28 @@
+{
+  "name": "artix-ai",
+  "displayName": "Artix AI",
+  "version": "0.1.0",
+  "publisher": "artix",
+  "description": "Plan, code and review with the Artix CLI (supervised only).",
+  "engines": { "vscode": "^1.85.0" },
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "categories": ["Other"],
+  "contributes": {
+    "commands": [
+      { "command": "artix.plan", "title": "Artix: Plan Story" },
+      { "command": "artix.code", "title": "Artix: Code (supervised)" },
+      { "command": "artix.review", "title": "Artix: Review Working Diff" }
+    ],
+    "configuration": {
+      "title": "Artix",
+      "properties": {
+        "artix.binary": { "type": "string", "default": "artix", "description": "Path to the artix executable." },
+        "artix.provider": { "type": "string", "default": "", "description": "anthropic, openai, gemini, grok, deepseek, mistral, ollama. API key is read from the environment." },
+        "artix.model": { "type": "string", "default": "" }
+      }
+    }
+  },
+  "scripts": { "build": "tsc -p .", "package": "vsce package" },
+  "devDependencies": { "@types/node": "^20.0.0", "@types/vscode": "^1.85.0", "typescript": "^5.4.0" }
+}
