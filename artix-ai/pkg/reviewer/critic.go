@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"artix/pkg/policy"
 	"socratix/pkg/model"
 	"socratix/pkg/runner"
 )
@@ -30,6 +31,32 @@ func RunnerCritic(r runner.AgentRunner, agent model.Agent) Critic {
 
 // SetCritic adds a model-backed review pass on top of the rule-based checks.
 func (r *AdversarialReviewer) SetCritic(c Critic) { r.critic = c }
+
+// SetCriticWithFamily registers a Critic along with its model family and verifies policy constraints.
+func (r *AdversarialReviewer) SetCriticWithFamily(c Critic, family string) error {
+	trimmed := strings.TrimSpace(family)
+	pol := policy.Active()
+	if pol.Reviewer.EnforceDisjointModelFamilies && r.coderFamily != "" && trimmed != "" {
+		if strings.EqualFold(r.coderFamily, trimmed) {
+			return fmt.Errorf("reviewer policy violation: critic model family %q matches coder family %q (disjoint model families required)", trimmed, r.coderFamily)
+		}
+	}
+	if len(pol.Reviewer.AllowedCriticFamilies) > 0 && trimmed != "" {
+		allowed := false
+		for _, f := range pol.Reviewer.AllowedCriticFamilies {
+			if strings.EqualFold(f, trimmed) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return fmt.Errorf("reviewer policy violation: critic model family %q not in allowedCriticFamilies", trimmed)
+		}
+	}
+	r.critic = c
+	r.criticFamily = trimmed
+	return nil
+}
 
 // SetMaxCriticDiffBytes configures the maximum diff size in bytes accepted for model review.
 func (r *AdversarialReviewer) SetMaxCriticDiffBytes(n int) {
