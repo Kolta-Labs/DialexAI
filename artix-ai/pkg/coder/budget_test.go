@@ -211,3 +211,135 @@ func TestG5_ReconciliationWithProviderReportedUsage(t *testing.T) {
 		t.Fatalf("expected reconciled cost %f, got: %f", expectedCost, b.UsedStoryCost)
 	}
 }
+
+// TestR2_5_ReconciliationThroughCoordinatorRunAndDeterministicModelPrice asserts that
+// when a provider reports actual usage differing from text estimation during a loop run,
+// the coordinator wires that usage into RecordRoundUsage so the ledger records the provider figure,
+// and uses the exact price from PriceTable matching opts.Model deterministically.
+func TestR2_5_ReconciliationThroughCoordinatorRunAndDeterministicModelPrice(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	reg := persona.NewRegistry("")
+	c, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(c, rev, driver, box)
+
+	storySpec := &spec.StorySpec{
+		ID:           "S-R2-5-RECON",
+		Title:        "Provider Usage Reconciliation",
+		TestCommands: []string{"grep '1' counter.txt"},
+	}
+
+	ledgerPath := filepath.Join(tempDir, ".artix", "ledger.json")
+	budget := &TokenBudget{
+		LedgerPath: ledgerPath,
+		TeamID:     "team-recon",
+		PriceTable: map[string]float64{
+			"gpt-4o-cheap":     0.001,
+			"gpt-4o-targeted":  0.020, // $0.020 per 1k tokens = $0.00002 per token
+			"claude-expensive": 0.100,
+		},
+		MaxStoryCost: 10.0,
+	}
+
+	// Provider reports 8500 tokens (diff text is only ~10 tokens)
+	reportedProviderTokens := 8500
+	mockUsage := &ProviderUsage{
+		PromptTokens:     7000,
+		CompletionTokens: 1500,
+		TotalTokens:      reportedProviderTokens,
+	}
+
+	opts := &LoopOptions{
+		MaxRounds:             1,
+		Budget:                budget,
+		Model:                 "gpt-4o-targeted",
+		TestCommandsConfirmed: true,
+		MockPatchGen: func(round int, feedback string) string {
+			return "--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+1\n"
+		},
+		CoderUsageTracker: func() *ProviderUsage {
+			return mockUsage
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, &repo.RepositoryContext{RootDir: tempDir}, nil, nil, opts)
+	if !res.Success {
+		t.Fatalf("expected successful coordinator run, failed with: %s", res.Error)
+	}
+
+	// 1. Budget's in-memory counters must reflect provider tokens, NOT estimate
+	if budget.UsedStoryTokens != reportedProviderTokens {
+		t.Fatalf("expected in-memory budget to record provider tokens %d, got: %d", reportedProviderTokens, budget.UsedStoryTokens)
+	}
+
+	// Expected cost: 8500 tokens * (0.020 / 1000) = $0.170
+	expectedCost := (float64(reportedProviderTokens) / 1000.0) * 0.020
+	if budget.UsedStoryCost < expectedCost-0.0001 || budget.UsedStoryCost > expectedCost+0.0001 {
+		t.Fatalf("expected cost $%.4f using model gpt-4o-targeted, got: $%.4f", expectedCost, budget.UsedStoryCost)
+	}
+
+	// 2. The file-locked ledger on disk must also equal the provider figure
+	ledgerBytes, err := os.ReadFile(ledgerPath)
+	if err != nil {
+		t.Fatalf("failed to read ledger file: %v", err)
+	}
+	var ledgerData sharedLedgerData
+	if err := json.Unmarshal(ledgerBytes, &ledgerData); err != nil {
+		t.Fatalf("failed to parse ledger json: %v", err)
+	}
+	if ledgerData.TeamTokens["team-recon"] != reportedProviderTokens {
+		t.Fatalf("expected team tokens in on-disk ledger to be %d, got: %d", reportedProviderTokens, ledgerData.TeamTokens["team-recon"])
+	}
+}
+
+// TestR2_5_MissingModelPriceRefusesWhenUSDCapSet asserts that when a USD cap is set,
+// if opts.Model is not found in PriceTable, the loop fails closed and refuses immediately.
+func TestR2_5_MissingModelPriceRefusesWhenUSDCapSet(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	reg := persona.NewRegistry("")
+	c, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(c, rev, driver, box)
+
+	storySpec := &spec.StorySpec{
+		ID:           "S-R2-5-MISSING",
+		Title:        "Missing Model Price Refusal",
+		TestCommands: []string{"grep '1' counter.txt"},
+	}
+
+	budget := &TokenBudget{
+		MaxStoryCost: 5.0, // USD cap set
+		PriceTable: map[string]float64{
+			"gpt-4o": 0.015,
+		},
+	}
+
+	// Pass an unknown model not in the price table
+	opts := &LoopOptions{
+		MaxRounds:             1,
+		Budget:                budget,
+		Model:                 "mystery-model-404",
+		TestCommandsConfirmed: true,
+		MockPatchGen: func(round int, feedback string) string {
+			return "--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+1\n"
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, &repo.RepositoryContext{RootDir: tempDir}, nil, nil, opts)
+	if res.Success {
+		t.Fatalf("expected run with unknown model under USD cap to be refused, but succeeded")
+	}
+	if !strings.Contains(strings.ToLower(res.Error), "mystery-model-404") || !strings.Contains(strings.ToLower(res.Error), "price") {
+		t.Fatalf("expected refusal error mentioning model and price, got: %s", res.Error)
+	}
+}
+
