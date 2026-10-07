@@ -1,12 +1,14 @@
 package audit
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -171,3 +173,358 @@ func TestRemoteHTTPSink(t *testing.T) {
 		t.Errorf("timeout waiting for remote HTTP sink delivery")
 	}
 }
+
+func TestSecretRedactionInAuditLog(t *testing.T) {
+	tempDir := t.TempDir()
+	logger := NewLogger(tempDir)
+
+	err := logger.Emit(AuditEvent{
+		EventType:   EventSecurityViolation,
+		Status:      "INFO",
+		StorySpecID: "STORY-SEC-1",
+		Actor:       "Bearer ghp_123456789012345678901234567890123456",
+		Details: map[string]any{
+			"authorization": "Bearer ya29.a0AfH6SMB_secret_bearer_token_123456789",
+			"github_token":  "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+			"config": map[string]any{
+				"apiKey": "super_secret_api_key_value",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Emit failed: %v", err)
+	}
+
+	data, err := os.ReadFile(logger.LogPath())
+	if err != nil {
+		t.Fatalf("failed to read log: %v", err)
+	}
+	raw := string(data)
+
+	// Ensure sensitive values are not present
+	if strings.Contains(raw, "ya29.a0AfH6SMB") {
+		t.Errorf("log leaked bearer token")
+	}
+	if strings.Contains(raw, "ghp_abcdefghijklmnopqrstuvwxyz0123456789") {
+		t.Errorf("log leaked GitHub PAT")
+	}
+	if strings.Contains(raw, "super_secret_api_key_value") {
+		t.Errorf("log leaked API key")
+	}
+
+	// Verify the hash chain still verifies
+	if _, err := VerifyLog(logger.LogPath()); err != nil {
+		t.Fatalf("verification failed for redacted log: %v", err)
+	}
+}
+
+func TestAuditLogFilePermissions(t *testing.T) {
+	tempDir := t.TempDir()
+	logger := NewLogger(tempDir)
+
+	_ = logger.Emit(AuditEvent{
+		EventType: EventSpecDeliberation,
+		Status:    "SUCCESS",
+	})
+
+	info, err := os.Stat(logger.LogPath())
+	if err != nil {
+		t.Fatalf("stat failed: %v", err)
+	}
+
+	// Mode should be 0600 (-rw-------)
+	perm := info.Mode().Perm()
+	if perm != 0600 {
+		t.Errorf("expected audit log permission 0600, got %o", perm)
+	}
+}
+
+func TestAuditAsymmetricSigningEd25519(t *testing.T) {
+	tempDir := t.TempDir()
+	logger := NewLogger(tempDir)
+	defer logger.Close()
+
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("ed25519.GenerateKey failed: %v", err)
+	}
+
+	logger.SetAsymmetricSigningKey(priv)
+
+	err = logger.Emit(AuditEvent{
+		EventType:   EventCodeConvergence,
+		Status:      "SUCCESS",
+		StorySpecID: "STORY-ASYM-1",
+		Actor:       "sec-ops",
+		Cost:        0.05,
+	})
+	if err != nil {
+		t.Fatalf("Emit failed: %v", err)
+	}
+
+	// Verify using public key (proves signature was generated with private key)
+	res, err := VerifyLogWithPubKey(logger.LogPath(), pub)
+	if err != nil {
+		t.Fatalf("VerifyLogWithPubKey failed: %v", err)
+	}
+	if res.ValidRecords != 1 {
+		t.Errorf("expected 1 valid record, got %d", res.ValidRecords)
+	}
+
+	// Verify with a different public key must fail
+	otherPub, _, _ := ed25519.GenerateKey(nil)
+	_, err = VerifyLogWithPubKey(logger.LogPath(), otherPub)
+	if err == nil {
+		t.Fatalf("expected verification failure with non-matching public key, got nil")
+	}
+}
+
+func TestAuditRemoteSinkSpooledRetry(t *testing.T) {
+	tempDir := t.TempDir()
+	logger := NewLogger(tempDir)
+	defer logger.Close()
+
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		att := attempts.Add(1)
+		if att < 2 {
+			// Fail first attempt to trigger spool worker retry
+			http.Error(w, "temporary gateway error", http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	logger.AddRemoteSink(policy.RemoteSinkConfig{
+		Type:     "http",
+		Endpoint: srv.URL,
+	})
+
+	err := logger.Emit(AuditEvent{
+		EventType: EventSpecDeliberation,
+		Status:    "SUCCESS",
+	})
+	if err != nil {
+		t.Fatalf("Emit failed: %v", err)
+	}
+
+	// Wait briefly for spool retry worker
+	deadline := time.Now().Add(2 * time.Second)
+	for attempts.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if attempts.Load() < 2 {
+		t.Errorf("expected at least 2 attempts from spooled retry worker, got %d", attempts.Load())
+	}
+}
+
+func TestG7_TamperLine(t *testing.T) {
+	tempDir := t.TempDir()
+	logger := NewLogger(tempDir)
+	defer logger.Close()
+
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	logger.SetAsymmetricSigningKey(priv)
+
+	_ = logger.Emit(AuditEvent{EventType: EventSpecDeliberation, Status: "SUCCESS", Cost: 0.01})
+	_ = logger.Emit(AuditEvent{EventType: EventCodeConvergence, Status: "SUCCESS", Cost: 0.05})
+	_ = logger.Emit(AuditEvent{EventType: EventReviewerVerdict, Status: "SUCCESS", Cost: 0.02})
+
+	logFile := logger.LogPath()
+	data, _ := os.ReadFile(logFile)
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+
+	// Tamper line 2
+	var evt AuditEvent
+	_ = json.Unmarshal([]byte(lines[1]), &evt)
+	evt.Cost = 999.99 // modified payload
+	tamperedLine, _ := json.Marshal(evt)
+	lines[1] = string(tamperedLine)
+	_ = os.WriteFile(logFile, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+
+	_, err := VerifyLogWithPubKey(logFile, pub)
+	if err == nil {
+		t.Fatalf("expected tamper detection on tampered line, got nil error")
+	}
+	if !strings.Contains(err.Error(), "tampering detected") {
+		t.Fatalf("expected error mentioning tampering detected, got: %v", err)
+	}
+}
+
+func TestG7_DeleteLine(t *testing.T) {
+	tempDir := t.TempDir()
+	logger := NewLogger(tempDir)
+	defer logger.Close()
+
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	logger.SetAsymmetricSigningKey(priv)
+
+	_ = logger.Emit(AuditEvent{EventType: EventSpecDeliberation, Status: "SUCCESS"})
+	_ = logger.Emit(AuditEvent{EventType: EventCodeConvergence, Status: "SUCCESS"})
+	_ = logger.Emit(AuditEvent{EventType: EventReviewerVerdict, Status: "SUCCESS"})
+
+	logFile := logger.LogPath()
+	data, _ := os.ReadFile(logFile)
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+
+	// Delete line 2
+	newLines := []string{lines[0], lines[2]}
+	_ = os.WriteFile(logFile, []byte(strings.Join(newLines, "\n")+"\n"), 0644)
+
+	_, err := VerifyLogWithPubKey(logFile, pub)
+	if err == nil {
+		t.Fatalf("expected tamper detection on deleted line, got nil error")
+	}
+	if !strings.Contains(err.Error(), "tampering detected") && !strings.Contains(err.Error(), "broken hash chain") {
+		t.Fatalf("expected broken hash chain or tampering detected, got: %v", err)
+	}
+}
+
+func TestG7_TruncateTail(t *testing.T) {
+	tempDir := t.TempDir()
+	logger := NewLogger(tempDir)
+	defer logger.Close()
+
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	logger.SetAsymmetricSigningKey(priv)
+
+	_ = logger.Emit(AuditEvent{EventType: EventSpecDeliberation, Status: "SUCCESS"})
+	_ = logger.Emit(AuditEvent{EventType: EventCodeConvergence, Status: "SUCCESS"})
+	_ = logger.Emit(AuditEvent{EventType: EventReviewerVerdict, Status: "SUCCESS"})
+
+	logFile := logger.LogPath()
+	data, _ := os.ReadFile(logFile)
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+
+	var lastEvt AuditEvent
+	_ = json.Unmarshal([]byte(lines[2]), &lastEvt)
+	expectedLastHash := lastEvt.RecordHash
+
+	// Truncate the tail: delete line 3
+	newLines := []string{lines[0], lines[1]}
+	_ = os.WriteFile(logFile, []byte(strings.Join(newLines, "\n")+"\n"), 0644)
+
+	_, err := VerifyLogWithOptions(logFile, VerifyOptions{
+		PubKey:           pub,
+		ExpectedCount:    3,
+		ExpectedLastHash: expectedLastHash,
+	})
+	if err == nil {
+		t.Fatalf("expected tamper detection on truncated tail, got nil error")
+	}
+	if !strings.Contains(err.Error(), "tail truncated") && !strings.Contains(err.Error(), "tampering detected") {
+		t.Fatalf("expected error mentioning tail truncated, got: %v", err)
+	}
+}
+
+func TestG7_ForgeWithHMACKeyFromPolicy(t *testing.T) {
+	tempDir := t.TempDir()
+	logger := NewLogger(tempDir)
+	defer logger.Close()
+
+	pub, _, _ := ed25519.GenerateKey(nil)
+
+	// Attacker tries to forge a record using HMAC key taken from policy file
+	hmacKey := "attacker-extracted-hmac-key"
+	logger.SetSigningKey(hmacKey)
+
+	_ = logger.Emit(AuditEvent{EventType: EventCodeConvergence, Status: "SUCCESS"})
+
+	logFile := logger.LogPath()
+
+	// Enterprise audit verification requires public key verification and must reject the HMAC forgery
+	_, err := VerifyLogWithPubKey(logFile, pub)
+	if err == nil {
+		t.Fatalf("expected verification failure for record forged with HMAC key, got nil error")
+	}
+	if !strings.Contains(err.Error(), "invalid ed25519 signature") && !strings.Contains(err.Error(), "tampering detected") {
+		t.Fatalf("expected ed25519 signature error, got: %v", err)
+	}
+}
+
+func TestG7_PrivateKeyOutsideSandboxRefusal(t *testing.T) {
+	tempDir := t.TempDir()
+	logger := NewLogger(tempDir)
+	defer logger.Close()
+
+	// Place private key inside sandbox/workspace directory
+	insidePath := filepath.Join(tempDir, "agent_accessible_private.key")
+	_ = os.WriteFile(insidePath, []byte("fake-key"), 0600)
+
+	err := logger.SetPrivateKeyPath(insidePath)
+	if err == nil {
+		t.Fatalf("expected error when private key path is inside sandbox-readable workspace, got nil")
+	}
+	if !strings.Contains(err.Error(), "sandbox-readable") && !strings.Contains(err.Error(), "outside sandbox") {
+		t.Fatalf("expected error mentioning sandbox path restriction, got: %v", err)
+	}
+}
+
+func TestG7_SinkOutageSpoolsAndRetriesWithoutDropping(t *testing.T) {
+	tempDir := t.TempDir()
+	logger := NewLogger(tempDir)
+	defer logger.Close()
+
+	var receivedCount atomic.Int32
+	var outageActive atomic.Bool
+	outageActive.Store(true)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if outageActive.Load() {
+			http.Error(w, "sink outage: 503 service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		receivedCount.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	logger.AddRemoteSink(policy.RemoteSinkConfig{
+		Type:     "http",
+		Endpoint: srv.URL,
+	})
+
+	// Emit 5 events while sink is suffering an outage
+	for i := 0; i < 5; i++ {
+		_ = logger.Emit(AuditEvent{
+			EventType: EventCodeConvergence,
+			Status:    "SUCCESS",
+			Round:     i + 1,
+		})
+	}
+
+	// Heal outage: sink is now operational
+	outageActive.Store(false)
+
+	// Wait for spooled retry worker to deliver all 5 events
+	deadline := time.Now().Add(3 * time.Second)
+	for receivedCount.Load() < 5 && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if receivedCount.Load() < 5 {
+		t.Fatalf("expected all 5 events to be delivered after sink recovered, but only received %d", receivedCount.Load())
+	}
+}
+
+func TestG7_SpoolLossIsItselfAudited(t *testing.T) {
+	tempDir := t.TempDir()
+	logger := NewLogger(tempDir)
+	defer logger.Close()
+
+	// Simulate unrecoverable spool loss
+	logger.RecordSpoolLoss("https://failing-sink.example.com", 10)
+
+	logFile := logger.LogPath()
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read log: %v", err)
+	}
+
+	if !strings.Contains(string(data), "audit.spool_loss") && !strings.Contains(string(data), "spool.loss") {
+		t.Fatalf("expected audit log to record audit.spool_loss event, got: %s", string(data))
+	}
+}
+

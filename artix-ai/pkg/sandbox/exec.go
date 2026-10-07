@@ -99,6 +99,15 @@ func (s *Sandbox) Run(ctx context.Context, cmdStr string, opts *ExecOptions) *Ex
 	defer cancel()
 
 	cmd, isolation := confine(cwd, cmdStr)
+	if cmd == nil || isolation == IsolationRefused {
+		return &ExecResult{
+			Command:    cmdStr,
+			Isolation:  IsolationRefused,
+			ExitCode:   126,
+			DurationMs: time.Since(start).Milliseconds(),
+			Error:      "sandbox confinement failure: enterprise mode requires kernel-level sandbox isolation (sandbox-exec or bwrap); unconfined execution refused",
+		}
+	}
 	cmd = exec.CommandContext(execCtx, cmd.Path, cmd.Args[1:]...)
 	cmd.Dir = cwd
 

@@ -2,11 +2,15 @@ package reviewer
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"artix/pkg/persona"
+	"artix/pkg/policy"
 	"artix/pkg/sandbox"
 	"artix/pkg/steering"
 	"socratix/pkg/model"
@@ -247,5 +251,470 @@ func TestCriticHardRejectsTruncatedDiff(t *testing.T) {
 		t.Fatalf("expected DIFF_TRUNCATED message in blocking issues, got: %v", v.BlockingIssues)
 	}
 }
+
+func TestReviewerRejectsProtectedPaths(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+
+	// Attempting to modify GitHub workflow
+	rc := &ReviewContext{
+		Diff: "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -1 +1 @@\n- old\n+ new",
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test", ExitCode: 0},
+		},
+	}
+	v := rev.Evaluate(rc)
+	if v.Approved || v.Status != StatusRejected {
+		t.Fatalf("expected rejection for protected path edit, got: %+v", v)
+	}
+	found := false
+	for _, issue := range v.BlockingIssues {
+		if strings.Contains(issue, "protected path violation") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected protected path violation message, got: %v", v.BlockingIssues)
+	}
+}
+
+func TestReviewerEnforcesTestIntegrity(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+
+	// Case 1: Test deletion
+	rcDelete := &ReviewContext{
+		Diff: "--- a/pkg/auth_test.go\n+++ b/pkg/auth_test.go\n@@ -10,3 +10,0 @@\n-func TestAuthRegression(t *testing.T) {\n-    t.Fail()\n-}",
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test", ExitCode: 0},
+		},
+	}
+	vDelete := rev.Evaluate(rcDelete)
+	if vDelete.Approved || vDelete.Status != StatusRejected {
+		t.Fatalf("expected rejection on test deletion, got: %+v", vDelete)
+	}
+
+	// Case 2: Test skip injection
+	rcSkip := &ReviewContext{
+		Diff: "--- a/pkg/auth_test.go\n+++ b/pkg/auth_test.go\n@@ -10,2 +10,3 @@\n func TestAuthRegression(t *testing.T) {\n+    t.Skip(\"skipping broken test\")\n     assertValid(t)\n }",
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test", ExitCode: 0},
+		},
+	}
+	vSkip := rev.Evaluate(rcSkip)
+	if vSkip.Approved || vSkip.Status != StatusRejected {
+		t.Fatalf("expected rejection on test skip injection, got: %+v", vSkip)
+	}
+}
+
+func TestSemanticASTTabooAndNoCommentFalsePositives(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	rev.SetGlobalTaboos(steering.GlobalTabooSpace{
+		ForbiddenArguments: []string{"No http.DefaultClient allowed"},
+	})
+
+	// Case 1: Taboo mention only inside a comment (should PASS - no false positive)
+	rcComment := &ReviewContext{
+		Diff: "--- a/client.go\n+++ b/client.go\n@@ -10,1 +10,2 @@\n func New() {\n+    // Note: No http.DefaultClient allowed here, use custom client\n+    c := &http.Client{}\n }",
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test", ExitCode: 0},
+		},
+	}
+	vComment := rev.Evaluate(rcComment)
+	if !vComment.Approved || vComment.Status != StatusApproved {
+		t.Fatalf("comment containing taboo should NOT cause false-positive rejection, got: %+v", vComment)
+	}
+
+	// Case 2: Actual AST usage of DefaultClient (should REJECT)
+	rcUsage := &ReviewContext{
+		Diff: "--- a/client.go\n+++ b/client.go\n@@ -10,1 +10,2 @@\n func Fetch() {\n+    resp, err := http.DefaultClient.Get(\"https://api.internal\")\n }",
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test", ExitCode: 0},
+		},
+	}
+	vUsage := rev.Evaluate(rcUsage)
+	if vUsage.Approved || vUsage.Status != StatusRejected {
+		t.Fatalf("actual code using DefaultClient MUST be rejected, got: %+v", vUsage)
+	}
+}
+
+func TestPolicyRestrictedPathsEnforcedInReviewer(t *testing.T) {
+	tempDir := t.TempDir()
+	policyFile := filepath.Join(tempDir, "policy_restricted.json")
+	pol := policy.Policy{
+		EnterpriseMode: true,
+		Reviewer: policy.ReviewerPolicyConfig{
+			RestrictedPaths: []string{"infra/terraform/", "k8s/overlays/"},
+		},
+	}
+	data, _ := json.Marshal(pol)
+	_ = os.WriteFile(policyFile, data, 0644)
+	key := "policy-restricted-key"
+	policy.SetTrustedKey("corp-test", key)
+	_ = policy.SignPolicyFile(policyFile, key)
+	policy.SetDefaultPolicyPath(policyFile)
+	defer func() {
+		policy.SetDefaultPolicyPath("/etc/artix/policy.json")
+		policy.ResetCache()
+	}()
+
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rc := &ReviewContext{
+		Diff: "--- a/infra/terraform/main.tf\n+++ b/infra/terraform/main.tf\n@@ -1,1 +1,2 @@\n+resource \"aws_s3_bucket\" \"b\" {}\n",
+		TestResults: []*sandbox.ExecResult{
+			{Command: "terraform validate", ExitCode: 0},
+		},
+	}
+	v := rev.Evaluate(rc)
+	if v.Approved || v.Status != StatusRejected {
+		t.Fatalf("expected rejection modifying org-restricted path 'infra/terraform/', got: %+v", v)
+	}
+}
+
+func TestDisjointModelFamiliesEnforcedInReviewer(t *testing.T) {
+	tempDir := t.TempDir()
+	policyFile := filepath.Join(tempDir, "policy_disjoint.json")
+	pol := policy.Policy{
+		EnterpriseMode: true,
+		Reviewer: policy.ReviewerPolicyConfig{
+			EnforceDisjointModelFamilies: true,
+		},
+	}
+	data, _ := json.Marshal(pol)
+	_ = os.WriteFile(policyFile, data, 0644)
+	key := "policy-disjoint-key"
+	policy.SetTrustedKey("corp-test", key)
+	_ = policy.SignPolicyFile(policyFile, key)
+	policy.SetDefaultPolicyPath(policyFile)
+	defer func() {
+		policy.SetDefaultPolicyPath("/etc/artix/policy.json")
+		policy.ResetCache()
+	}()
+
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCoderFamily("anthropic")
+
+	// Case 1: Matching model family must be rejected by SetCriticWithFamily
+	err := rev.SetCriticWithFamily(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true}`, nil
+	}, "anthropic")
+	if err == nil {
+		t.Fatalf("expected SetCriticWithFamily error when critic family matches coder family, got nil")
+	}
+
+	// Case 2: Disjoint family succeeds
+	err = rev.SetCriticWithFamily(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true}`, nil
+	}, "openai")
+	if err != nil {
+		t.Fatalf("expected SetCriticWithFamily success with disjoint family, got: %v", err)
+	}
+
+	// Case 3: In evaluation, matching family triggers rejection
+	rev.SetCriticFamily("anthropic") // artificially set to match
+	rc := &ReviewContext{
+		Diff: "--- a/foo.go\n+++ b/foo.go\n@@ -1,1 +1,2 @@\n+package foo\n",
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test", ExitCode: 0},
+		},
+	}
+	v := rev.Evaluate(rc)
+	if v.Approved || v.Status != StatusRejected {
+		t.Fatalf("expected rejection when critic family matches coder family, got: %+v", v)
+	}
+}
+
+func TestDeepSemanticASTTaboosNonStatementDiffs(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetGlobalTaboos(steering.GlobalTabooSpace{
+		ForbiddenArguments: []string{
+			"No DefaultTransport allowed",
+			"No InsecureSkipVerify allowed",
+			"No raw shell exec",
+		},
+	})
+
+	// Diff with package-level code (not a function body)
+	diffPackageLevel := `--- a/net.go
++++ b/net.go
+@@ -1,5 +1,6 @@
++package net
++import "crypto/tls"
++var tr = &http.Transport{
++    TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
++}
+`
+	rc := &ReviewContext{
+		Diff: diffPackageLevel,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test", ExitCode: 0},
+		},
+	}
+	v := rev.Evaluate(rc)
+	if v.Approved || v.Status != StatusRejected {
+		t.Fatalf("expected rejection for InsecureSkipVerify in package-level declaration, got: %+v", v)
+	}
+}
+
+func TestCheckProtectedPaths_IncludesBuildScripts(t *testing.T) {
+	buildScriptDiff := `--- a/Makefile
++++ b/Makefile
+@@ -1 +1 @@
+-test: go test
++test: echo bypassing
+--- a/package.json
++++ b/package.json
+@@ -1 +1 @@
+-"scripts": {"test": "jest"}
++"scripts": {"test": "exit 0"}
+`
+	violations := CheckProtectedPaths(buildScriptDiff)
+	if len(violations) < 2 {
+		t.Fatalf("expected at least 2 protected path violations for Makefile and package.json, got: %v", violations)
+	}
+}
+
+func TestCheckTestCountAndCoverageDeltaGates(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+
+	// 1. Test count decreased from 10 to 7 -> REJECT
+	ctxCount := &ReviewContext{
+		Diff:            "--- a/feature.go\n+++ b/feature.go\n@@ -1 +1 @@\n-old\n+new",
+		TestCountBefore: 10,
+		TestCountAfter:  7,
+		TestResults:     []*sandbox.ExecResult{{Command: "go test", ExitCode: 0}},
+	}
+	verdictCount := rev.Evaluate(ctxCount)
+	if verdictCount.Approved || verdictCount.Status != StatusRejected {
+		t.Errorf("expected rejection when test count decreases from 10 to 7")
+	}
+
+	// 2. Coverage dropped from 85% to 70% -> REJECT
+	ctxCov := &ReviewContext{
+		Diff:           "--- a/feature.go\n+++ b/feature.go\n@@ -1 +1 @@\n-old\n+new",
+		CoverageBefore: 0.85,
+		CoverageAfter:  0.70,
+		TestResults:    []*sandbox.ExecResult{{Command: "go test", ExitCode: 0}},
+	}
+	verdictCov := rev.Evaluate(ctxCov)
+	if verdictCov.Approved || verdictCov.Status != StatusRejected {
+		t.Errorf("expected rejection when code coverage drops significantly")
+	}
+}
+
+func TestSemanticASTTaboos_WholeFileParsing(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "service.go")
+	content := `package service
+
+import "net/http"
+
+func Fetch() {
+	_ = http.DefaultClient.Get("https://example.com")
+}
+`
+	if err := os.WriteFile(sourceFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	diff := `--- a/service.go
++++ b/service.go
+@@ -5,1 +5,1 @@
+-func Fetch()
++func Fetch()
+`
+	taboos := []string{"No DefaultClient"}
+	violations := CheckSemanticASTTaboos(diff, taboos, tmp)
+	if len(violations) == 0 {
+		t.Fatalf("expected whole file AST parsing to detect DefaultClient taboo in service.go")
+	}
+}
+
+func TestAdversarial_EarlyReturnAtTopOfTest(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "service_test.go")
+	content := `package service
+import "testing"
+func TestProcess(t *testing.T) {
+	return
+	t.Fatal("should have run")
+}
+`
+	_ = os.WriteFile(sourceFile, []byte(content), 0644)
+	diff := "diff --git a/service_test.go b/service_test.go\n--- a/service_test.go\n+++ b/service_test.go\n@@ -3,1 +3,2 @@\n+ return\n"
+
+	violations := CheckTestIntegrityWholeFile(tmp, diff)
+	if len(violations) == 0 {
+		t.Fatalf("expected early return at top of test to be rejected by test integrity analysis")
+	}
+}
+
+func TestAdversarial_RenameTestToNonTestName(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "service_test.go")
+	content := `package service
+import "testing"
+func OldProcess(t *testing.T) {
+	t.Log("no longer a test")
+}
+`
+	_ = os.WriteFile(sourceFile, []byte(content), 0644)
+	diff := "diff --git a/service_test.go b/service_test.go\n--- a/service_test.go\n+++ b/service_test.go\n@@ -3,1 +3,1 @@\n-func TestProcess(t *testing.T)\n+func OldProcess(t *testing.T)\n"
+
+	violations := CheckTestIntegrityWholeFile(tmp, diff)
+	if len(violations) == 0 {
+		t.Fatalf("expected renamed test to be caught by test integrity analysis")
+	}
+}
+
+func TestAdversarial_MoveAssertionsIntoUncalledHelper(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "service_test.go")
+	content := `package service
+import "testing"
+func uncalledHelper(t *testing.T) {
+	t.Fatal("assertion hidden in uncalled helper")
+}
+func TestMainFlow(t *testing.T) {
+	// uncalledHelper is never executed
+}
+`
+	_ = os.WriteFile(sourceFile, []byte(content), 0644)
+	diff := "diff --git a/service_test.go b/service_test.go\n--- a/service_test.go\n+++ b/service_test.go\n@@ -3,2 +3,2 @@\n+func uncalledHelper(t *testing.T)\n"
+
+	violations := CheckTestIntegrityWholeFile(tmp, diff)
+	if len(violations) == 0 {
+		t.Fatalf("expected assertion hidden in uncalled helper to be rejected")
+	}
+}
+
+func TestAdversarial_EmptyTRunBody(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "service_test.go")
+	content := `package service
+import "testing"
+func TestSubtests(t *testing.T) {
+	t.Run("empty subtest", func(t *testing.T) {})
+}
+`
+	_ = os.WriteFile(sourceFile, []byte(content), 0644)
+	diff := "diff --git a/service_test.go b/service_test.go\n--- a/service_test.go\n+++ b/service_test.go\n@@ -4,1 +4,1 @@\n+ t.Run(\"empty subtest\", func(t *testing.T) {})\n"
+
+	violations := CheckTestIntegrityWholeFile(tmp, diff)
+	if len(violations) == 0 {
+		t.Fatalf("expected empty t.Run body to be rejected")
+	}
+}
+
+func TestAdversarial_BuildTagTestFileOut(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "service_test.go")
+	content := `//go:build ignore
+
+package service
+import "testing"
+func TestDisabled(t *testing.T) {
+	t.Fatal("excluded from build")
+}
+`
+	_ = os.WriteFile(sourceFile, []byte(content), 0644)
+	diff := "diff --git a/service_test.go b/service_test.go\n--- a/service_test.go\n+++ b/service_test.go\n@@ -1,1 +1,3 @@\n+//go:build ignore\n"
+
+	violations := CheckTestIntegrityWholeFile(tmp, diff)
+	if len(violations) == 0 {
+		t.Fatalf("expected //go:build ignore on test file to be rejected")
+	}
+}
+
+func TestAdversarial_AliasImportTaboo(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "client.go")
+	// The import of net/http is aliased to h. The diff only touches the function body.
+	content := `package client
+
+import h "net/http"
+
+func MakeRequest() {
+	_ = h.DefaultClient.Get("https://example.com")
+}
+`
+	_ = os.WriteFile(sourceFile, []byte(content), 0644)
+	// The diff does not mention net/http at all, only h.DefaultClient
+	diff := "diff --git a/client.go b/client.go\n--- a/client.go\n+++ b/client.go\n@@ -5,1 +5,2 @@\n+	_ = h.DefaultClient.Get(\"https://example.com\")\n"
+
+	violations := CheckSemanticASTTaboos(diff, []string{"Forbidden package net/http"}, tmp)
+	if len(violations) == 0 {
+		t.Fatalf("expected aliased import h (\"net/http\") usage to be caught by AST taboo analysis")
+	}
+}
+
+func TestAdversarial_TabooViaReflectionOrConcat(t *testing.T) {
+	tmp := t.TempDir()
+	sourceFile := filepath.Join(tmp, "reflect_call.go")
+	content := `package client
+import "reflect"
+func Run() {
+	_ = reflect.ValueOf(nil)
+}
+`
+	_ = os.WriteFile(sourceFile, []byte(content), 0644)
+	diff := "diff --git a/reflect_call.go b/reflect_call.go\n--- a/reflect_call.go\n+++ b/reflect_call.go\n@@ -1,1 +1,4 @@\n+import \"reflect\"\n"
+
+	violations := CheckSemanticASTTaboos(diff, []string{"No Reflection"}, tmp)
+	if len(violations) == 0 {
+		t.Fatalf("expected reflection taboo to be caught by AST analysis")
+	}
+}
+
+func TestAdversarial_EditMakefileOrScriptUsedByTestCommand(t *testing.T) {
+	// A script used by test command (e.g. ./scripts/run_tests.sh) modified by patch
+	diffScript := "diff --git a/scripts/run_tests.sh b/scripts/run_tests.sh\n--- a/scripts/run_tests.sh\n+++ b/scripts/run_tests.sh\n@@ -1,1 +1,1 @@\n-go test ./...\n+exit 0\n"
+	
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved": true, "blocking": [], "warnings": []}`, nil
+	})
+	ctx := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diffScript,
+		TestResults: []*sandbox.ExecResult{{Command: "./scripts/run_tests.sh", ExitCode: 0}},
+	}
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected modification to test script/Makefile indirection to be rejected by Reviewer pre-filter")
+	}
+}
+
+func TestAdversarial_NonGoLanguageFailsClosedUnreviewed(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	// Configure a critic that would approve if called
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved": true, "blocking": [], "warnings": []}`, nil
+	})
+
+	ctx := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: `diff --git a/Service.kt b/Service.kt
+--- a/Service.kt
++++ b/Service.kt
+@@ -1,1 +1,2 @@
++fun doRiskyThings() {}
+`,
+		TestResults: []*sandbox.ExecResult{{Command: "echo ok", ExitCode: 0}},
+	}
+
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected non-Go file without semantic rule runner to NOT be approved")
+	}
+	if verdict.Status != StatusUnreviewed {
+		t.Fatalf("expected StatusUnreviewed when non-Go file has no semantic runner, got status: %s", verdict.Status)
+	}
+}
+
+
+
 
 

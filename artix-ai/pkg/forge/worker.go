@@ -3,6 +3,7 @@ package forge
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,16 +42,35 @@ type RemoteWorkerResult struct {
 
 // RemoteWorker coordinates server-side autonomous repository tasks.
 type RemoteWorker struct {
-	workRoot string
-	registry *persona.Registry
+	workRoot                       string
+	registry                       *persona.Registry
+	allowedCloneHosts              []string
+	allowInsecureLocalCloneForTest bool
 }
 
 // NewRemoteWorker creates a remote worker using a base directory for ephemeral clones.
-func NewRemoteWorker(workRoot string, registry *persona.Registry) *RemoteWorker {
+func NewRemoteWorker(workRoot string, registry *persona.Registry, allowedHosts ...string) *RemoteWorker {
 	_ = os.MkdirAll(workRoot, 0755)
+	hosts := []string{"github.com", "gitlab.com"}
+	if len(allowedHosts) > 0 {
+		hosts = allowedHosts
+	}
 	return &RemoteWorker{
-		workRoot: workRoot,
-		registry: registry,
+		workRoot:          workRoot,
+		registry:          registry,
+		allowedCloneHosts: hosts,
+	}
+}
+
+// SetAllowInsecureLocalCloneForTest permits local file clones strictly within unit/integration tests.
+func (w *RemoteWorker) SetAllowInsecureLocalCloneForTest(allow bool) {
+	w.allowInsecureLocalCloneForTest = allow
+}
+
+// SetAllowedCloneHosts configures the trusted repository hosts for cloning.
+func (w *RemoteWorker) SetAllowedCloneHosts(hosts []string) {
+	if len(hosts) > 0 {
+		w.allowedCloneHosts = hosts
 	}
 }
 
@@ -73,9 +93,36 @@ func (w *RemoteWorker) Execute(ctx context.Context, task *RemoteWorkerTask) *Rem
 	_ = os.MkdirAll(cloneDir, 0755)
 	defer os.RemoveAll(cloneDir)
 
+	// Validate clone URL strictly: must be valid URL, scheme must be https, and hostname must be in allowedCloneHosts
+	u, err := url.Parse(task.Target.CloneURL)
+	if !w.allowInsecureLocalCloneForTest {
+		if err != nil || u == nil || u.Scheme != "https" || u.Hostname() == "" {
+			res.Error = fmt.Sprintf("clone refused: clone URL %q is invalid, non-https, or missing hostname", task.Target.CloneURL)
+			return res
+		}
+		host := strings.ToLower(u.Hostname())
+		allowed := false
+		for _, h := range w.allowedCloneHosts {
+			if host == strings.ToLower(h) || strings.HasSuffix(host, "."+strings.ToLower(h)) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			res.Error = fmt.Sprintf("clone refused: host %q is not in allowed clone hosts allowlist %v", host, w.allowedCloneHosts)
+			return res
+		}
+	}
+
 	// 1. Clone repository
-	authURL := formatAuthURL(task.Target.CloneURL, task.Auth)
-	cloneCmd := exec.Command("git", "clone", "--depth", "50", authURL, cloneDir)
+	var cloneCmd *exec.Cmd
+	if task.Auth.Token != "" && strings.HasPrefix(task.Target.CloneURL, "https://") {
+		// Pass token securely via git extraHeader to prevent token leakage in ps args or .git/config
+		cloneCmd = exec.Command("git", "-c", fmt.Sprintf("http.extraHeader=Authorization: Bearer %s", task.Auth.Token), "clone", "--depth", "50", task.Target.CloneURL, cloneDir)
+	} else {
+		authURL := formatAuthURL(task.Target.CloneURL, task.Auth)
+		cloneCmd = exec.Command("git", "clone", "--depth", "50", authURL, cloneDir)
+	}
 	if err := cloneCmd.Run(); err != nil {
 		res.Error = fmt.Sprintf("failed to clone repository: %v", err)
 		return res
@@ -187,15 +234,6 @@ func (w *RemoteWorker) Execute(ctx context.Context, task *RemoteWorkerTask) *Rem
 }
 
 func formatAuthURL(rawURL string, auth ForgeAuth) string {
-	if auth.Token == "" || strings.HasPrefix(rawURL, "git@") {
-		return rawURL
-	}
-
-	// Embed token for https cloning: https://x-access-token:<token>@github.com/...
-	if strings.HasPrefix(rawURL, "https://") {
-		trimmed := strings.TrimPrefix(rawURL, "https://")
-		return fmt.Sprintf("https://oauth2:%s@%s", auth.Token, trimmed)
-	}
-
+	// Tokens must never be embedded in URLs (prevents leakage via process table and git remote config)
 	return rawURL
 }

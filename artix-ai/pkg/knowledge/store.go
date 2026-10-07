@@ -218,6 +218,21 @@ func (s *Store) List() ([]KnowledgeItem, error) {
 	return items, nil
 }
 
+// ListActive returns only non-expired knowledge items honoring TTL expiration.
+func (s *Store) ListActive() ([]KnowledgeItem, error) {
+	all, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	var active []KnowledgeItem
+	for _, ki := range all {
+		if !ki.IsExpired() {
+			active = append(active, ki)
+		}
+	}
+	return active, nil
+}
+
 // Delete removes a Knowledge Item from the project store.
 func (s *Store) Delete(id string) error {
 	s.mu.Lock()

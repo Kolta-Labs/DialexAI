@@ -3,9 +3,11 @@ package reviewer
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"artix/pkg/persona"
+	"artix/pkg/policy"
 	"artix/pkg/sandbox"
 	"artix/pkg/steering"
 	"socratix/pkg/model"
@@ -35,6 +37,8 @@ type AdversarialReviewer struct {
 	persona            model.Persona
 	registry           *persona.Registry
 	critic             Critic
+	coderFamily        string
+	criticFamily       string
 	maxCriticDiffBytes int
 	globalTaboos       steering.GlobalTabooSpace
 }
@@ -57,6 +61,16 @@ func NewAdversarialReviewer(registry *persona.Registry) *AdversarialReviewer {
 	}
 }
 
+// SetCoderFamily configures the model family of the coder agent (e.g. "anthropic", "openai").
+func (r *AdversarialReviewer) SetCoderFamily(family string) {
+	r.coderFamily = strings.TrimSpace(family)
+}
+
+// SetCriticFamily configures the model family of the critic agent (e.g. "openai", "google").
+func (r *AdversarialReviewer) SetCriticFamily(family string) {
+	r.criticFamily = strings.TrimSpace(family)
+}
+
 // SetGlobalTaboos sets workspace-wide taboo constraints.
 func (r *AdversarialReviewer) SetGlobalTaboos(gt steering.GlobalTabooSpace) {
 	r.globalTaboos = gt
@@ -70,6 +84,11 @@ type ReviewContext struct {
 	SteeringContext  *steering.PersonaSteeringContext
 	Ctx              context.Context
 	Criteria         []string
+	WorkspaceDir     string
+	TestCountBefore  int
+	TestCountAfter   int
+	CoverageBefore   float64
+	CoverageAfter    float64
 }
 
 // Evaluate performs deterministic pre-filtering (tests, diff, taboos, static analyzers) and
@@ -110,6 +129,85 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 		verdict.Warnings = append(verdict.Warnings, "No test commands were run; pre-filter verified diff only.")
 	}
 
+	// 2b. Deterministic Pre-Filter: Protected Paths Validation (including org-configured RestrictedPaths)
+	pol := policy.Active()
+	protectedViolations := CheckProtectedPaths(ctx.Diff, pol.Reviewer.RestrictedPaths...)
+	if len(protectedViolations) > 0 {
+		verdict.Approved = false
+		verdict.Status = StatusRejected
+		verdict.BlockingIssues = append(verdict.BlockingIssues, protectedViolations...)
+	}
+
+	// 2bb. Deterministic Pre-Filter: Disjoint Model Families Enforcement
+	if pol.Reviewer.EnforceDisjointModelFamilies && r.critic != nil {
+		if r.coderFamily != "" && r.criticFamily != "" && strings.EqualFold(r.coderFamily, r.criticFamily) {
+			verdict.Approved = false
+			verdict.Status = StatusRejected
+			verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("reviewer policy violation: critic model family %q matches coder family %q (disjoint model families required)", r.criticFamily, r.coderFamily))
+		}
+	}
+
+	// 2c. Deterministic Pre-Filter: Test Integrity Validation (no deleting/skipping tests)
+	testIntegrityViolations := CheckTestIntegrity(ctx.Diff)
+	if len(testIntegrityViolations) > 0 {
+		verdict.Approved = false
+		verdict.Status = StatusRejected
+		verdict.BlockingIssues = append(verdict.BlockingIssues, testIntegrityViolations...)
+	}
+
+	// 2cc. Deterministic Pre-Filter: Test Count & Coverage Delta Gates
+	if ctx.TestCountBefore > 0 && ctx.TestCountAfter < ctx.TestCountBefore {
+		verdict.Approved = false
+		verdict.Status = StatusRejected
+		verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("test integrity violation: test count decreased from %d to %d (test elimination is strictly forbidden)", ctx.TestCountBefore, ctx.TestCountAfter))
+	}
+	if ctx.CoverageBefore > 0 && ctx.CoverageAfter > 0 && ctx.CoverageAfter < ctx.CoverageBefore-0.01 {
+		verdict.Approved = false
+		verdict.Status = StatusRejected
+		verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("test coverage gate violation: test coverage decreased from %.2f%% to %.2f%%", ctx.CoverageBefore*100, ctx.CoverageAfter*100))
+	}
+
+	// 2d. Deterministic Pre-Filter: Script/Makefile Indirection Detection
+	touchedFiles := extractTouchedFiles(ctx.Diff)
+	for _, tr := range ctx.TestResults {
+		for _, tf := range touchedFiles {
+			if isScriptOrBuildFile(tf) {
+				base := filepath.Base(tf)
+				if strings.Contains(tr.Command, tf) || strings.Contains(tr.Command, "./"+tf) || (base != "" && strings.Contains(tr.Command, base)) {
+					verdict.Approved = false
+					verdict.Status = StatusRejected
+					verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("test integrity violation: test command %q calls modified script/Makefile %q", tr.Command, tf))
+				}
+			}
+		}
+	}
+
+	// 2e. Deterministic Pre-Filter: Whole-File Post-Patch Test Integrity
+	if ctx.WorkspaceDir != "" {
+		wholeFileViolations := CheckTestIntegrityWholeFile(ctx.WorkspaceDir, ctx.Diff)
+		if len(wholeFileViolations) > 0 {
+			verdict.Approved = false
+			verdict.Status = StatusRejected
+			verdict.BlockingIssues = append(verdict.BlockingIssues, wholeFileViolations...)
+		}
+	}
+
+	// 2f. Deterministic Pre-Filter: Fail Closed for Non-Go Languages without Semantic Runner
+	hasNonGo := false
+	for _, tf := range touchedFiles {
+		ext := filepath.Ext(tf)
+		if ext == ".kt" || ext == ".swift" || ext == ".ts" || ext == ".py" || ext == ".js" {
+			hasNonGo = true
+			break
+		}
+	}
+	if hasNonGo && len(ctx.AnalyzerFindings) == 0 {
+		verdict.Approved = false
+		verdict.Status = StatusUnreviewed
+		verdict.BlockingIssues = append(verdict.BlockingIssues, "UNREVIEWED: diff touches non-Go files (.kt, .swift, .ts, .py) and no semantic rule runner (Konsist/Detekt/Semgrep/SwiftLint) is configured; fail-closed")
+		return verdict
+	}
+
 	// 3. Deterministic Pre-Filter: Static Analyzer Findings
 	for _, f := range ctx.AnalyzerFindings {
 		if f.Severity == "ERROR" {
@@ -121,7 +219,7 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 		}
 	}
 
-	// 4. Deterministic Pre-Filter: Taboo Space Violations (Persona Taboos + Global Taboos)
+	// 4. Deterministic Pre-Filter: Semantic AST & Taboo Space Violations (Persona Taboos + Global Taboos)
 	tabooList := make([]string, 0)
 	if ctx.SteeringContext != nil {
 		tabooList = append(tabooList, ctx.SteeringContext.Taboos.ForbiddenArguments...)
@@ -129,26 +227,11 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 	}
 	tabooList = append(tabooList, r.globalTaboos.ForbiddenArguments...)
 
-	diffLower := strings.ToLower(ctx.Diff)
-	for _, taboo := range tabooList {
-		lowerTaboo := strings.ToLower(strings.TrimSpace(taboo))
-		if lowerTaboo == "" {
-			continue
-		}
-		matched := false
-		if strings.Contains(lowerTaboo, "raw sqlite") && strings.Contains(diffLower, "android.database.sqlite") {
-			matched = true
-		} else if strings.Contains(lowerTaboo, "blocking main thread") && strings.Contains(ctx.Diff, "Thread.sleep") {
-			matched = true
-		} else if strings.Contains(diffLower, lowerTaboo) {
-			matched = true
-		}
-
-		if matched {
-			verdict.Approved = false
-			verdict.Status = StatusRejected
-			verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("Violates Taboo: %s", taboo))
-		}
+	tabooViolations := CheckSemanticASTTaboos(ctx.Diff, tabooList, ctx.WorkspaceDir)
+	if len(tabooViolations) > 0 {
+		verdict.Approved = false
+		verdict.Status = StatusRejected
+		verdict.BlockingIssues = append(verdict.BlockingIssues, tabooViolations...)
 	}
 
 	// If pre-filter failed, reject immediately without calling model
@@ -195,4 +278,16 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 	}
 
 	return verdict
+}
+
+func isScriptOrBuildFile(path string) bool {
+	base := filepath.Base(path)
+	ext := strings.ToLower(filepath.Ext(path))
+	if base == "Makefile" || base == "makefile" || base == "GNUmakefile" {
+		return true
+	}
+	if ext == ".sh" || ext == ".bash" || ext == ".zsh" || ext == ".py" || ext == ".rb" || ext == ".pl" {
+		return true
+	}
+	return false
 }

@@ -1,0 +1,6 @@
+{
+  "name": "artix",
+  "version": "0.1.0",
+  "description": "Artix AI plan -> code -> review workflow via the artix CLI (supervised only).",
+  "commands": "./commands"
+}

@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,22 +15,25 @@ import (
 
 // Server implements a Language Server Protocol 3.17 backend for Artix AI.
 type Server struct {
-	rootDir   string
-	in        *bufio.Reader
-	out       io.Writer
-	docs      map[string]string
-	docsMu    sync.RWMutex
-	running   bool
-	runningMu sync.Mutex
+	rootDir         string
+	in              *bufio.Reader
+	out             io.Writer
+	docs            map[string]string
+	docsMu          sync.RWMutex
+	running         bool
+	runningMu       sync.Mutex
+	inFlightCancels map[string]context.CancelFunc
+	inFlightMu      sync.Mutex
 }
 
 // NewServer creates a new LSP server instance.
 func NewServer(rootDir string, in io.Reader, out io.Writer) *Server {
 	return &Server{
-		rootDir: rootDir,
-		in:      bufio.NewReader(in),
-		out:     out,
-		docs:    make(map[string]string),
+		rootDir:         rootDir,
+		in:              bufio.NewReader(in),
+		out:             out,
+		docs:            make(map[string]string),
+		inFlightCancels: make(map[string]context.CancelFunc),
 	}
 }
 
@@ -138,6 +142,37 @@ func (s *Server) writeMessage(payload []byte) {
 }
 
 func (s *Server) handleRequest(req *LSPRequest) {
+	if req.Method == "$/cancelRequest" {
+		var p CancelParams
+		if err := json.Unmarshal(req.Params, &p); err == nil && p.ID != nil {
+			idStr := fmt.Sprintf("%v", p.ID)
+			s.inFlightMu.Lock()
+			if cancel, exists := s.inFlightCancels[idStr]; exists {
+				cancel()
+				delete(s.inFlightCancels, idStr)
+			}
+			s.inFlightMu.Unlock()
+		}
+		return
+	}
+
+	var ctx context.Context
+	var cancel context.CancelFunc
+	var idStr string
+	if req.ID != nil {
+		idStr = fmt.Sprintf("%v", req.ID)
+		ctx, cancel = context.WithCancel(context.Background())
+		s.inFlightMu.Lock()
+		s.inFlightCancels[idStr] = cancel
+		s.inFlightMu.Unlock()
+		defer func() {
+			s.inFlightMu.Lock()
+			delete(s.inFlightCancels, idStr)
+			s.inFlightMu.Unlock()
+			cancel()
+		}()
+	}
+
 	switch req.Method {
 	case "initialize":
 		result := map[string]interface{}{
@@ -209,6 +244,10 @@ func (s *Server) handleRequest(req *LSPRequest) {
 		s.sendResponse(req.ID, actions, nil)
 
 	case "textDocument/codeLens":
+		if ctx != nil && ctx.Err() != nil {
+			s.sendResponse(req.ID, nil, &LSPError{Code: CodeRequestCancelled, Message: "Request cancelled"})
+			return
+		}
 		var p CodeLensParams
 		_ = json.Unmarshal(req.Params, &p)
 		lenses := []CodeLens{

@@ -89,3 +89,88 @@ func TestEnterpriseModeBlocksSandboxEscape(t *testing.T) {
 	}
 }
 
+func TestEnterpriseModeFailClosedRefusal(t *testing.T) {
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+	// Clear PATH so LookPath fails for sandbox-exec and bwrap
+	t.Setenv("PATH", "")
+
+	box := NewSandbox(t.TempDir())
+	res := box.Run(context.Background(), "echo fail-closed", nil)
+	if res.Isolation != IsolationRefused {
+		t.Fatalf("expected IsolationRefused in enterprise mode when no sandbox tool is available, got: %s", res.Isolation)
+	}
+	if res.ExitCode != 126 {
+		t.Errorf("expected exit code 126 for refused sandbox execution, got %d", res.ExitCode)
+	}
+	if res.Success() {
+		t.Errorf("refused sandbox execution must not succeed")
+	}
+}
+
+func TestSandboxBlocksSensitiveCredentialsRead(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		if _, err := exec.LookPath("bwrap"); err != nil {
+			t.Skip("skipping credential read deny test: no sandbox available on this OS")
+		}
+	}
+
+	fakeHome := t.TempDir()
+	sshDir := filepath.Join(fakeHome, ".ssh")
+	if err := os.MkdirAll(sshDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	secretFile := filepath.Join(sshDir, "id_ed25519")
+	if err := os.WriteFile(secretFile, []byte("SUPER_SECRET_KEY"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("HOME", fakeHome)
+	ws := t.TempDir()
+	box := NewSandbox(ws)
+
+	res := box.Run(context.Background(), "cat "+secretFile, nil)
+	if res.Success() {
+		t.Fatalf("sandbox must deny reading sensitive ssh credential from %s, but read succeeded: %s", secretFile, res.Stdout)
+	}
+}
+
+func TestSandboxBlocksArtixHomeDirectoryReadAndWrite(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		if _, err := exec.LookPath("bwrap"); err != nil {
+			t.Skip("skipping artix home sandbox test: no sandbox available on this OS")
+		}
+	}
+
+	fakeHome := t.TempDir()
+	artixDir := filepath.Join(fakeHome, ".artix")
+	if err := os.MkdirAll(artixDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	personaFile := filepath.Join(artixDir, "persona.json")
+	if err := os.WriteFile(personaFile, []byte("SENSITIVE_STEERING_DATA"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("HOME", fakeHome)
+	ws := t.TempDir()
+	box := NewSandbox(ws)
+
+	// 1. Read must be denied
+	resRead := box.Run(context.Background(), "cat "+personaFile, nil)
+	if resRead.Success() {
+		t.Fatalf("sandbox must deny reading ~/.artix files, but succeeded: %s", resRead.Stdout)
+	}
+
+	// 2. Write to ~/.artix must be denied (prevent poisoning of global state)
+	poisonFile := filepath.Join(artixDir, "poison.json")
+	resWrite := box.Run(context.Background(), "echo poisoned > "+poisonFile, nil)
+	if resWrite.Success() {
+		t.Fatalf("sandbox must deny writing to ~/.artix, but succeeded")
+	}
+	if _, err := os.Stat(poisonFile); err == nil {
+		t.Fatalf("poison file was created inside ~/.artix by sandboxed code")
+	}
+}
+
+
+

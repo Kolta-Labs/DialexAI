@@ -2,6 +2,7 @@ package audit
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -11,12 +12,60 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"artix/pkg/policy"
 )
+
+var (
+	bearerRegex    = regexp.MustCompile(`(?i)\b(bearer\s+)[A-Za-z0-9_\-\.]{16,}`)
+	githubPatRegex = regexp.MustCompile(`\b(gh[pous]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,})\b`)
+	kvSecretRegex  = regexp.MustCompile(`(?i)\b(api[_-]?key|secret|password|access[_-]?token|auth[_-]?token)(\s*[:=]\s*["']?)[A-Za-z0-9_\-\.]{8,}(["']?)`)
+	privKeyRegex   = regexp.MustCompile(`-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+ PRIVATE KEY-----`)
+)
+
+// RedactSecrets replaces sensitive tokens, API keys, passwords, and private keys with redaction markers.
+func RedactSecrets(input string) string {
+	if input == "" {
+		return ""
+	}
+	out := privKeyRegex.ReplaceAllString(input, "[REDACTED PRIVATE KEY]")
+	out = bearerRegex.ReplaceAllString(out, "$1[REDACTED]")
+	out = githubPatRegex.ReplaceAllString(out, "[REDACTED TOKEN]")
+	out = kvSecretRegex.ReplaceAllString(out, "$1$2[REDACTED]$3")
+	return out
+}
+
+func redactValue(val any) any {
+	switch v := val.(type) {
+	case string:
+		return RedactSecrets(v)
+	case map[string]any:
+		res := make(map[string]any, len(v))
+		for k, item := range v {
+			lowerK := strings.ToLower(k)
+			if strings.Contains(lowerK, "key") || strings.Contains(lowerK, "secret") || strings.Contains(lowerK, "token") || strings.Contains(lowerK, "password") || strings.Contains(lowerK, "auth") {
+				if _, ok := item.(string); ok {
+					res[k] = "[REDACTED]"
+					continue
+				}
+			}
+			res[k] = redactValue(item)
+		}
+		return res
+	case []any:
+		res := make([]any, len(v))
+		for i, item := range v {
+			res[i] = redactValue(item)
+		}
+		return res
+	default:
+		return val
+	}
+}
 
 // EventType categorizes an enterprise audit event.
 type EventType string
@@ -37,24 +86,27 @@ const GenesisHash = "00000000000000000000000000000000000000000000000000000000000
 
 // AuditEvent represents a structured, SIEM/OTEL-compatible, hash-chained audit record.
 type AuditEvent struct {
-	EventID      string         `json:"eventId"`
-	Timestamp    time.Time      `json:"timestamp"`
-	EventType    EventType      `json:"eventType"`
-	Actor        string         `json:"actor"`
-	Workspace    string         `json:"workspace"`
-	Status       string         `json:"status"` // "SUCCESS", "REJECTED", "FAILED", "INFO"
-	DurationMs   int64          `json:"durationMs,omitempty"`
-	ModelID      string         `json:"modelId,omitempty"`
-	PromptHash   string         `json:"promptHash,omitempty"`
-	ResponseHash string         `json:"responseHash,omitempty"`
-	StorySpecID  string         `json:"storySpecId,omitempty"`
-	DiffHash     string         `json:"diffHash,omitempty"`
-	Round        int            `json:"round,omitempty"`
-	Cost         float64        `json:"cost,omitempty"`
-	Details      map[string]any `json:"details,omitempty"`
-	PrevHash     string         `json:"prevHash"`
-	RecordHash   string         `json:"recordHash"`
-	Signature    string         `json:"signature,omitempty"`
+	EventID         string         `json:"eventId"`
+	Timestamp       time.Time      `json:"timestamp"`
+	EventType       EventType      `json:"eventType"`
+	Actor           string         `json:"actor"`
+	Workspace       string         `json:"workspace"`
+	Status          string         `json:"status"` // "SUCCESS", "REJECTED", "FAILED", "INFO"
+	DurationMs      int64          `json:"durationMs,omitempty"`
+	ModelID         string         `json:"modelId,omitempty"`
+	ModelFamily     string         `json:"modelFamily,omitempty"`
+	PromptHash      string         `json:"promptHash,omitempty"`
+	ResponseHash    string         `json:"responseHash,omitempty"`
+	StorySpecID     string         `json:"storySpecId,omitempty"`
+	DiffHash        string         `json:"diffHash,omitempty"`
+	Round           int            `json:"round,omitempty"`
+	Cost            float64        `json:"cost,omitempty"`
+	SandboxExitCode int            `json:"sandboxExitCode,omitempty"`
+	Approver        string         `json:"approver,omitempty"`
+	Details         map[string]any `json:"details,omitempty"`
+	PrevHash        string         `json:"prevHash"`
+	RecordHash      string         `json:"recordHash"`
+	Signature       string         `json:"signature,omitempty"`
 }
 
 // ComputeRecordHash deterministically calculates the SHA-256 hash of the audit record.
@@ -63,7 +115,7 @@ func ComputeRecordHash(e *AuditEvent) string {
 	if e.Details != nil {
 		detailsJSON, _ = json.Marshal(e.Details)
 	}
-	payload := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%d|%s|%s|%s|%s|%s|%d|%.6f|%s",
+	payload := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%d|%s|%s|%s|%s|%s|%s|%d|%.6f|%d|%s|%s",
 		e.PrevHash,
 		e.EventID,
 		e.Timestamp.UTC().Format(time.RFC3339Nano),
@@ -73,12 +125,15 @@ func ComputeRecordHash(e *AuditEvent) string {
 		e.Status,
 		e.DurationMs,
 		e.ModelID,
+		e.ModelFamily,
 		e.PromptHash,
 		e.ResponseHash,
 		e.StorySpecID,
 		e.DiffHash,
 		e.Round,
 		e.Cost,
+		e.SandboxExitCode,
+		e.Approver,
 		string(detailsJSON),
 	)
 	h := sha256.Sum256([]byte(payload))
@@ -98,15 +153,39 @@ func VerifyRecordSignature(recordHash, signature, secret string) bool {
 	return hmac.Equal([]byte(expected), []byte(signature))
 }
 
-// Logger persists, hash-chains, and emits structured audit records.
+// SignRecordEd25519 signs a record hash using an asymmetric Ed25519 private key.
+func SignRecordEd25519(recordHash string, privKey ed25519.PrivateKey) string {
+	sig := ed25519.Sign(privKey, []byte(recordHash))
+	return hex.EncodeToString(sig)
+}
+
+// VerifyRecordSignatureEd25519 verifies an Ed25519 signature of a record hash against a public key.
+func VerifyRecordSignatureEd25519(recordHash, signatureHex string, pubKey ed25519.PublicKey) bool {
+	sigBytes, err := hex.DecodeString(strings.TrimSpace(signatureHex))
+	if err != nil || len(sigBytes) != ed25519.SignatureSize {
+		return false
+	}
+	return ed25519.Verify(pubKey, []byte(recordHash), sigBytes)
+}
+
+type spooledSinkItem struct {
+	sink policy.RemoteSinkConfig
+	data []byte
+}
+
+// Logger persists, hash-chains, and emits structured audit records with spooled remote delivery.
 type Logger struct {
-	workspaceDir string
-	logPath      string
-	signingKey   string
-	remoteSinks  []policy.RemoteSinkConfig
-	lastHash     string
-	mu           sync.Mutex
-	httpClient   *http.Client
+	workspaceDir   string
+	logPath        string
+	signingKey     string
+	asymSigningKey ed25519.PrivateKey
+	remoteSinks    []policy.RemoteSinkConfig
+	lastHash       string
+	mu             sync.Mutex
+	httpClient     *http.Client
+	spoolChan      chan spooledSinkItem
+	stopChan       chan struct{}
+	spoolWg        sync.WaitGroup
 }
 
 var (
@@ -150,10 +229,17 @@ func NewLogger(workspaceDir string) *Logger {
 		remoteSinks:  pol.AuditRemoteSinks,
 		lastHash:     GenesisHash,
 		httpClient:   &http.Client{Timeout: 5 * time.Second},
+		spoolChan:    make(chan spooledSinkItem, 1024),
+		stopChan:     make(chan struct{}),
 	}
 
 	// Initialize lastHash from existing log file if available
 	l.initLastHash()
+
+	// Start spooled delivery worker for remote sinks
+	l.spoolWg.Add(1)
+	go l.spoolWorker()
+
 	return l
 }
 
@@ -189,6 +275,13 @@ func (l *Logger) SetSigningKey(key string) {
 	l.signingKey = key
 }
 
+// SetAsymmetricSigningKey configures an Ed25519 private key for asymmetric audit signing.
+func (l *Logger) SetAsymmetricSigningKey(privKey ed25519.PrivateKey) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.asymSigningKey = privKey
+}
+
 // AddRemoteSink adds an HTTP or syslog remote audit sink.
 func (l *Logger) AddRemoteSink(sink policy.RemoteSinkConfig) {
 	l.mu.Lock()
@@ -201,7 +294,18 @@ func (l *Logger) LogPath() string {
 	return l.logPath
 }
 
-// Emit writes an AuditEvent to the JSONL log stream with hash chaining and dispatches to remote sinks.
+// Close gracefully flushes pending spooled sinks and stops workers.
+func (l *Logger) Close() {
+	select {
+	case <-l.stopChan:
+		return // already closed
+	default:
+		close(l.stopChan)
+		l.spoolWg.Wait()
+	}
+}
+
+// Emit writes an AuditEvent to the JSONL log stream with hash chaining and dispatches to spooled sinks.
 func (l *Logger) Emit(event AuditEvent) error {
 	if event.EventID == "" {
 		event.EventID = fmt.Sprintf("evt-%d", time.Now().UnixNano())
@@ -219,6 +323,17 @@ func (l *Logger) Emit(event AuditEvent) error {
 		event.Workspace = l.workspaceDir
 	}
 
+	// Secret redaction pass before recording or hashing
+	if event.Details != nil {
+		event.Details = redactValue(event.Details).(map[string]any)
+	}
+	if event.Actor != "" {
+		event.Actor = RedactSecrets(event.Actor)
+	}
+	if event.Approver != "" {
+		event.Approver = RedactSecrets(event.Approver)
+	}
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -229,8 +344,10 @@ func (l *Logger) Emit(event AuditEvent) error {
 	event.PrevHash = l.lastHash
 	event.RecordHash = ComputeRecordHash(&event)
 
-	// Optional signing
-	if l.signingKey != "" {
+	// Cryptographic signing: prefer Ed25519 asymmetric signature if configured
+	if l.asymSigningKey != nil {
+		event.Signature = SignRecordEd25519(event.RecordHash, l.asymSigningKey)
+	} else if l.signingKey != "" {
 		event.Signature = SignRecord(event.RecordHash, l.signingKey)
 	}
 
@@ -241,8 +358,8 @@ func (l *Logger) Emit(event AuditEvent) error {
 	logLine := append(data, '\n')
 
 	if l.logPath != "" {
-		_ = os.MkdirAll(filepath.Dir(l.logPath), 0755)
-		f, err := os.OpenFile(l.logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		_ = os.MkdirAll(filepath.Dir(l.logPath), 0700)
+		f, err := os.OpenFile(l.logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 		if err != nil {
 			return fmt.Errorf("failed to open audit log %s: %w", l.logPath, err)
 		}
@@ -255,20 +372,59 @@ func (l *Logger) Emit(event AuditEvent) error {
 
 	l.lastHash = event.RecordHash
 
-	// Dispatch to remote sinks asynchronously
+	// Dispatch to spooled sink queue
 	for _, sink := range l.remoteSinks {
-		go l.sendToRemoteSink(sink, data)
+		select {
+		case l.spoolChan <- spooledSinkItem{sink: sink, data: data}:
+		default:
+			// Spool channel saturated: fallback to asynchronous goroutine
+			go l.sendToRemoteSinkWithRetry(sink, data, 1)
+		}
 	}
 
 	return nil
 }
 
-func (l *Logger) sendToRemoteSink(sink policy.RemoteSinkConfig, data []byte) {
+func (l *Logger) spoolWorker() {
+	defer l.spoolWg.Done()
+	for {
+		select {
+		case item := <-l.spoolChan:
+			l.sendToRemoteSinkWithRetry(item.sink, item.data, 3)
+		case <-l.stopChan:
+			// Drain remaining items before exiting
+			for len(l.spoolChan) > 0 {
+				item := <-l.spoolChan
+				l.sendToRemoteSinkWithRetry(item.sink, item.data, 1)
+			}
+			return
+		}
+	}
+}
+
+func (l *Logger) sendToRemoteSinkWithRetry(sink policy.RemoteSinkConfig, data []byte, maxAttempts int) {
+	delivered := false
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		success := l.sendToRemoteSink(sink, data)
+		if success {
+			delivered = true
+			break
+		}
+		if attempt < maxAttempts {
+			time.Sleep(time.Duration(attempt*50) * time.Millisecond) // exponential backoff retry
+		}
+	}
+	if !delivered {
+		l.RecordSpoolLoss(sink.Endpoint, 1)
+	}
+}
+
+func (l *Logger) sendToRemoteSink(sink policy.RemoteSinkConfig, data []byte) bool {
 	switch strings.ToLower(sink.Type) {
 	case "http", "https":
 		req, err := http.NewRequest("POST", sink.Endpoint, bytes.NewReader(data))
 		if err != nil {
-			return
+			return false
 		}
 		req.Header.Set("Content-Type", "application/json")
 		if sink.AuthKey != "" {
@@ -278,12 +434,13 @@ func (l *Logger) sendToRemoteSink(sink policy.RemoteSinkConfig, data []byte) {
 			req.Header.Set(k, v)
 		}
 		resp, err := l.httpClient.Do(req)
-		if err == nil {
-			_ = resp.Body.Close()
+		if err != nil {
+			return false
 		}
+		_ = resp.Body.Close()
+		return resp.StatusCode >= 200 && resp.StatusCode < 300
 
 	case "syslog":
-		// Send over UDP / TCP or local syslog socket
 		endpoint := sink.Endpoint
 		network := "udp"
 		if strings.HasPrefix(endpoint, "tcp://") {
@@ -294,12 +451,15 @@ func (l *Logger) sendToRemoteSink(sink policy.RemoteSinkConfig, data []byte) {
 		}
 
 		conn, err := net.DialTimeout(network, endpoint, 2*time.Second)
-		if err == nil {
-			syslogMsg := fmt.Sprintf("<14>%s artix-audit: %s\n", time.Now().Format(time.RFC3339), string(data))
-			_, _ = conn.Write([]byte(syslogMsg))
-			_ = conn.Close()
+		if err != nil {
+			return false
 		}
+		syslogMsg := fmt.Sprintf("<14>%s artix-audit: %s\n", time.Now().Format(time.RFC3339), string(data))
+		_, err = conn.Write([]byte(syslogMsg))
+		_ = conn.Close()
+		return err == nil
 	}
+	return false
 }
 
 // VerificationResult summarizes the audit log chain verification.
@@ -311,7 +471,7 @@ type VerificationResult struct {
 }
 
 // VerifyLog verifies the cryptographic hash chain and optional signatures of an audit log file.
-// It detects any tampering, record modification, reordering, or truncation.
+// Supports both HMAC symmetric keys and Ed25519 asymmetric public keys.
 func VerifyLog(logPath string, signingKey ...string) (*VerificationResult, error) {
 	data, err := os.ReadFile(logPath)
 	if err != nil {
@@ -370,3 +530,142 @@ func VerifyLog(logPath string, signingKey ...string) (*VerificationResult, error
 		LastHash:     expectedPrevHash,
 	}, nil
 }
+
+// VerifyLogWithPubKey verifies audit records signed with an asymmetric Ed25519 private key.
+func VerifyLogWithPubKey(logPath string, pubKey ed25519.PublicKey) (*VerificationResult, error) {
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read audit log: %w", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) == 0 || (len(lines) == 1 && lines[0] == "") {
+		return &VerificationResult{TotalRecords: 0, ValidRecords: 0}, nil
+	}
+
+	expectedPrevHash := GenesisHash
+
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		var event AuditEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			return nil, fmt.Errorf("tampering detected at record #%d: invalid JSON format: %w", i+1, err)
+		}
+
+		if event.PrevHash != expectedPrevHash {
+			return nil, fmt.Errorf("tampering detected at record #%d (event ID %s): broken hash chain", i+1, event.EventID)
+		}
+
+		computedHash := ComputeRecordHash(&event)
+		if event.RecordHash != computedHash {
+			return nil, fmt.Errorf("tampering detected at record #%d (event ID %s): record payload altered", i+1, event.EventID)
+		}
+
+		if event.Signature != "" {
+			if !VerifyRecordSignatureEd25519(event.RecordHash, event.Signature, pubKey) {
+				return nil, fmt.Errorf("tampering detected at record #%d (event ID %s): invalid ed25519 signature", i+1, event.EventID)
+			}
+		}
+
+		expectedPrevHash = event.RecordHash
+	}
+
+	return &VerificationResult{
+		TotalRecords: len(lines),
+		ValidRecords: len(lines),
+		GenesisHash:  GenesisHash,
+		LastHash:     expectedPrevHash,
+	}, nil
+}
+
+// SetPrivateKeyPath configures the Ed25519 private key from an external path.
+// It strictly enforces that the private key must reside outside sandbox-readable paths.
+func (l *Logger) SetPrivateKeyPath(path string) error {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("invalid private key path: %w", err)
+	}
+	if l.workspaceDir != "" {
+		absWs, errWs := filepath.Abs(l.workspaceDir)
+		if errWs == nil {
+			rel, errRel := filepath.Rel(absWs, absPath)
+			if errRel == nil && !strings.HasPrefix(rel, "..") {
+				return fmt.Errorf("signing key refused: private key must be located outside sandbox-readable paths (%s is inside workspace %s)", absPath, absWs)
+			}
+		}
+	}
+
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return fmt.Errorf("failed to read private key: %w", err)
+	}
+
+	raw := strings.TrimSpace(string(data))
+	if keyBytes, err := hex.DecodeString(raw); err == nil && len(keyBytes) == ed25519.PrivateKeySize {
+		l.SetAsymmetricSigningKey(ed25519.PrivateKey(keyBytes))
+		return nil
+	} else if len(data) == ed25519.PrivateKeySize {
+		l.SetAsymmetricSigningKey(ed25519.PrivateKey(data))
+		return nil
+	} else if len(data) == ed25519.SeedSize {
+		priv := ed25519.NewKeyFromSeed(data)
+		l.SetAsymmetricSigningKey(priv)
+		return nil
+	}
+
+	return nil
+}
+
+// RecordSpoolLoss records that spooled audit records were lost due to unrecoverable delivery failure.
+func (l *Logger) RecordSpoolLoss(sinkEndpoint string, count int) {
+	_ = l.Emit(AuditEvent{
+		EventType: EventType("audit.spool_loss"),
+		Status:    "FAILED",
+		Details: map[string]any{
+			"sink":           sinkEndpoint,
+			"droppedRecords": count,
+			"reason":         "unrecoverable delivery failure or buffer saturation",
+		},
+	})
+}
+
+// VerifyOptions configures comprehensive audit log verification.
+type VerifyOptions struct {
+	PubKey           ed25519.PublicKey
+	SigningKey       string
+	ExpectedCount    int
+	ExpectedLastHash string
+}
+
+// VerifyLogWithOptions verifies an audit log against custom constraints including expected count and last hash.
+func VerifyLogWithOptions(logPath string, opts VerifyOptions) (*VerificationResult, error) {
+	var res *VerificationResult
+	var err error
+
+	if opts.PubKey != nil {
+		res, err = VerifyLogWithPubKey(logPath, opts.PubKey)
+	} else if opts.SigningKey != "" {
+		res, err = VerifyLog(logPath, opts.SigningKey)
+	} else {
+		res, err = VerifyLog(logPath)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	if opts.ExpectedCount > 0 && res.ValidRecords < opts.ExpectedCount {
+		return nil, fmt.Errorf("tampering detected: tail truncated: expected %d records, got %d", opts.ExpectedCount, res.ValidRecords)
+	}
+
+	if opts.ExpectedLastHash != "" && res.LastHash != opts.ExpectedLastHash {
+		return nil, fmt.Errorf("tampering detected: tail truncated or altered: expected last hash %s, got %s", opts.ExpectedLastHash, res.LastHash)
+	}
+
+	return res, nil
+}
+

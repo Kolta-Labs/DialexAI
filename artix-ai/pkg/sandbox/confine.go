@@ -14,11 +14,37 @@ import (
 const (
 	IsolationOSSandbox    = "os-sandbox"    // macOS sandbox-exec, or Linux bubblewrap
 	IsolationProcessGroup = "process-group" // no filesystem/network restriction
+	IsolationRefused      = "refused"       // execution refused due to fail-closed policy
 )
+
+// SensitiveReadDenyPaths lists sensitive credential and token paths blocked from sandbox reads.
+var SensitiveReadDenyPaths = []string{
+	".ssh",
+	".aws",
+	".kube",
+	".gnupg",
+	".config/gcloud",
+	".azure",
+	".netrc",
+	".artix",
+	".kritix",
+}
 
 // BuildBwrapArgs builds the bubblewrap execution arguments for Linux environments.
 func BuildBwrapArgs(writable []string, net bool, cmdStr string) []string {
 	args := []string{"--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--die-with-parent"}
+
+	// Hide sensitive credential directories from reads via empty tmpfs mounts
+	home, _ := os.UserHomeDir()
+	if home != "" {
+		for _, denyRel := range SensitiveReadDenyPaths {
+			denyPath := filepath.Join(home, denyRel)
+			if _, err := os.Stat(denyPath); err == nil {
+				args = append(args, "--tmpfs", denyPath)
+			}
+		}
+	}
+
 	for _, w := range writable {
 		if _, err := os.Stat(w); err == nil {
 			args = append(args, "--bind", w, w)
@@ -32,15 +58,11 @@ func BuildBwrapArgs(writable []string, net bool, cmdStr string) []string {
 }
 
 // Confinement: writes are limited to the workspace, temp dirs and common tool caches; network
-// is denied unless ARTIX_SANDBOX_NETWORK=1. Reads are unrestricted.
+// is denied unless ARTIX_SANDBOX_NETWORK=1. Reads are restricted to exclude sensitive user credentials.
 //
-// In Enterprise Mode (ARTIX_ENTERPRISE=1), ARTIX_SANDBOX=off is strictly disallowed and ignored.
-// If no confinement tool exists the command still runs, flagged IsolationProcessGroup.
-//
-// Deprecation & Architectural Roadmap:
-// macOS sandbox-exec is deprecated by Apple.
-// Enterprise Roadmap Item ARTIX-SEC-01: Container/microVM-based confinement (gVisor/Firecracker)
-// scheduled to replace kernel sandbox hooks for universal, unbypassable isolation in CI/CD.
+// In Enterprise Mode (ARTIX_ENTERPRISE=1):
+// 1. ARTIX_SANDBOX=off is strictly disallowed and ignored.
+// 2. Fail-Closed: If no confinement tool exists (sandbox-exec or bwrap), execution is REFUSED.
 func confine(cwd, cmdStr string) (*exec.Cmd, string) {
 	plain := func() (*exec.Cmd, string) { return exec.Command("sh", "-c", cmdStr), IsolationProcessGroup }
 
@@ -60,13 +82,16 @@ func confine(cwd, cmdStr string) (*exec.Cmd, string) {
 		return p
 	}
 	writable := []string{real(cwd), real(os.TempDir()), "/tmp", "/private/tmp", "/private/var/folders"}
-	for _, c := range []string{"Library/Caches", ".cache", "go/pkg", ".gradle", ".m2", ".npm", ".cargo", ".artix", ".kritix"} {
+	for _, c := range []string{"Library/Caches", ".cache", "go/pkg", ".gradle", ".m2", ".npm", ".cargo"} {
 		writable = append(writable, filepath.Join(home, c))
 	}
 
 	switch runtime.GOOS {
 	case "darwin":
 		if _, err := exec.LookPath("sandbox-exec"); err != nil {
+			if isEnterprise {
+				return nil, IsolationRefused
+			}
 			return plain()
 		}
 		var p strings.Builder
@@ -74,19 +99,56 @@ func confine(cwd, cmdStr string) (*exec.Cmd, string) {
 		if !net {
 			p.WriteString("(deny network*)")
 		}
+
+		// Read deny list for credentials & tokens
+		if home != "" {
+			p.WriteString("(deny file-read*")
+			for _, denyRel := range SensitiveReadDenyPaths {
+				denyPath := filepath.Join(home, denyRel)
+				fmt.Fprintf(&p, " (subpath %q)", denyPath)
+				if resolved := real(denyPath); resolved != denyPath {
+					fmt.Fprintf(&p, " (subpath %q)", resolved)
+				}
+			}
+			p.WriteString(")")
+		}
+
+		// Write deny list
 		p.WriteString("(deny file-write*)(allow file-write* (literal \"/dev/null\") (literal \"/dev/tty\") (regex #\"^/dev/fd/\")")
 		for _, w := range writable {
 			fmt.Fprintf(&p, " (subpath %q)", w)
 		}
 		p.WriteString(")")
+
+		// Deny write explicitly for protected governance and credential paths
+		if home != "" {
+			p.WriteString("(deny file-write*")
+			for _, denyRel := range []string{".artix", ".kritix", ".ssh", ".aws", ".kube"} {
+				denyPath := filepath.Join(home, denyRel)
+				fmt.Fprintf(&p, " (subpath %q)", denyPath)
+				if resolved := real(denyPath); resolved != denyPath {
+					fmt.Fprintf(&p, " (subpath %q)", resolved)
+				}
+			}
+			p.WriteString(")")
+		}
 		return exec.Command("sandbox-exec", "-p", p.String(), "sh", "-c", cmdStr), IsolationOSSandbox
+
 	case "linux":
 		bwrap, err := exec.LookPath("bwrap")
 		if err != nil {
+			if isEnterprise {
+				return nil, IsolationRefused
+			}
 			return plain()
 		}
 		args := BuildBwrapArgs(writable, net, cmdStr)
 		return exec.Command(bwrap, args...), IsolationOSSandbox
+
+	default:
+		if isEnterprise {
+			return nil, IsolationRefused
+		}
+		return plain()
 	}
-	return plain()
 }

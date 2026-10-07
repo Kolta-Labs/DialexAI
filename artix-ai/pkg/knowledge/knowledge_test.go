@@ -250,3 +250,67 @@ func TestComputeHash_NoDelimiterCollision(t *testing.T) {
 	}
 }
 
+func TestSynthesizedRuleGovernanceAndApproval(t *testing.T) {
+	syn := NewRuleSynthesizer()
+	rule, err := syn.SynthesizeFromComment("Never call Thread.sleep directly on main thread")
+	if err != nil {
+		t.Fatalf("Synthesize failed: %v", err)
+	}
+
+	// 1. New rule must default to Proposed
+	if rule.Status != RuleStatusProposed {
+		t.Errorf("expected initial status proposed, got %s", rule.Status)
+	}
+	if rule.IsActive() {
+		t.Errorf("unapproved rule must not be active")
+	}
+
+	// 2. Bot self-approval must fail
+	if err := rule.Approve("artix-agent"); err == nil {
+		t.Errorf("expected error when bot tries to approve synthesized rule, got nil")
+	}
+	if err := rule.Approve("github-actions[bot]"); err == nil {
+		t.Errorf("expected error when bot identity approves, got nil")
+	}
+
+	// 3. Human approval must succeed
+	if err := rule.Approve("lead-architect@corp.internal"); err != nil {
+		t.Fatalf("human approval failed: %v", err)
+	}
+	if rule.Status != RuleStatusApproved {
+		t.Errorf("expected status approved, got %s", rule.Status)
+	}
+	if !rule.IsActive() {
+		t.Errorf("approved non-expired rule must be active")
+	}
+
+	// 4. Expired rule must not be active
+	past := time.Now().Add(-1 * time.Hour)
+	rule.ExpiresAt = &past
+	if rule.IsActive() {
+		t.Errorf("expired rule must not be active")
+	}
+}
+
+func TestRuleConflictDetection(t *testing.T) {
+	r1 := &SynthesizedRule{
+		IsTaboo:  true,
+		RuleText: "Never use raw sqlite in ViewModel",
+	}
+	r2 := &SynthesizedRule{
+		IsTaboo:  false,
+		RuleText: "Always use raw sqlite helper for quick queries",
+	}
+	r3 := &SynthesizedRule{
+		IsTaboo:  true,
+		RuleText: "Never use coroutine channels without buffer",
+	}
+
+	if !DetectConflict(r1, r2) {
+		t.Errorf("expected conflict between contradictory sqlite rules")
+	}
+	if DetectConflict(r1, r3) {
+		t.Errorf("did not expect conflict between sqlite and coroutine rules")
+	}
+}
+

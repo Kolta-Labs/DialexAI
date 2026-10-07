@@ -1,0 +1,18 @@
+<idea-plugin>
+  <id>ai.artix.ide</id>
+  <name>Artix AI</name>
+  <vendor>Artix</vendor>
+  <description>Plan, code and review with the artix CLI (supervised only). Needs `artix` on PATH; set ARTIX_PROVIDER / ARTIX_MODEL and the provider API key in the environment.</description>
+  <depends>com.intellij.modules.platform</depends>
+  <extensions defaultExtensionNs="com.intellij">
+    <notificationGroup id="Artix" displayType="BALLOON"/>
+  </extensions>
+  <actions>
+    <group id="Artix.Menu" text="Artix" popup="true">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+      <action id="Artix.Plan" class="ai.artix.ide.PlanAction" text="Plan Story…"/>
+      <action id="Artix.Code" class="ai.artix.ide.CodeAction" text="Code (supervised)"/>
+      <action id="Artix.Review" class="ai.artix.ide.ReviewAction" text="Review Working Diff"/>
+    </group>
+  </actions>
+</idea-plugin>

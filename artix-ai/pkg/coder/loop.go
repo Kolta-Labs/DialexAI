@@ -2,7 +2,12 @@ package coder
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"artix/pkg/audit"
@@ -36,7 +41,12 @@ type LoopOptions struct {
 	MockPatchGen     func(round int, feedback string) string // for tests and offline runs
 	// PatchGenerator produces each round's patch, typically NewRunnerPatchGenerator. Without
 	// it (or MockPatchGen) the loop cannot generate code and stops immediately.
-	PatchGenerator PatchGenerator
+	PatchGenerator                     PatchGenerator
+	Approver                           string              `json:"approver,omitempty"`
+	ForgeApproval                      *policy.PRApproval  `json:"forgeApproval,omitempty"`
+	MaxConsecutiveIdenticalRejections int                 `json:"maxConsecutiveIdenticalRejections,omitempty"`
+	TestCommandsConfirmed              bool                `json:"testCommandsConfirmed,omitempty"`
+	ConfirmTestCommands                func(commands []string) bool
 }
 
 // LoopResult represents the final convergence outcome.
@@ -114,7 +124,16 @@ func (c *ConvergenceCoordinator) Run(
 		costReport.BudgetStoryCap = budget.MaxStoryTokens
 		costReport.BudgetTeamCap = budget.MaxTeamTokens
 		costReport.BudgetDayCap = budget.MaxDayTokens
+		costReport.BudgetStoryCostCap = budget.MaxStoryCost
+		costReport.BudgetTeamCostCap = budget.MaxTeamCost
+		costReport.BudgetDayCostCap = budget.MaxDayCost
 		costReport.TeamID = budget.TeamID
+
+		if err := budget.ValidatePricing(); err != nil {
+			res.Error = err.Error()
+			res.CostReport = costReport
+			return res
+		}
 	}
 
 	// Enterprise Autonomous Gate (ARTIX-SEC-02):
@@ -128,7 +147,49 @@ func (c *ConvergenceCoordinator) Run(
 		}
 	}
 
+	// Validate test commands against signed enterprise policy before any execution
+	effectiveTestCommands, pErr := policy.ValidateTestCommands(s.TestCommands)
+	if pErr != nil {
+		res.Error = fmt.Sprintf("test execution blocked by policy: %v", pErr)
+		res.CostReport = costReport
+		return res
+	}
+
+	// Compute test commands hash for provenance and audit verification
+	cmdBytes := []byte(strings.Join(effectiveTestCommands, "\n"))
+	cmdHashArr := sha256.Sum256(cmdBytes)
+	testCommandsHash := hex.EncodeToString(cmdHashArr[:])
+
+	// G4: Test-command trust outside enterprise:
+	// In supervised/interactive mode outside enterprise, require explicit user confirmation and print command list
+	if !policy.IsEnterprise() && opts != nil && (opts.Autonomy == AutonomySupervised || opts.Autonomy == AutonomyInteractive) {
+		fmt.Printf("Proposed test commands (%d):\n", len(effectiveTestCommands))
+		for i, cmd := range effectiveTestCommands {
+			fmt.Printf("  [%d] %s\n", i+1, cmd)
+		}
+
+		confirmed := false
+		if opts != nil {
+			if opts.ConfirmTestCommands != nil {
+				confirmed = opts.ConfirmTestCommands(effectiveTestCommands)
+			} else if opts.TestCommandsConfirmed {
+				confirmed = true
+			}
+		}
+		if !confirmed {
+			res.Error = "unconfirmed test commands: supervised/interactive mode outside enterprise requires explicit user confirmation of test commands"
+			res.CostReport = costReport
+			return res
+		}
+	}
+
 	var lastFeedback string
+	var lastVerdictFeedback string
+	var consecutiveIdenticalCount int
+	maxIdentical := 2
+	if opts != nil && opts.MaxConsecutiveIdenticalRejections > 0 {
+		maxIdentical = opts.MaxConsecutiveIdenticalRejections
+	}
 	var priorFailures []string
 	var activeSession *git.PatchSession
 
@@ -173,6 +234,54 @@ func (c *ConvergenceCoordinator) Run(
 		coderPatchTokens := EstimateTokens(patch)
 		totalCoderTokens := coderPromptTokens + coderPatchTokens
 
+		// Mid-round budget check: abort immediately before sandbox/critic if coder tokens exhausted cap
+		if budget != nil {
+			costPer1k := budget.CostPer1kTokens
+			if costPer1k <= 0 && len(budget.PriceTable) > 0 {
+				for _, p := range budget.PriceTable {
+					costPer1k = p
+					break
+				}
+			}
+			coderCostUSD := (float64(totalCoderTokens) / 1000.0) * costPer1k
+			budget.RecordRoundUsage(totalCoderTokens, coderCostUSD)
+			costReport.TotalTokens += totalCoderTokens
+			costReport.TotalCost += coderCostUSD
+
+			if exhausted, reason := budget.CheckExhaustion(); exhausted {
+				roundCost := RoundCost{
+					Round: round,
+					RoleTokens: map[string]int{
+						"coder": totalCoderTokens,
+					},
+					DNAOverhead: map[string]int{
+						"coder_dna": coderDNATokens,
+					},
+					TotalRoundTokens: totalCoderTokens,
+				}
+				costReport.Rounds = append(costReport.Rounds, roundCost)
+				costReport.DNAOverheadTokens += coderDNATokens
+
+				costReport.Exhausted = true
+				costReport.ExhaustionReason = reason
+				res.CostReport = costReport
+				res.Error = fmt.Sprintf("budget exhausted in round %d: %s", round, reason)
+				_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+					EventType: audit.EventType("budget.exhausted"),
+					Status:    "FAILED",
+					Details: map[string]any{
+						"storyId":          s.ID,
+						"roundsRun":        round,
+						"totalTokens":      costReport.TotalTokens,
+						"totalCost":        costReport.TotalCost,
+						"exhaustionReason": costReport.ExhaustionReason,
+						"testCommandsHash": testCommandsHash,
+					},
+				})
+				return res
+			}
+		}
+
 		// 2. Apply patch via PatchSession
 		activeSession = git.NewPatchSession(repoCtx.RootDir, patch)
 		if err := activeSession.Apply(); err != nil {
@@ -189,18 +298,44 @@ func (c *ConvergenceCoordinator) Run(
 		// 4. Sandbox executes project test commands
 		var testResults []*sandbox.ExecResult
 		priorFailures = nil // only the latest round's failures are relevant to the next attempt
-		for _, cmdStr := range s.TestCommands {
-			tOpts := &sandbox.ExecOptions{
-				Cwd:     repoCtx.RootDir,
-				Timeout: 2 * time.Minute,
+
+		// Script/Makefile indirection check: refuse commands referencing modified scripts/Makefiles before execution
+		touchedByPatch := extractTouchedFilesFromDiff(diff)
+		var indirectionViolations []string
+		for _, cmdStr := range effectiveTestCommands {
+			for _, tf := range touchedByPatch {
+				if isScriptOrBuildFile(tf) {
+					base := filepath.Base(tf)
+					if strings.Contains(cmdStr, tf) || strings.Contains(cmdStr, "./"+tf) || (base != "" && strings.Contains(cmdStr, base)) {
+						indirectionViolations = append(indirectionViolations, fmt.Sprintf("test execution blocked: command %q references file %q modified by patch (script/Makefile indirection forbidden)", cmdStr, tf))
+					}
+				}
 			}
-			if opts != nil && opts.TestTimeout > 0 {
-				tOpts.Timeout = opts.TestTimeout
+		}
+
+		if len(indirectionViolations) > 0 {
+			for _, iv := range indirectionViolations {
+				priorFailures = append(priorFailures, iv)
+				testResults = append(testResults, &sandbox.ExecResult{
+					Command:  effectiveTestCommands[0],
+					ExitCode: 1,
+					Stderr:   iv,
+				})
 			}
-			tRes := c.sandbox.Run(ctx, cmdStr, tOpts)
-			testResults = append(testResults, tRes)
-			if !tRes.Success() {
-				priorFailures = append(priorFailures, fmt.Sprintf("%s: exit %d\n%s", cmdStr, tRes.ExitCode, tRes.Stderr))
+		} else {
+			for _, cmdStr := range effectiveTestCommands {
+				tOpts := &sandbox.ExecOptions{
+					Cwd:     repoCtx.RootDir,
+					Timeout: 2 * time.Minute,
+				}
+				if opts != nil && opts.TestTimeout > 0 {
+					tOpts.Timeout = opts.TestTimeout
+				}
+				tRes := c.sandbox.Run(ctx, cmdStr, tOpts)
+				testResults = append(testResults, tRes)
+				if !tRes.Success() {
+					priorFailures = append(priorFailures, fmt.Sprintf("%s: exit %d\n%s", cmdStr, tRes.ExitCode, tRes.Stderr))
+				}
 			}
 		}
 
@@ -262,29 +397,27 @@ func (c *ConvergenceCoordinator) Run(
 			TotalRoundTokens: totalCoderTokens + totalReviewerTokens,
 		}
 		costReport.Rounds = append(costReport.Rounds, roundCost)
-		costReport.TotalTokens += roundCost.TotalRoundTokens
 		costReport.DNAOverheadTokens += coderDNATokens + reviewerDNATokens
 
-		// Check budget exhaustion
+		// Check budget exhaustion after reviewer pass
 		if budget != nil {
-			budget.UsedStoryTokens += roundCost.TotalRoundTokens
-			budget.UsedTeamTokens += roundCost.TotalRoundTokens
-			budget.UsedDayTokens += roundCost.TotalRoundTokens
-
-			if budget.MaxStoryTokens > 0 && budget.UsedStoryTokens > budget.MaxStoryTokens {
-				costReport.Exhausted = true
-				costReport.ExhaustionReason = fmt.Sprintf("story token budget exceeded: %d used > %d max cap", budget.UsedStoryTokens, budget.MaxStoryTokens)
-			} else if budget.MaxTeamTokens > 0 && budget.UsedTeamTokens > budget.MaxTeamTokens {
-				costReport.Exhausted = true
-				costReport.ExhaustionReason = fmt.Sprintf("team token budget exceeded: %d used > %d max cap", budget.UsedTeamTokens, budget.MaxTeamTokens)
-			} else if budget.MaxDayTokens > 0 && budget.UsedDayTokens > budget.MaxDayTokens {
-				costReport.Exhausted = true
-				costReport.ExhaustionReason = fmt.Sprintf("daily token budget exceeded: %d used > %d max cap", budget.UsedDayTokens, budget.MaxDayTokens)
+			costPer1k := budget.CostPer1kTokens
+			if costPer1k <= 0 && len(budget.PriceTable) > 0 {
+				for _, p := range budget.PriceTable {
+					costPer1k = p
+					break
+				}
 			}
+			reviewerCostUSD := (float64(totalReviewerTokens) / 1000.0) * costPer1k
+			budget.RecordRoundUsage(totalReviewerTokens, reviewerCostUSD)
+			costReport.TotalTokens += totalReviewerTokens
+			costReport.TotalCost += reviewerCostUSD
 
-			if costReport.Exhausted {
+			if exhausted, reason := budget.CheckExhaustion(); exhausted {
+				costReport.Exhausted = true
+				costReport.ExhaustionReason = reason
 				res.CostReport = costReport
-				res.Error = fmt.Sprintf("budget exhausted in round %d: %s", round, costReport.ExhaustionReason)
+				res.Error = fmt.Sprintf("budget exhausted in round %d: %s", round, reason)
 				if activeSession != nil {
 					_ = activeSession.Rollback()
 				}
@@ -295,15 +428,15 @@ func (c *ConvergenceCoordinator) Run(
 						"storyId":          s.ID,
 						"roundsRun":        round,
 						"totalTokens":      costReport.TotalTokens,
+						"totalCost":        costReport.TotalCost,
 						"exhaustionReason": costReport.ExhaustionReason,
-						"budgetStoryCap":   costReport.BudgetStoryCap,
-						"budgetTeamCap":    costReport.BudgetTeamCap,
-						"budgetDayCap":     costReport.BudgetDayCap,
-						"dnaOverhead":      costReport.DNAOverheadTokens,
+						"testCommandsHash": testCommandsHash,
 					},
 				})
 				return res
 			}
+		} else {
+			costReport.TotalTokens += totalReviewerTokens
 		}
 
 		// Handle unreviewed status: fail closed and block auto-commit
@@ -337,6 +470,36 @@ func (c *ConvergenceCoordinator) Run(
 			// confirmed at loop entry (enterprise gate fires before the first round). The guard
 			// below exists solely to require at least one verified test command before committing.
 			if autonomy == AutonomyAutonomous {
+				approver := ""
+				var forgeApproval *policy.PRApproval
+				if opts != nil {
+					approver = opts.Approver
+					forgeApproval = opts.ForgeApproval
+				}
+
+				if policy.IsEnterprise() || policy.Active().RequireForgeApproval {
+					if forgeApproval == nil || !forgeApproval.VerifiedByForge {
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = "autonomous commit blocked: separation of duties violation: caller-supplied or forged approvals are strictly forbidden in enterprise mode; approval must be verified server-side from forge API"
+						return res
+					}
+					if err := policy.ValidateForgeApproval(forgeApproval, "artix-agent", "artix-agent"); err != nil {
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = fmt.Sprintf("autonomous commit blocked: %v", err)
+						return res
+					}
+				} else {
+					// Validate approver unconditionally under Separation of Duties
+					if err := policy.ValidateApprover("artix-agent", approver); err != nil {
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = fmt.Sprintf("autonomous commit blocked: %v", err)
+						return res
+					}
+				}
+
 				if len(testResults) == 0 {
 					res.Error = "autonomous commit refused: the spec defines no test commands, so nothing verified the change"
 					return res
@@ -344,7 +507,7 @@ func (c *ConvergenceCoordinator) Run(
 
 				// Post-merge test re-verification: Ensure all test commands pass against the final
 				// state before committing (double-checks race conditions vs. the mid-loop run).
-				for _, cmdStr := range s.TestCommands {
+				for _, cmdStr := range effectiveTestCommands {
 					tOpts := &sandbox.ExecOptions{
 						Cwd:     repoCtx.RootDir,
 						Timeout: 2 * time.Minute,
@@ -370,15 +533,25 @@ func (c *ConvergenceCoordinator) Run(
 				}
 			}
 
+			approverIdentity := ""
+			if opts != nil {
+				if opts.ForgeApproval != nil {
+					approverIdentity = opts.ForgeApproval.ApproverUsername
+				} else {
+					approverIdentity = opts.Approver
+				}
+			}
 			_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
 				EventType: audit.EventCodeConvergence,
 				Status:    "SUCCESS",
+				Approver:  approverIdentity,
 				Details: map[string]any{
-					"storyId":     s.ID,
-					"roundsRun":   res.RoundsRun,
-					"success":     true,
-					"totalTokens": costReport.TotalTokens,
-					"dnaOverhead": costReport.DNAOverheadTokens,
+					"storyId":          s.ID,
+					"roundsRun":        res.RoundsRun,
+					"success":          true,
+					"totalTokens":      costReport.TotalTokens,
+					"dnaOverhead":      costReport.DNAOverheadTokens,
+					"testCommandsHash": testCommandsHash,
 				},
 			})
 			return res
@@ -387,6 +560,20 @@ func (c *ConvergenceCoordinator) Run(
 		// If failed, rollback this round's patch before trying next round
 		_ = activeSession.Rollback()
 		lastFeedback = verdict.ActionableFeedback
+
+		if !verdict.Approved {
+			if verdict.ActionableFeedback == lastVerdictFeedback && verdict.ActionableFeedback != "" {
+				consecutiveIdenticalCount++
+				if consecutiveIdenticalCount >= maxIdentical && round < maxRounds {
+					res.Error = fmt.Sprintf("early convergence loop termination: %d consecutive identical rejections encountered", consecutiveIdenticalCount)
+					res.CostReport = costReport
+					return res
+				}
+			} else {
+				consecutiveIdenticalCount = 1
+				lastVerdictFeedback = verdict.ActionableFeedback
+			}
+		}
 	}
 
 	res.CostReport = costReport
@@ -398,12 +585,13 @@ func (c *ConvergenceCoordinator) Run(
 		EventType: audit.EventCodeConvergence,
 		Status:    "FAILED",
 		Details: map[string]any{
-			"storyId":     s.ID,
-			"roundsRun":   res.RoundsRun,
-			"success":     res.Success,
-			"totalTokens": costReport.TotalTokens,
-			"dnaOverhead": costReport.DNAOverheadTokens,
-			"error":       res.Error,
+			"storyId":          s.ID,
+			"roundsRun":        res.RoundsRun,
+			"success":          res.Success,
+			"totalTokens":      costReport.TotalTokens,
+			"dnaOverhead":      costReport.DNAOverheadTokens,
+			"testCommandsHash": testCommandsHash,
+			"error":            res.Error,
 		},
 	})
 
@@ -417,4 +605,33 @@ func criteriaOf(s *spec.StorySpec) []string {
 		out = append(out, fmt.Sprintf("%s: Given %s, When %s, Then %s", sc.Name, sc.Given, sc.When, sc.Then))
 	}
 	return out
+}
+
+func extractTouchedFilesFromDiff(diff string) []string {
+	var files []string
+	lines := strings.Split(diff, "\n")
+	reDiff := regexp.MustCompile(`^diff --git a/(.*) b/(.*)$`)
+	rePlus := regexp.MustCompile(`^\+\+\+ b/(.*)$`)
+	for _, line := range lines {
+		if m := reDiff.FindStringSubmatch(line); len(m) > 2 {
+			files = append(files, m[2])
+		} else if m := rePlus.FindStringSubmatch(line); len(m) > 1 {
+			if m[1] != "/dev/null" {
+				files = append(files, m[1])
+			}
+		}
+	}
+	return files
+}
+
+func isScriptOrBuildFile(path string) bool {
+	base := filepath.Base(path)
+	ext := strings.ToLower(filepath.Ext(path))
+	if base == "Makefile" || base == "makefile" || base == "GNUmakefile" {
+		return true
+	}
+	if ext == ".sh" || ext == ".bash" || ext == ".zsh" || ext == ".py" || ext == ".rb" || ext == ".pl" {
+		return true
+	}
+	return false
 }

@@ -1,0 +1,68 @@
+name: Artix CI
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build and Vet
+        run: |
+          go build ./...
+          go vet ./...
+
+      - name: Enterprise Build
+        run: |
+          go build -ldflags "-X artix/pkg/policy.RequireSignedPolicyFlag=true" -o bin/artix-enterprise ./cli
+
+      - name: Run Tests with Race Detector
+        run: |
+          go test -race -count=1 ./...
+
+  plugins:
+    name: Build IDE Plugins
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js for VS Code Plugin
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build VS Code Plugin (.vsix)
+        working-directory: plugins/vscode
+        run: |
+          npm ci
+          npx @vscode/vsce package --no-git-tag-version
+
+      - name: Set up JDK for IntelliJ Plugin
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Build IntelliJ Plugin (.zip)
+        working-directory: plugins/intellij
+        run: |
+          chmod +x ../../gradlew || true
+          ../../gradlew buildPlugin --no-daemon
+
+      - name: Upload Plugin Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ide-plugins
+          path: |
+            plugins/vscode/*.vsix
+            plugins/intellij/build/distributions/*.zip
