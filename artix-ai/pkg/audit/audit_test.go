@@ -2,6 +2,7 @@ package audit
 
 import (
 	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -525,6 +526,124 @@ func TestG7_SpoolLossIsItselfAudited(t *testing.T) {
 
 	if !strings.Contains(string(data), "audit.spool_loss") && !strings.Contains(string(data), "spool.loss") {
 		t.Fatalf("expected audit log to record audit.spool_loss event, got: %s", string(data))
+	}
+}
+
+// TestR2_6_EnterpriseMode_RequiresExternalEd25519KeyAndRefusesOtherwise asserts that
+// in enterprise mode, NewLogger requires an ed25519 key path outside sandbox-readable paths
+// and refuses to operate otherwise.
+func TestR2_6_EnterpriseMode_RequiresExternalEd25519KeyAndRefusesOtherwise(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Enable enterprise policy
+	entPol := &policy.Policy{
+		RequireSignedPolicy: true,
+		IsVerified:          true,
+	}
+	policy.SetActivePolicyForTest(entPol)
+	defer policy.ResetTestPolicy()
+
+	// 1. Missing private key path in enterprise mode -> must refuse
+	l1 := NewLogger(tempDir)
+	defer l1.Close()
+	if err := l1.InitError(); err == nil {
+		t.Fatalf("expected enterprise NewLogger to refuse when no ed25519 key path is provided, got nil")
+	}
+	if err := l1.Emit(AuditEvent{EventType: EventCodeConvergence, Status: "TEST"}); err == nil {
+		t.Fatalf("expected Emit to fail when logger initialized without ed25519 key in enterprise, got nil")
+	}
+
+	// 2. Private key path set to a path INSIDE workspace -> must refuse
+	insideKeyPath := filepath.Join(tempDir, "inside_workspace.key")
+	_ = os.WriteFile(insideKeyPath, []byte("key"), 0600)
+	entPol.AuditPrivateKeyPath = insideKeyPath
+	l2 := NewLogger(tempDir)
+	defer l2.Close()
+	if err := l2.InitError(); err == nil {
+		t.Fatalf("expected enterprise NewLogger to refuse when key is inside workspace, got nil")
+	}
+
+	// 3. Private key path set to outside workspace with valid Ed25519 key -> succeeds
+	extDir := t.TempDir()
+	pubKey, privKey, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	extKeyPath := filepath.Join(extDir, "outside_ed25519.key")
+	if err := os.WriteFile(extKeyPath, []byte(hex.EncodeToString(privKey)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	entPol.AuditPrivateKeyPath = extKeyPath
+	entPol.AuditPublicKey = hex.EncodeToString(pubKey)
+
+	l3 := NewLogger(tempDir)
+	defer l3.Close()
+	if err := l3.InitError(); err != nil {
+		t.Fatalf("expected enterprise NewLogger to succeed with valid outside key, got error: %v", err)
+	}
+	if err := l3.Emit(AuditEvent{EventType: EventCodeConvergence, Status: "SUCCESS"}); err != nil {
+		t.Fatalf("expected successful emit, got: %v", err)
+	}
+
+	// Verify the log verifies cleanly with the public key
+	res, err := VerifyLogWithOptions(l3.LogPath(), VerifyOptions{PubKey: pubKey})
+	if err != nil {
+		t.Fatalf("expected log to verify with public key, got: %v", err)
+	}
+	if res.ValidRecords != 1 {
+		t.Fatalf("expected 1 valid record, got %d", res.ValidRecords)
+	}
+}
+
+// TestR2_6_EnterpriseMode_ForgedRecordWithPolicyHMACKeyIsRejected asserts that an audit record
+// signed using the HMAC key (from policy or env) is strictly rejected in enterprise mode,
+// where only Ed25519 asymmetric signatures from the external private key are valid.
+func TestR2_6_EnterpriseMode_ForgedRecordWithPolicyHMACKeyIsRejected(t *testing.T) {
+	tempDir := t.TempDir()
+	pubKey, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hmacSecret := "leaked-or-readable-policy-hmac-key"
+	entPol := &policy.Policy{
+		RequireSignedPolicy: true,
+		IsVerified:          true,
+		AuditSigningKey:     hmacSecret,
+		AuditPublicKey:      hex.EncodeToString(pubKey),
+	}
+	policy.SetActivePolicyForTest(entPol)
+	defer policy.ResetTestPolicy()
+
+	logPath := filepath.Join(tempDir, "enterprise_audit.jsonl")
+
+	// Craft an audit event signed with the HMAC secret
+	event := AuditEvent{
+		EventID:   "EVT-FORGED-001",
+		Timestamp: time.Now().UTC(),
+		EventType: EventCodeConvergence,
+		Status:    "SUCCESS",
+		PrevHash:  GenesisHash,
+	}
+	event.RecordHash = ComputeRecordHash(&event)
+	// Attacker attempts to forge with HMAC key
+	event.Signature = SignRecord(event.RecordHash, hmacSecret)
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(logPath, append(data, '\n'), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verification in enterprise mode MUST reject the HMAC-forged signature
+	_, verifyErr := VerifyLogWithOptions(logPath, VerifyOptions{PubKey: pubKey})
+	if verifyErr == nil {
+		t.Fatalf("SECURITY VIOLATION: enterprise verification accepted record signed with HMAC key! Must strictly require Ed25519 signature.")
+	}
+	if !strings.Contains(verifyErr.Error(), "invalid ed25519 signature") && !strings.Contains(verifyErr.Error(), "signature") {
+		t.Fatalf("expected signature rejection error, got: %v", verifyErr)
 	}
 }
 

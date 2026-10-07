@@ -273,6 +273,18 @@ func ResetCachedPolicy() {
 	cachedPolicy = nil
 }
 
+// SetActivePolicyForTest sets an in-memory policy for testing purposes.
+func SetActivePolicyForTest(p *Policy) {
+	policyMu.Lock()
+	defer policyMu.Unlock()
+	cachedPolicy = p
+}
+
+// ResetTestPolicy clears any test policy override.
+func ResetTestPolicy() {
+	ResetCachedPolicy()
+}
+
 // Active returns the currently active policy. If a verified system policy file exists,
 // it caches and returns it. If unverified, it fails closed in enterprise mode or evaluates
 // environment dynamically without poisoning the cache.
