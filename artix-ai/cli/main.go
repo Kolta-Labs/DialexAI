@@ -572,6 +572,7 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 		}
 		sendJSON(map[string]any{
 			"ok":           res.Success,
+			"success":      res.Success,
 			"status":       statusStr,
 			"roundsRun":    res.RoundsRun,
 			"commitHash":   res.CommitHash,

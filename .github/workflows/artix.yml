@@ -24,10 +24,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Go 1.22
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22.x"
+          go-version-file: 'artix-ai/go.mod'
 
       - name: Verify Go Modules
         working-directory: artix-ai
@@ -37,7 +37,7 @@ jobs:
 
       - name: Static Analysis (go vet)
         working-directory: artix-ai
-        run: go vet ./pkg/... ./cli/... ./cmd/...
+        run: go vet ./...
 
       - name: Install Bubblewrap (Linux OS Sandbox)
         run: |
@@ -46,22 +46,81 @@ jobs:
 
       - name: Run Unit Tests with Race Detector & Coverage
         working-directory: artix-ai
-        run: go test -v -race -cover ./pkg/...
+        run: go test -v -race -cover ./...
 
-      - name: Build Native CLI Binaries
+      - name: Build Enterprise CLI & Daemon Binaries
         working-directory: artix-ai
         run: |
           mkdir -p bin
-          CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/artix ./cli/main.go
-          CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/artixd ./cmd/artixd/main.go
+          CGO_ENABLED=0 go build -ldflags="-s -w -X artix/pkg/policy.RequireSignedPolicyFlag=true" -o bin/artix ./cli
+          CGO_ENABLED=0 go build -ldflags="-s -w -X artix/pkg/policy.RequireSignedPolicyFlag=true" -o bin/artixd ./cmd/artixd
+          (cd bin && sha256sum artix artixd > SHA256SUMS)
+          cat bin/SHA256SUMS
           ./bin/artix version
           ./bin/artix help
 
-      - name: Upload CLI Binaries
+      - name: Upload CLI Binaries and Checksums
         uses: actions/upload-artifact@v4
         with:
           name: artix-binaries-linux
           path: artix-ai/bin/
+          retention-days: 7
+
+  vscode-plugin-build:
+    name: VS Code Extension Packaging (.vsix)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Package VS Code Extension
+        working-directory: artix-ai/plugins/vscode
+        run: |
+          npm install
+          npm run build
+          npx @vscode/vsce package --no-git-tag-version -o artix-ai.vsix
+
+      - name: Upload VS Code Extension (.vsix)
+        uses: actions/upload-artifact@v4
+        with:
+          name: artix-vscode-extension
+          path: artix-ai/plugins/vscode/artix-ai.vsix
+          retention-days: 7
+
+  intellij-plugin-build:
+    name: IntelliJ IDEA Plugin Packaging (.zip)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Package IntelliJ Plugin
+        working-directory: artix-ai/plugins/intellij
+        run: |
+          chmod +x gradlew
+          ./gradlew buildPlugin --no-daemon --stacktrace
+
+      - name: Upload IntelliJ Plugin (.zip)
+        uses: actions/upload-artifact@v4
+        with:
+          name: artix-intellij-plugin
+          path: artix-ai/plugins/intellij/build/distributions/*.zip
           retention-days: 7
 
   cockpit-kmp-build:
@@ -106,14 +165,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Go 1.22
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22.x"
+          go-version-file: 'artix-ai/go.mod'
 
       - name: Build Artix CLI
         working-directory: artix-ai
-        run: go build -o bin/artix ./cli/main.go
+        run: go build -o bin/artix ./cli
 
       - name: Run Adversarial Reviewer on PR Diff
         working-directory: artix-ai
