@@ -1067,6 +1067,265 @@ func TestR2_2_Coordinator_AcceptsMockedForgeApprovalInEnterprise(t *testing.T) {
 	}
 }
 
+func TestR2_3_Coordinator_RejectsEarlyReturnIfTrue(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "pkg_test.go")
+	_ = os.WriteFile(testFile, []byte("package pkg\nfunc TestExample(t *testing.T) {\n\tt.Fatal(\"fail\")\n}\n"), 0644)
+	_, _ = driver.CommitAll("initial")
+
+	storySpec := &spec.StorySpec{
+		ID:           "SPEC-R2-3-IF-TRUE",
+		Title:        "Test Early Return If True",
+		TestCommands: []string{"echo ok"},
+	}
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	evasionPatch := `diff --git a/pkg_test.go b/pkg_test.go
+--- a/pkg_test.go
++++ b/pkg_test.go
+@@ -1,4 +1,5 @@
+ package pkg
+ func TestExample(t *testing.T) {
++	if true { return }
+ 	t.Fatal("fail")
+ }
+`
+	opts := &LoopOptions{
+		MaxRounds:             1,
+		Autonomy:              AutonomySupervised,
+		TestCommandsConfirmed: true,
+		MockPatchGen: func(round int, feedback string) string {
+			return evasionPatch
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if res.Success {
+		t.Fatalf("expected coordinator to reject if true { return } test evasion, but succeeded")
+	}
+	if res.FinalVerdict == nil || res.FinalVerdict.Approved {
+		t.Fatalf("expected final verdict to be rejected, got: %+v", res.FinalVerdict)
+	}
+}
+
+func TestR2_3_Coordinator_RejectsEarlyReturnIfEnvCI(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "pkg_test.go")
+	_ = os.WriteFile(testFile, []byte("package pkg\nfunc TestExample(t *testing.T) {\n\tt.Fatal(\"fail\")\n}\n"), 0644)
+	_, _ = driver.CommitAll("initial")
+
+	storySpec := &spec.StorySpec{
+		ID:           "SPEC-R2-3-ENV-CI",
+		Title:        "Test Early Return If Env CI",
+		TestCommands: []string{"echo ok"},
+	}
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	evasionPatch := `diff --git a/pkg_test.go b/pkg_test.go
+--- a/pkg_test.go
++++ b/pkg_test.go
+@@ -1,4 +1,5 @@
+ package pkg
+ func TestExample(t *testing.T) {
++	if os.Getenv("CI") == "" { return }
+ 	t.Fatal("fail")
+ }
+`
+	opts := &LoopOptions{
+		MaxRounds:             1,
+		Autonomy:              AutonomySupervised,
+		TestCommandsConfirmed: true,
+		MockPatchGen: func(round int, feedback string) string {
+			return evasionPatch
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if res.Success {
+		t.Fatalf("expected coordinator to reject if os.Getenv('CI') == '' test evasion, but succeeded")
+	}
+	if res.FinalVerdict == nil || res.FinalVerdict.Approved {
+		t.Fatalf("expected final verdict to be rejected, got: %+v", res.FinalVerdict)
+	}
+}
+
+func TestR2_3_Coordinator_RejectsTwoAssertionsGutted(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "pkg_test.go")
+	_ = os.WriteFile(testFile, []byte("package pkg\nfunc TestExample(t *testing.T) {\n\tt.Fatal(\"first assertion\")\n\tassert.True(t, false)\n}\n"), 0644)
+	_, _ = driver.CommitAll("initial")
+
+	storySpec := &spec.StorySpec{
+		ID:           "SPEC-R2-3-GUTTED",
+		Title:        "Test 2 Assertions Gutted",
+		TestCommands: []string{"echo ok"},
+	}
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	guttedPatch := `diff --git a/pkg_test.go b/pkg_test.go
+--- a/pkg_test.go
++++ b/pkg_test.go
+@@ -1,5 +1,3 @@
+ package pkg
+ func TestExample(t *testing.T) {
+-	t.Fatal("first assertion")
+-	assert.True(t, false)
+ }
+`
+	opts := &LoopOptions{
+		MaxRounds:             1,
+		Autonomy:              AutonomySupervised,
+		TestCommandsConfirmed: true,
+		MockPatchGen: func(round int, feedback string) string {
+			return guttedPatch
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if res.Success {
+		t.Fatalf("expected coordinator to reject 2 assertions gutted, but succeeded")
+	}
+	if res.FinalVerdict == nil || res.FinalVerdict.Approved {
+		t.Fatalf("expected final verdict to be rejected, got: %+v", res.FinalVerdict)
+	}
+}
+
+func TestR2_3_Coordinator_RejectsNoOpTRun(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	testFile := filepath.Join(tempDir, "pkg_test.go")
+	_ = os.WriteFile(testFile, []byte("package pkg\nfunc TestExample(t *testing.T) {\n}\n"), 0644)
+	_, _ = driver.CommitAll("initial")
+
+	storySpec := &spec.StorySpec{
+		ID:           "SPEC-R2-3-NO-OP-TRUN",
+		Title:        "Test No-Op t.Run",
+		TestCommands: []string{"echo ok"},
+	}
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	noOpPatch := `diff --git a/pkg_test.go b/pkg_test.go
+--- a/pkg_test.go
++++ b/pkg_test.go
+@@ -1,3 +1,5 @@
+ package pkg
+ func TestExample(t *testing.T) {
++	t.Run("sub", func(t *testing.T) {
++	})
+ }
+`
+	opts := &LoopOptions{
+		MaxRounds:             1,
+		Autonomy:              AutonomySupervised,
+		TestCommandsConfirmed: true,
+		MockPatchGen: func(round int, feedback string) string {
+			return noOpPatch
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if res.Success {
+		t.Fatalf("expected coordinator to reject t.Run with no-op body, but succeeded")
+	}
+	if res.FinalVerdict == nil || res.FinalVerdict.Approved {
+		t.Fatalf("expected final verdict to be rejected, got: %+v", res.FinalVerdict)
+	}
+}
+
+func TestR2_3_Coordinator_NonGo_WarningAnalyzerFindingDoesNotApproveTaboo(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	appFile := filepath.Join(tempDir, "App.kt")
+	_ = os.WriteFile(appFile, []byte("package com.example\nclass App {\n}\n"), 0644)
+	_, _ = driver.CommitAll("initial")
+
+	storySpec := &spec.StorySpec{
+		ID:           "SPEC-R2-3-NON-GO-KOTLIN",
+		Title:        "Test Kotlin Dangerous Exec Not Approved by Warning Finding",
+		TestCommands: []string{"echo ok"},
+	}
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	kotlinDangerousPatch := `diff --git a/App.kt b/App.kt
+--- a/App.kt
++++ b/App.kt
+@@ -1,3 +1,5 @@
+ package com.example
+ class App {
++    fun run() { Runtime.getRuntime().exec("rm -rf /") }
+ }
+`
+	opts := &LoopOptions{
+		MaxRounds:             1,
+		Autonomy:              AutonomySupervised,
+		TestCommandsConfirmed: true,
+		MockPatchGen: func(round int, feedback string) string {
+			return kotlinDangerousPatch
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if res.Success {
+		t.Fatalf("expected coordinator to reject/unreview Kotlin Runtime.exec diff, but succeeded")
+	}
+	if res.FinalVerdict != nil && res.FinalVerdict.Approved {
+		t.Fatalf("expected final verdict to NOT be approved for dangerous non-Go diff, got approved with: %+v", res.FinalVerdict)
+	}
+}
+
 
 
 

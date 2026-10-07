@@ -714,6 +714,69 @@ func TestAdversarial_NonGoLanguageFailsClosedUnreviewed(t *testing.T) {
 	}
 }
 
+func TestR2_3_Reviewer_NonGo_WarningFindingDoesNotApproveDangerousKotlin(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved": true, "blocking": [], "warnings": []}`, nil
+	})
+
+	ctx := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: `diff --git a/App.kt b/App.kt
+--- a/App.kt
++++ b/App.kt
+@@ -1,3 +1,5 @@
+ package com.example
+ class App {
++    fun run() { Runtime.getRuntime().exec("rm -rf /") }
+ }
+`,
+		AnalyzerFindings: []AnalyzerFinding{
+			{Tool: "detekt", Message: "Naming convention warning", Severity: "WARNING"},
+		},
+	}
+
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("CRITICAL SECURITY DEFECT: 1 warning finding flipped dangerous Kotlin diff to APPROVED!")
+	}
+}
+
+func TestR2_3_Reviewer_CoverageDropToZero_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved": true, "blocking": [], "warnings": []}`, nil
+	})
+	ctx := &ReviewContext{
+		Ctx:            context.Background(),
+		Diff:           "diff --git a/pkg.go b/pkg.go\n...",
+		CoverageBefore: 0.85,
+		CoverageAfter:  0.0,
+	}
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected coverage drop to 0 to be rejected, but approved")
+	}
+}
+
+func TestR2_3_Reviewer_TestCountBeforeZero_MissingDataRejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved": true, "blocking": [], "warnings": []}`, nil
+	})
+	ctx := &ReviewContext{
+		Ctx:               context.Background(),
+		Diff:              "diff --git a/pkg.go b/pkg.go\n...",
+		TestCountBefore:   0,
+		TestCountAfter:    0,
+		RequiresTestGates: true,
+	}
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected missing test count metrics to fail closed, but approved")
+	}
+}
+
 
 
 

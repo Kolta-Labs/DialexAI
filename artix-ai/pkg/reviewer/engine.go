@@ -85,10 +85,13 @@ type ReviewContext struct {
 	Ctx              context.Context
 	Criteria         []string
 	WorkspaceDir     string
-	TestCountBefore  int
-	TestCountAfter   int
-	CoverageBefore   float64
-	CoverageAfter    float64
+	TestCountBefore          int
+	TestCountAfter           int
+	CoverageBefore           float64
+	CoverageAfter            float64
+	RequiresTestGates        bool
+	SemanticRunnerConfigured bool
+	SemanticRunnerExecuted   bool
 }
 
 // Evaluate performs deterministic pre-filtering (tests, diff, taboos, static analyzers) and
