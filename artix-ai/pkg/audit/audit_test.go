@@ -687,4 +687,61 @@ func TestR3_5_PrivateKeyPath_TestedAgainstSandboxReadablePaths(t *testing.T) {
 	}
 }
 
+func TestR9_SetPrivateKeyPath_MalformedKeys_FailHard(t *testing.T) {
+	wsDir := t.TempDir()
+	secDir := filepath.Join(t.TempDir(), "secure_keys", ".ssh")
+	_ = os.MkdirAll(secDir, 0700)
+
+	logger := NewLogger(wsDir)
+
+	// Case 1: Garbage content
+	garbageKey := filepath.Join(secDir, "garbage.key")
+	_ = os.WriteFile(garbageKey, []byte("this is not a valid ed25519 key at all"), 0600)
+	if err := logger.SetPrivateKeyPath(garbageKey); err == nil {
+		t.Fatalf("expected error for garbage private key file, got nil")
+	}
+
+	// Case 2: Truncated hex key (10 bytes hex instead of 64 or 128)
+	truncatedKey := filepath.Join(secDir, "truncated.key")
+	_ = os.WriteFile(truncatedKey, []byte("deadbeef01"), 0600)
+	if err := logger.SetPrivateKeyPath(truncatedKey); err == nil {
+		t.Fatalf("expected error for truncated private key file, got nil")
+	}
+
+	// Case 3: Wrong length raw bytes (e.g. 16 bytes)
+	wrongLenKey := filepath.Join(secDir, "wrong_len.key")
+	_ = os.WriteFile(wrongLenKey, make([]byte, 16), 0600)
+	if err := logger.SetPrivateKeyPath(wrongLenKey); err == nil {
+		t.Fatalf("expected error for wrong length raw private key file, got nil")
+	}
+}
+
+func TestR9_SetPrivateKeyPath_Permissions_RequireOwnerOnly(t *testing.T) {
+	wsDir := t.TempDir()
+	secDir := filepath.Join(t.TempDir(), "secure_keys", ".ssh")
+	_ = os.MkdirAll(secDir, 0700)
+
+	logger := NewLogger(wsDir)
+	_, priv, _ := ed25519.GenerateKey(nil)
+
+	// 0644 insecure permissions (group/world readable)
+	insecureKey := filepath.Join(secDir, "insecure_0644.key")
+	_ = os.WriteFile(insecureKey, []byte(hex.EncodeToString(priv)), 0644)
+	_ = os.Chmod(insecureKey, 0644)
+
+	if err := logger.SetPrivateKeyPath(insecureKey); err == nil {
+		t.Fatalf("expected error for 0644 permissions on private key file, got nil")
+	}
+
+	// 0600 secure permissions (owner only)
+	secureKey := filepath.Join(secDir, "secure_0600.key")
+	_ = os.WriteFile(secureKey, []byte(hex.EncodeToString(priv)), 0600)
+	_ = os.Chmod(secureKey, 0600)
+
+	if err := logger.SetPrivateKeyPath(secureKey); err != nil {
+		t.Fatalf("expected success for 0600 permissions, got: %v", err)
+	}
+}
+
+
 

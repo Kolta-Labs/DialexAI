@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"artix/pkg/persona"
 	"artix/pkg/pilot"
@@ -396,5 +397,126 @@ func TestR6_4_InsecureLedgerFilePermissionsRefused(t *testing.T) {
 		t.Fatalf("expected error mentioning insecure permissions, got: %v", err)
 	}
 }
+
+func TestR10_Budget_LedgerLockFailure_AbortsWhenCapSet(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create an unopenable/uncreatable lock path by making the directory read-only or invalid
+	unwritableDir := filepath.Join(tmpDir, "unwritable")
+	_ = os.MkdirAll(unwritableDir, 0500)
+	defer os.Chmod(unwritableDir, 0700)
+
+	ledgerPath := filepath.Join(unwritableDir, "ledger.json")
+
+	b := &TokenBudget{
+		TaskID:          "TASK-R10-LOCK-FAIL",
+		MaxTeamCost:     10.0, // Financial cap set
+		LedgerPath:      ledgerPath,
+		CostPer1kTokens: 0.002,
+	}
+
+	b.RecordRoundUsage(100, 0.0002)
+
+	// Since ledger lock/write failed and cap is active, it must record error or trigger exhaustion/abort
+	if b.LedgerError == nil {
+		t.Fatalf("expected LedgerError or abort when ledger write fails under an active budget cap, got nil")
+	}
+	exhausted, reason := b.CheckExhaustion()
+	if !exhausted {
+		t.Fatalf("expected budget exhaustion/abort when ledger operation fails with cap set")
+	}
+	if !strings.Contains(reason, "ledger") {
+		t.Fatalf("expected reason mentioning ledger failure, got: %s", reason)
+	}
+}
+
+func TestR10_Budget_TwoProcessRaceWithCap(t *testing.T) {
+	tmpDir := t.TempDir()
+	ledgerPath := filepath.Join(tmpDir, "shared_race_ledger.json")
+
+	// Shared cap: MaxTeamCost = $0.010 (10 rounds of $0.001 each)
+	teamID := "eng-core-race"
+	t.Setenv("ARTIX_TEAM_ID", teamID)
+
+	var wg sync.WaitGroup
+	workers := 4
+	roundsPerWorker := 10
+
+	var totalRecordedCost float64
+	var costMu sync.Mutex
+
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			b := &TokenBudget{
+				TaskID:          fmt.Sprintf("TASK-WORKER-%d", workerID),
+				MaxTeamCost:     0.010,
+				LedgerPath:      ledgerPath,
+				CostPer1kTokens: 0.001,
+			}
+			for r := 0; r < roundsPerWorker; r++ {
+				if exh, _ := b.CheckExhaustion(); exh {
+					return
+				}
+				b.RecordRoundUsage(1000, 0.001)
+				costMu.Lock()
+				totalRecordedCost += 0.001
+				costMu.Unlock()
+				time.Sleep(2 * time.Millisecond)
+			}
+		}(w)
+	}
+	wg.Wait()
+
+	// Verify persistence in shared ledger
+	finalBudget := &TokenBudget{
+		TaskID:      "TASK-VERIFIER",
+		MaxTeamCost: 0.010,
+		LedgerPath:  ledgerPath,
+	}
+	finalBudget.SyncWithSharedLedger()
+
+	if finalBudget.UsedTeamCost < 0.010 {
+		t.Fatalf("expected team cost to reach or hit the cap of $0.010, got: $%.4f", finalBudget.UsedTeamCost)
+	}
+	if exh, _ := finalBudget.CheckExhaustion(); !exh {
+		t.Fatalf("expected final budget state to be exhausted after racing past the cap")
+	}
+}
+
+func TestR10_Budget_RestartPersistence(t *testing.T) {
+	tmpDir := t.TempDir()
+	ledgerPath := filepath.Join(tmpDir, "restart_ledger.json")
+
+	teamID := "persistence-team"
+	t.Setenv("ARTIX_TEAM_ID", teamID)
+
+	// Process 1: run 3 rounds, then exit
+	b1 := &TokenBudget{
+		TaskID:          "TASK-P1",
+		MaxTeamCost:     1.0,
+		LedgerPath:      ledgerPath,
+		CostPer1kTokens: 0.002,
+	}
+	b1.RecordRoundUsage(2000, 0.004)
+	b1.RecordRoundUsage(3000, 0.006)
+
+	// Process 2: restart / new process instantiating TokenBudget pointing to same ledger
+	b2 := &TokenBudget{
+		TaskID:          "TASK-P2",
+		MaxTeamCost:     1.0,
+		LedgerPath:      ledgerPath,
+		CostPer1kTokens: 0.002,
+	}
+	b2.SyncWithSharedLedger()
+
+	if b2.UsedTeamTokens != 5000 {
+		t.Fatalf("expected 5000 team tokens persisted across process restart, got: %d", b2.UsedTeamTokens)
+	}
+	if b2.UsedTeamCost < 0.0099 || b2.UsedTeamCost > 0.0101 {
+		t.Fatalf("expected $0.010 team cost persisted across restart, got: $%.4f", b2.UsedTeamCost)
+	}
+}
+
 
 

@@ -45,6 +45,7 @@ type TokenBudget struct {
 	TeamID          string             `json:"teamId,omitempty"`
 	TaskID          string             `json:"taskId,omitempty"`
 	LedgerPath      string             `json:"ledgerPath,omitempty"`
+	LedgerError     error              `json:"-"`
 }
 
 // LoadBudgetFromEnv loads budget limits from policy and ARTIX_BUDGET_* environment variables.
