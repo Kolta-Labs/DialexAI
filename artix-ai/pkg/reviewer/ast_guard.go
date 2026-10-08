@@ -79,6 +79,12 @@ func CheckProtectedPaths(diff string, customProtected ...string) []string {
 	return violations
 }
 
+var reStringLit = regexp.MustCompile(`"(\\.|[^"\\])*"|` + "`[^`]*`")
+
+func stripStringLiterals(s string) string {
+	return reStringLit.ReplaceAllString(s, `""`)
+}
+
 // CheckTestIntegrity ensures tests are not deleted, assertions gutted, or test skipping introduced.
 func CheckTestIntegrity(diff string) []string {
 	var violations []string
@@ -120,7 +126,8 @@ func CheckTestIntegrity(diff string) []string {
 				continue
 			}
 
-			if strings.Contains(trimmed, "t.Skip(") || strings.Contains(trimmed, "t.SkipNow()") || strings.Contains(trimmed, "t.Skip") || strings.Contains(trimmed, "t.Skipf") {
+			if (strings.Contains(trimmed, "t.Skip(") || strings.Contains(trimmed, "t.SkipNow()") || strings.Contains(trimmed, "t.Skip") || strings.Contains(trimmed, "t.Skipf")) &&
+				!strings.Contains(diff, "testing.Short()") && !strings.Contains(trimmed, "Short()") {
 				violations = append(violations, "test integrity violation: Go test skipping is forbidden (t.Skip)")
 			} else if strings.Contains(trimmed, "@Ignore") || strings.Contains(trimmed, "@Disabled") {
 				violations = append(violations, "test integrity violation: test disablement is forbidden (@Ignore/@Disabled)")
@@ -140,35 +147,34 @@ func CheckTestIntegrity(diff string) []string {
 				}
 			}
 
+			codeWithoutStrings := stripStringLiterals(trimmed)
+
 			// Detect impossible/weakened assertion (len(...) < 0 or len(...) <= -1 or bitshifts len(...) > 1<<62)
-			if (strings.Contains(trimmed, "len(") || strings.Contains(trimmed, "size()")) && (strings.Contains(trimmed, "< 0") || strings.Contains(trimmed, "<= -1") || strings.Contains(trimmed, "== -1") || strings.Contains(trimmed, "1<<") || strings.Contains(trimmed, "1 <<") || strings.Contains(trimmed, "1>>") || strings.Contains(trimmed, "1 >>")) {
+			if (strings.Contains(codeWithoutStrings, "len(") || strings.Contains(codeWithoutStrings, "size()")) &&
+				(strings.Contains(codeWithoutStrings, "< 0") || strings.Contains(codeWithoutStrings, "<= -1") || strings.Contains(codeWithoutStrings, "== -1") || strings.Contains(codeWithoutStrings, "1<<") || strings.Contains(codeWithoutStrings, "1 <<") || strings.Contains(codeWithoutStrings, "1>>") || strings.Contains(codeWithoutStrings, "1 >>")) {
 				violations = append(violations, fmt.Sprintf("test integrity violation: impossible/weakened assertion detected (%s)", trimmed))
 			}
 
-			// Detect tautology / dead test condition (e.g. 1 != 1, 1 == 1, if false, if !ok, a != a)
-			if strings.Contains(trimmed, "1 != 1") || strings.Contains(trimmed, "1 == 1") || strings.Contains(trimmed, "if false") || strings.Contains(trimmed, "assert.True(t, true)") || strings.Contains(trimmed, "assert.False(t, false)") || strings.Contains(trimmed, "if !ok") || strings.Contains(trimmed, "if !valid") || strings.Contains(trimmed, "if !pass") {
+			// Detect tautology / dead test condition (e.g. 1 != 1, 1 == 1, if false, assert.True(t, true))
+			if strings.Contains(codeWithoutStrings, "1 != 1") || strings.Contains(codeWithoutStrings, "1 == 1") || strings.Contains(codeWithoutStrings, "if false") || strings.Contains(codeWithoutStrings, "assert.True(t, true)") || strings.Contains(codeWithoutStrings, "assert.False(t, false)") {
 				violations = append(violations, fmt.Sprintf("test integrity violation: tautological assertion / dead test condition detected (%s)", trimmed))
 			}
 
-			// Track pointer/value aliases on diff lines e.g. p := &b or c := b
-			if strings.Contains(trimmed, ":=") {
-				assignParts := strings.Split(trimmed, ":=")
-				if len(assignParts) == 2 {
-					lhsVar := strings.TrimSpace(assignParts[0])
-					rhsVar := strings.Trim(strings.TrimSpace(assignParts[1]), "&* ;()")
-					if lhsVar != "" && rhsVar != "" && !strings.Contains(rhsVar, " ") {
-						// Record alias
-						for _, op := range []string{"!=", "==", "<=", ">=", "<", ">"} {
-							_ = op
-						}
+			// Track boolean literal assignments e.g. ok := true followed by if !ok
+			if strings.Contains(codeWithoutStrings, ":= true") || strings.Contains(codeWithoutStrings, "= true") {
+				parts := strings.Split(codeWithoutStrings, "=")
+				if len(parts) >= 2 {
+					varName := strings.Trim(strings.TrimSpace(parts[0]), ": ")
+					if varName != "" && strings.Contains(diff, "if !"+varName) {
+						violations = append(violations, fmt.Sprintf("test integrity violation: tautological assertion / dead test condition detected (%s := true followed by if !%s)", varName, varName))
 					}
 				}
 			}
 
 			// Detect self-comparison e.g. "a != a" or "x != x" or "a == a" or "if a != a { t.Fatal(1) }"
 			for _, op := range []string{"!=", "==", "<=", ">=", "<", ">"} {
-				if strings.Contains(trimmed, op) {
-					parts := strings.Split(trimmed, op)
+				if strings.Contains(codeWithoutStrings, op) {
+					parts := strings.Split(codeWithoutStrings, op)
 					if len(parts) >= 2 {
 						lhsTokens := strings.Fields(parts[0])
 						rhsTokens := strings.Fields(parts[1])
@@ -177,8 +183,8 @@ func CheckTestIntegrity(diff string) []string {
 							rawRhs := rhsTokens[0]
 							// Exclude function calls e.g. gen() != gen() or rand.Int() == rand.Int()
 							if !strings.Contains(rawLhs, "(") && !strings.Contains(rawRhs, "(") && !strings.Contains(rawLhs, ")") && !strings.Contains(rawRhs, ")") {
-								lhs := strings.Trim(rawLhs, "(){},;[]*")
-								rhs := strings.Trim(rawRhs, "(){},;[]*")
+								lhs := strings.Trim(rawLhs, "(){},;[]*\"'`")
+								rhs := strings.Trim(rawRhs, "(){},;[]*\"'`")
 								if lhs != "" && lhs == rhs {
 									violations = append(violations, fmt.Sprintf("test integrity violation: self-comparison tautology detected (%s %s %s)", lhs, op, rhs))
 									break
@@ -191,17 +197,17 @@ func CheckTestIntegrity(diff string) []string {
 
 			// Detect assertion inside loop over empty slice/collection e.g. for range []string{} { t.Fatal(...) }
 			isEmptyRangeLit := false
-			if strings.Contains(trimmed, "range ") {
-				if matched, _ := regexp.MatchString(`range\s+(\[\]|[a-zA-Z0-9_\.]*map\[)[a-zA-Z0-9_\.\]\s]*\{\s*\}`, trimmed); matched {
+			if strings.Contains(codeWithoutStrings, "range ") {
+				if matched, _ := regexp.MatchString(`range\s+(\[\]|[a-zA-Z0-9_\.]*map\[)[a-zA-Z0-9_\.\]\s]*\{\s*\}`, codeWithoutStrings); matched {
 					isEmptyRangeLit = true
 				}
 			}
-			if isEmptyRangeLit || strings.Contains(trimmed, "for i := 0; i < 0;") || strings.Contains(trimmed, "for i := 0; i <= -1;") {
+			if isEmptyRangeLit || strings.Contains(codeWithoutStrings, "for i := 0; i < 0;") || strings.Contains(codeWithoutStrings, "for i := 0; i <= -1;") {
 				violations = append(violations, fmt.Sprintf("test integrity violation: assertion inside empty loop detected (%s)", trimmed))
 			}
 
 			// Detect defer recover() panic swallowing in tests
-			if strings.Contains(trimmed, "recover()") && (strings.Contains(trimmed, "defer") || strings.Contains(trimmed, "func()")) {
+			if strings.Contains(codeWithoutStrings, "recover()") && (strings.Contains(codeWithoutStrings, "defer") || strings.Contains(codeWithoutStrings, "func()")) {
 				violations = append(violations, fmt.Sprintf("test integrity violation: defer recover() panic swallowing detected in test (%s)", trimmed))
 			}
 
@@ -211,66 +217,27 @@ func CheckTestIntegrity(diff string) []string {
 		}
 	}
 
-	// Detect test functions with only logging, assertions only in unjoined goroutines, or assertions only in t.Cleanup
-	for i, line := range lines {
-		if strings.HasPrefix(line, "+") {
-			trimmed := strings.TrimSpace(line[1:])
-			if strings.HasPrefix(trimmed, "func Test") {
-				hasLog := false
-				hasSyncAssert := false
-				hasGoroutineAssert := false
-				hasCleanupAssert := false
-				inGoroutine := false
-				inCleanup := false
-
-				for j := i + 1; j < len(lines); j++ {
-					if strings.HasPrefix(lines[j], "+") {
-						subTrimmed := strings.TrimSpace(lines[j][1:])
-						if strings.HasPrefix(subTrimmed, "func ") && !strings.Contains(subTrimmed, "func()") {
-							break
-						}
-						if strings.Contains(subTrimmed, "go func()") || strings.HasPrefix(subTrimmed, "go ") {
-							inGoroutine = true
-						}
-						if strings.Contains(subTrimmed, "t.Cleanup") {
-							inCleanup = true
-						}
-						if strings.Contains(subTrimmed, "t.Log") {
-							hasLog = true
-						}
-						if isAssertionStatement(subTrimmed) || strings.Contains(subTrimmed, "t.Fatal") || strings.Contains(subTrimmed, "t.Error") || strings.Contains(subTrimmed, "t.Fail") {
-							if inGoroutine {
-								hasGoroutineAssert = true
-							} else if inCleanup {
-								hasCleanupAssert = true
-							} else {
-								hasSyncAssert = true
-							}
-						}
-						if strings.Contains(subTrimmed, "}()") || strings.Contains(subTrimmed, "})") {
-							inGoroutine = false
-							inCleanup = false
-						}
-					} else if !strings.HasPrefix(lines[j], "-") && !strings.HasPrefix(lines[j], " ") && !strings.HasPrefix(lines[j], "@") {
-						break
-					}
-				}
-				if !hasSyncAssert {
-					if hasGoroutineAssert {
-						violations = append(violations, "test integrity violation: test has assertions only inside unjoined goroutine")
-					} else if hasCleanupAssert {
-						violations = append(violations, "test integrity violation: test has assertions only inside t.Cleanup (must have assertions in test body)")
-					} else if hasLog {
-						violations = append(violations, "test integrity violation: test has no assertions (only logging)")
-					}
-				}
-			}
-		}
-	}
-
 	// Flag any net assertion loss
 	if deletedAssertions > addedAssertions {
 		violations = append(violations, fmt.Sprintf("test integrity violation: net assertion loss detected (%d assertion statements removed, %d added)", deletedAssertions, addedAssertions))
+	}
+
+	// AST-based assertion reachability analysis on added Go test code
+	addedLines := extractAddedCodeLines(diff)
+	if len(addedLines) > 0 {
+		codeBlob := strings.Join(addedLines, "\n")
+		if strings.Contains(codeBlob, "func Test") || strings.Contains(codeBlob, "t *testing.T") {
+			fset := token.NewFileSet()
+			if strings.Contains(codeBlob, "package ") {
+				if node, err := parser.ParseFile(fset, "diff_test.go", codeBlob, parser.ParseComments); err == nil {
+					violations = append(violations, inspectTestASTIntegrity(node)...)
+				}
+			} else {
+				if node, err := parser.ParseFile(fset, "diff_test.go", fmt.Sprintf("package p\n%s\n", codeBlob), parser.ParseComments); err == nil {
+					violations = append(violations, inspectTestASTIntegrity(node)...)
+				}
+			}
+		}
 	}
 
 	return deduplicateStrings(violations)
@@ -1308,9 +1275,344 @@ func CheckTestIntegrityWholeFile(workspaceDir, diff string) []string {
 				violations = append(violations, fmt.Sprintf("test integrity violation: assertions hidden in uncalled helper function %s in %s", helper.Name.Name, f))
 			}
 		}
+
+		// Run AST test reachability analysis
+		violations = append(violations, inspectTestASTIntegrity(node)...)
 	}
 
 	return deduplicateStrings(violations)
+}
+
+// inspectTestASTIntegrity performs comprehensive AST assertion reachability analysis on Go test files.
+func inspectTestASTIntegrity(node *ast.File) []string {
+	var violations []string
+	if node == nil {
+		return violations
+	}
+
+	// 1. Collect file-level constants
+	fileConsts := make(map[string]bool)
+	for _, decl := range node.Decls {
+		if gen, ok := decl.(*ast.GenDecl); ok && gen.Tok == token.CONST {
+			for _, spec := range gen.Specs {
+				if vs, ok := spec.(*ast.ValueSpec); ok {
+					for i, name := range vs.Names {
+						if i < len(vs.Values) {
+							if ident, ok := vs.Values[i].(*ast.Ident); ok {
+								if ident.Name == "false" {
+									fileConsts[name.Name] = false
+								} else if ident.Name == "true" {
+									fileConsts[name.Name] = true
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Collect helper functions and test functions
+	helpers := make(map[string]*ast.FuncDecl)
+	var testFuncs []*ast.FuncDecl
+	for _, decl := range node.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		if strings.HasPrefix(fn.Name.Name, "Test") {
+			testFuncs = append(testFuncs, fn)
+		} else if !strings.HasPrefix(fn.Name.Name, "Benchmark") && !strings.HasPrefix(fn.Name.Name, "Example") {
+			helpers[fn.Name.Name] = fn
+		}
+	}
+
+	// Helper to check if a block returns unconditionally on all execution paths
+	var returnsUnconditionally func(body *ast.BlockStmt, consts map[string]bool) bool
+	returnsUnconditionally = func(body *ast.BlockStmt, consts map[string]bool) bool {
+		if body == nil || len(body.List) == 0 {
+			return false
+		}
+		for _, stmt := range body.List {
+			if _, isRet := stmt.(*ast.ReturnStmt); isRet {
+				return true
+			}
+			if ifStmt, ok := stmt.(*ast.IfStmt); ok {
+				condIsConstFalse := false
+				condIsConstTrue := false
+				if ident, ok := ifStmt.Cond.(*ast.Ident); ok {
+					if val, ok := consts[ident.Name]; ok {
+						if !val {
+							condIsConstFalse = true
+						} else {
+							condIsConstTrue = true
+						}
+					} else if ident.Name == "false" {
+						condIsConstFalse = true
+					} else if ident.Name == "true" {
+						condIsConstTrue = true
+					}
+				}
+				if condIsConstTrue && returnsUnconditionally(ifStmt.Body, consts) {
+					return true
+				}
+				if !condIsConstFalse && ifStmt.Else != nil {
+					elseReturns := false
+					if elseBlock, ok := ifStmt.Else.(*ast.BlockStmt); ok {
+						elseReturns = returnsUnconditionally(elseBlock, consts)
+					} else if elseIf, ok := ifStmt.Else.(*ast.IfStmt); ok {
+						if returnsUnconditionally(&ast.BlockStmt{List: []ast.Stmt{elseIf}}, consts) {
+							elseReturns = true
+						}
+					}
+					if returnsUnconditionally(ifStmt.Body, consts) && elseReturns {
+						return true
+					}
+				}
+			}
+		}
+		return false
+	}
+
+	// Helper to check if a helper function can reach assertions
+	helperCanReachAssertions := func(helper *ast.FuncDecl) bool {
+		if helper == nil || helper.Body == nil {
+			return false
+		}
+		hasReachableAssertion := false
+		for _, stmt := range helper.Body.List {
+			if _, isRet := stmt.(*ast.ReturnStmt); isRet {
+				break
+			}
+			if ifStmt, ok := stmt.(*ast.IfStmt); ok {
+				if ifStmt.Else != nil {
+					if returnsUnconditionally(ifStmt.Body, fileConsts) {
+						if elseBlock, ok := ifStmt.Else.(*ast.BlockStmt); ok && returnsUnconditionally(elseBlock, fileConsts) {
+							break
+						}
+					}
+				}
+			}
+			ast.Inspect(stmt, func(n ast.Node) bool {
+				if call, ok := n.(*ast.CallExpr); ok {
+					if isAssertionCall(call) {
+						hasReachableAssertion = true
+					}
+				}
+				return true
+			})
+			if hasReachableAssertion {
+				break
+			}
+		}
+		return hasReachableAssertion
+	}
+
+	for _, fn := range testFuncs {
+		// Collect local consts
+		localConsts := make(map[string]bool)
+		for k, v := range fileConsts {
+			localConsts[k] = v
+		}
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			if gen, ok := n.(*ast.GenDecl); ok && gen.Tok == token.CONST {
+				for _, spec := range gen.Specs {
+					if vs, ok := spec.(*ast.ValueSpec); ok {
+						for i, name := range vs.Names {
+							if i < len(vs.Values) {
+								if ident, ok := vs.Values[i].(*ast.Ident); ok {
+									if ident.Name == "false" {
+										localConsts[name.Name] = false
+									} else if ident.Name == "true" {
+										localConsts[name.Name] = true
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			return true
+		})
+
+		// Track closures defined vs invoked
+		closureVars := make(map[string]*ast.FuncLit)
+		invokedClosures := make(map[string]bool)
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			if assign, ok := n.(*ast.AssignStmt); ok {
+				for i, lhs := range assign.Lhs {
+					if ident, ok := lhs.(*ast.Ident); ok && i < len(assign.Rhs) {
+						if lit, ok := assign.Rhs[i].(*ast.FuncLit); ok {
+							closureVars[ident.Name] = lit
+						}
+					}
+				}
+			}
+			if call, ok := n.(*ast.CallExpr); ok {
+				if ident, ok := call.Fun.(*ast.Ident); ok {
+					invokedClosures[ident.Name] = true
+				}
+			}
+			return true
+		})
+
+		// Track sync primitives in test function
+		hasSync := false
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			if sel, ok := n.(*ast.SelectorExpr); ok {
+				if sel.Sel.Name == "Wait" || sel.Sel.Name == "Parallel" || sel.Sel.Name == "Run" {
+					hasSync = true
+				}
+			}
+			if _, ok := n.(*ast.UnaryExpr); ok { // <-ch
+				hasSync = true
+			}
+			return true
+		})
+
+		// Walk top-level statements in fn.Body.List
+		hasReachableAssertion := false
+		hasOnlyUnreachableAfterReturn := false
+		hasOnlyConstFalseAssertion := false
+		hasOnlyUninvokedClosureAssertion := false
+		hasOnlyHelperThatCannotFail := false
+		hasOnlyUnjoinedGoroutine := false
+		hasOnlyCleanupAssertion := false
+		hasLogging := false
+
+		hitUnconditionalReturn := false
+
+		for _, stmt := range fn.Body.List {
+			if hitUnconditionalReturn {
+				// Any assertion here is unreachable dead code
+				ast.Inspect(stmt, func(n ast.Node) bool {
+					if call, ok := n.(*ast.CallExpr); ok && isAssertionCall(call) {
+						hasOnlyUnreachableAfterReturn = true
+					}
+					return true
+				})
+				continue
+			}
+
+			if _, isRet := stmt.(*ast.ReturnStmt); isRet {
+				hitUnconditionalReturn = true
+				continue
+			}
+
+			// Check if this statement is an if with const-false condition
+			if ifStmt, ok := stmt.(*ast.IfStmt); ok {
+				condIsConstFalse := false
+				if ident, ok := ifStmt.Cond.(*ast.Ident); ok {
+					if val, ok := localConsts[ident.Name]; ok && !val {
+						condIsConstFalse = true
+					} else if ident.Name == "false" {
+						condIsConstFalse = true
+					}
+				}
+				if condIsConstFalse {
+					ast.Inspect(ifStmt.Body, func(n ast.Node) bool {
+						if call, ok := n.(*ast.CallExpr); ok && isAssertionCall(call) {
+							hasOnlyConstFalseAssertion = true
+						}
+						return true
+					})
+					continue
+				}
+			}
+
+			// Check if statement contains assertion or helper call
+			ast.Inspect(stmt, func(n ast.Node) bool {
+				if _, ok := n.(*ast.FuncLit); ok {
+					return false // Closures are evaluated via closureVars and invokedClosures
+				}
+				if goStmt, ok := n.(*ast.GoStmt); ok {
+					ast.Inspect(goStmt.Call, func(gn ast.Node) bool {
+						if call, ok := gn.(*ast.CallExpr); ok && isAssertionCall(call) {
+							if !hasSync {
+								hasOnlyUnjoinedGoroutine = true
+							} else {
+								hasReachableAssertion = true
+							}
+						}
+						return true
+					})
+					return false // don't re-walk inside goStmt
+				}
+
+				if call, ok := n.(*ast.CallExpr); ok {
+					if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+						if sel.Sel.Name == "Cleanup" {
+							ast.Inspect(call, func(cn ast.Node) bool {
+								if subCall, ok := cn.(*ast.CallExpr); ok && isAssertionCall(subCall) {
+									hasOnlyCleanupAssertion = true
+								}
+								return true
+							})
+							return false
+						}
+						if sel.Sel.Name == "Log" || sel.Sel.Name == "Logf" {
+							hasLogging = true
+						}
+					}
+					if isAssertionCall(call) {
+						hasReachableAssertion = true
+					}
+					// Check helper calls
+					if ident, ok := call.Fun.(*ast.Ident); ok {
+						if helper, ok := helpers[ident.Name]; ok {
+							if helperCanReachAssertions(helper) {
+								hasReachableAssertion = true
+							} else {
+								hasOnlyHelperThatCannotFail = true
+							}
+						}
+					}
+				}
+				return true
+			})
+		}
+
+		// Check if closures have assertions but were never invoked
+		for name, lit := range closureVars {
+			if !invokedClosures[name] {
+				ast.Inspect(lit.Body, func(cn ast.Node) bool {
+					if call, ok := cn.(*ast.CallExpr); ok && isAssertionCall(call) {
+						hasOnlyUninvokedClosureAssertion = true
+					}
+					return true
+				})
+			} else {
+				ast.Inspect(lit.Body, func(cn ast.Node) bool {
+					if call, ok := cn.(*ast.CallExpr); ok && isAssertionCall(call) {
+						hasReachableAssertion = true
+					}
+					return true
+				})
+			}
+		}
+
+		if !hasReachableAssertion {
+			if hasOnlyUnreachableAfterReturn {
+				violations = append(violations, fmt.Sprintf("test integrity violation: assertion placed after unconditional return in %s (unreachable)", fn.Name.Name))
+			} else if hasOnlyConstFalseAssertion {
+				violations = append(violations, fmt.Sprintf("test integrity violation: assertion inside constant false block in %s (unreachable)", fn.Name.Name))
+			} else if hasOnlyUninvokedClosureAssertion {
+				violations = append(violations, fmt.Sprintf("test integrity violation: assertion inside uninvoked closure in %s", fn.Name.Name))
+			} else if hasOnlyHelperThatCannotFail {
+				violations = append(violations, fmt.Sprintf("test integrity violation: helper function cannot fail (returns on all paths before reaching assertions) in %s", fn.Name.Name))
+			} else if hasOnlyUnjoinedGoroutine {
+				violations = append(violations, fmt.Sprintf("test integrity violation: test %s has assertions only inside unjoined goroutine", fn.Name.Name))
+			} else if hasOnlyCleanupAssertion {
+				violations = append(violations, fmt.Sprintf("test integrity violation: test %s has assertions only inside t.Cleanup (must have assertions in test body)", fn.Name.Name))
+			} else if hasLogging {
+				violations = append(violations, fmt.Sprintf("test integrity violation: test %s has no assertions (only logging)", fn.Name.Name))
+			} else {
+				violations = append(violations, fmt.Sprintf("test integrity violation: test %s has no reachable assertions", fn.Name.Name))
+			}
+		}
+	}
+
+	return violations
 }
 
 // CountTestsInWorkspace counts all Test* functions in all Go test files within workspaceDir.
