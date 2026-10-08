@@ -34,7 +34,14 @@ var SensitiveReadDenyPaths = []string{
 func BuildBwrapArgs(writable []string, net bool, cmdStr string) []string {
 	args := []string{"--unshare-user-try", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--die-with-parent"}
 
+	for _, w := range writable {
+		if _, err := os.Stat(w); err == nil {
+			args = append(args, "--bind", w, w)
+		}
+	}
+
 	// Hide sensitive credential directories from reads via empty tmpfs mounts
+	// Note: Placed after writable binds so tmpfs shadows any parent directory binds (e.g. in /tmp)
 	home, _ := os.UserHomeDir()
 	if home != "" {
 		for _, denyRel := range SensitiveReadDenyPaths {
@@ -45,11 +52,6 @@ func BuildBwrapArgs(writable []string, net bool, cmdStr string) []string {
 		}
 	}
 
-	for _, w := range writable {
-		if _, err := os.Stat(w); err == nil {
-			args = append(args, "--bind", w, w)
-		}
-	}
 	if !net {
 		args = append(args, "--unshare-net")
 	}

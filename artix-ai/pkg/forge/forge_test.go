@@ -229,6 +229,10 @@ func TestWebhookServer_GitLab_Issue(t *testing.T) {
 
 func TestRemoteWorker_Execute_LocalSimulated(t *testing.T) {
 	t.Setenv("ARTIX_ALLOW_AUTONOMOUS", "1")
+	t.Setenv("GIT_AUTHOR_NAME", "Artix Bot")
+	t.Setenv("GIT_AUTHOR_EMAIL", "bot@artix.ai")
+	t.Setenv("GIT_COMMITTER_NAME", "Artix Bot")
+	t.Setenv("GIT_COMMITTER_EMAIL", "bot@artix.ai")
 	remoteDir, err := os.MkdirTemp("", "kritix-sim-remote-*")
 	if err != nil {
 		t.Fatalf("failed to create temp remote dir: %v", err)
