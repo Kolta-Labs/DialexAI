@@ -91,16 +91,81 @@ func VerifyAuditRecord(auditLogPath, expectedHash string) error {
 	return fmt.Errorf("audit record hash %s not found or altered in %s", expectedHash, auditLogPath)
 }
 
-// VerifyLedgerEntry verifies that a referenced ledger file exists on disk.
+// VerifyLedgerEntry verifies that a referenced ledger file exists on disk and is valid JSON.
 func VerifyLedgerEntry(ledgerPath string) error {
 	if ledgerPath == "" {
 		return errors.New("missing ledger path")
 	}
-	if _, err := os.Stat(ledgerPath); err != nil {
+	data, err := os.ReadFile(ledgerPath)
+	if err != nil {
 		return fmt.Errorf("ledger file not found at %s: %w", ledgerPath, err)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Errorf("invalid json in ledger at %s: %w", ledgerPath, err)
 	}
 	return nil
 }
+
+// VerifyLedgerEntryMatch verifies that the ledger file exists, parses its JSON contents,
+// and confirms that the entry matching the task ID exists and matches the expected token count and USD cost.
+func VerifyLedgerEntryMatch(ledgerPath, taskID string, expectedTokens int64, expectedUSD float64) error {
+	if ledgerPath == "" {
+		return errors.New("missing ledger path")
+	}
+	data, err := os.ReadFile(ledgerPath)
+	if err != nil {
+		return fmt.Errorf("failed to read ledger file at %s: %w", ledgerPath, err)
+	}
+
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		return fmt.Errorf("invalid json in ledger at %s: %w", ledgerPath, err)
+	}
+
+	// Check if task exists in "tasks" or directly in root
+	var entry map[string]any
+	if tasks, ok := root["tasks"].(map[string]any); ok {
+		if t, ok := tasks[taskID].(map[string]any); ok {
+			entry = t
+		}
+	}
+	if entry == nil {
+		if t, ok := root[taskID].(map[string]any); ok {
+			entry = t
+		}
+	}
+	if entry == nil {
+		return fmt.Errorf("task %q not found in ledger %s", taskID, ledgerPath)
+	}
+
+	// Verify tokens
+	tokensVal, hasTokens := entry["tokens"]
+	if !hasTokens {
+		return fmt.Errorf("task %q in ledger missing 'tokens' field", taskID)
+	}
+	tokensFloat, ok := tokensVal.(float64)
+	if !ok || int64(tokensFloat) != expectedTokens {
+		return fmt.Errorf("token count mismatch in ledger for task %q: expected %d, got %v", taskID, expectedTokens, tokensVal)
+	}
+
+	// Verify USD
+	usdVal, hasUSD := entry["usd"]
+	if !hasUSD {
+		return fmt.Errorf("task %q in ledger missing 'usd' field", taskID)
+	}
+	usdFloat, ok := usdVal.(float64)
+	diff := usdFloat - expectedUSD
+	if diff < 0 {
+		diff = -diff
+	}
+	if !ok || diff > 0.0001 {
+		return fmt.Errorf("USD cost mismatch in ledger for task %q: expected %.4f, got %v", taskID, expectedUSD, usdVal)
+	}
+
+	return nil
+}
+
 
 // ValidateAndJoinRecord verifies the complete joinability and independence of a task record.
 func ValidateAndJoinRecord(r TaskRecord, repoDir ...string) error {
