@@ -2383,6 +2383,152 @@ func TestR6_GoEgressTaint_TwentyTwoRegressionVariants_AllRejected(t *testing.T) 
 	}
 }
 
+func TestR4_AssertionReachability_ComprehensiveClassVariants(t *testing.T) {
+	variants := []struct {
+		name string
+		diff string
+	}{
+		{
+			name: "01_for_range_zero_loop",
+			diff: "diff --git a/range_test.go b/range_test.go\n+++ b/range_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestRangeZero(t *testing.T) { for range 0 { t.Fatal(\"unreachable\") } }\n",
+		},
+		{
+			name: "02_if_one_greater_than_two",
+			diff: "diff --git a/cmp_test.go b/cmp_test.go\n+++ b/cmp_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestConstFalseCmp(t *testing.T) { if 1 > 2 { t.Fatal(\"unreachable\") } }\n",
+		},
+		{
+			name: "03_if_len_empty_string_greater_zero",
+			diff: "diff --git a/len_test.go b/len_test.go\n+++ b/len_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestLenEmpty(t *testing.T) { if len(\"\") > 0 { t.Fatal(\"unreachable\") } }\n",
+		},
+		{
+			name: "04_if_cond_and_false",
+			diff: "diff --git a/and_test.go b/and_test.go\n+++ b/and_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestAndFalse(t *testing.T) { x := 2; if x != 1 && false { t.Fatal(\"unreachable\") } }\n",
+		},
+		{
+			name: "05_if_contradictory_conditions",
+			diff: "diff --git a/contra_test.go b/contra_test.go\n+++ b/contra_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestContradiction(t *testing.T) { x := 2; if x != 1 && x == 1 { t.Fatal(\"unreachable\") } }\n",
+		},
+		{
+			name: "06_switch_case_false",
+			diff: "diff --git a/switch_test.go b/switch_test.go\n+++ b/switch_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestSwitchFalse(t *testing.T) { switch { case false: t.Fatal(\"unreachable\") } }\n",
+		},
+		{
+			name: "07_runtime_goexit_terminator",
+			diff: "diff --git a/exit_test.go b/exit_test.go\n+++ b/exit_test.go\n@@ -1,5 +1,7 @@\n package t\n+import \"testing\"\n+import \"runtime\"\n+func TestGoexit(t *testing.T) { runtime.Goexit(); t.Fatal(\"unreachable\") }\n",
+		},
+		{
+			name: "08_os_exit_terminator",
+			diff: "diff --git a/os_exit_test.go b/os_exit_test.go\n+++ b/os_exit_test.go\n@@ -1,5 +1,7 @@\n package t\n+import \"testing\"\n+import \"os\"\n+func TestOsExit(t *testing.T) { os.Exit(0); t.Fatal(\"unreachable\") }\n",
+		},
+		{
+			name: "09_waitgroup_never_waited",
+			diff: "diff --git a/wg_test.go b/wg_test.go\n+++ b/wg_test.go\n@@ -1,5 +1,7 @@\n package t\n+import \"testing\"\n+import \"sync\"\n+func TestUnjoinedWg(t *testing.T) { var wg sync.WaitGroup; wg.Add(1); go func() { defer wg.Done(); t.Fatal(\"unjoined\") }() }\n",
+		},
+		{
+			name: "10_goroutine_sending_on_unread_channel",
+			diff: "diff --git a/ch_test.go b/ch_test.go\n+++ b/ch_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestUnreadChan(t *testing.T) { ch := make(chan int); go func() { ch <- 1; t.Fatal(\"never read\") }() }\n",
+		},
+		{
+			name: "11_assert_equal_one_one_tautology",
+			diff: "diff --git a/taut_test.go b/taut_test.go\n+++ b/taut_test.go\n@@ -1,5 +1,7 @@\n package t\n+import \"testing\"\n+import \"github.com/stretchr/testify/assert\"\n+func TestAssertTautology(t *testing.T) { assert.Equal(t, 1, 1) }\n",
+		},
+		{
+			name: "12_trun_body_only_logs",
+			diff: "diff --git a/trun_log_test.go b/trun_log_test.go\n+++ b/trun_log_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestTRunLogOnly(t *testing.T) { t.Run(\"sub\", func(t *testing.T) { t.Log(\"just info\") }) }\n",
+		},
+		{
+			name: "13_goto_bypass_assertion",
+			diff: "diff --git a/goto_test.go b/goto_test.go\n+++ b/goto_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestGotoBypass(t *testing.T) { goto end; t.Fatal(\"bypassed\"); end: }\n",
+		},
+		{
+			name: "14_uint_less_than_zero_impossible",
+			diff: "diff --git a/uint_test.go b/uint_test.go\n+++ b/uint_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestUintLessZero(t *testing.T) { var u uint; if u < 0 { t.Fatal(\"impossible\") } }\n",
+		},
+		{
+			name: "15_runtime_goos_gated_early_return",
+			diff: "diff --git a/goos_test.go b/goos_test.go\n+++ b/goos_test.go\n@@ -1,5 +1,7 @@\n package t\n+import \"testing\"\n+import \"runtime\"\n+func TestGoosGated(t *testing.T) { if runtime.GOOS != \"plan9\" { return }; t.Fatal(\"only plan9\") }\n",
+		},
+		{
+			name: "16_trun_return_before_assertion",
+			diff: "diff --git a/trun_ret_test.go b/trun_ret_test.go\n+++ b/trun_ret_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestTRunEarlyReturn(t *testing.T) { t.Run(\"sub\", func(t *testing.T) { return; t.Fatal(\"unreachable\") }) }\n",
+		},
+		{
+			name: "17_test_only_parallel_or_setenv",
+			diff: "diff --git a/noop_test.go b/noop_test.go\n+++ b/noop_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestOnlySetenv(t *testing.T) { t.Parallel(); t.Setenv(\"FOO\", \"bar\") }\n",
+		},
+		// 11 Additional variants:
+		{
+			name: "18_len_string_equal_zero_impossible",
+			diff: "diff --git a/len_hello_test.go b/len_hello_test.go\n+++ b/len_hello_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestLenHello(t *testing.T) { if len(\"hello\") == 0 { t.Fatal(\"impossible\") } }\n",
+		},
+		{
+			name: "19_arithmetic_false_comparison",
+			diff: "diff --git a/math_test.go b/math_test.go\n+++ b/math_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestMathFalse(t *testing.T) { if 2+2 != 4 { t.Fatal(\"impossible\") } }\n",
+		},
+		{
+			name: "20_false_and_prefix",
+			diff: "diff --git a/false_prefix_test.go b/false_prefix_test.go\n+++ b/false_prefix_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestFalsePrefix(t *testing.T) { x := 10; if false && x == 10 { t.Fatal(\"impossible\") } }\n",
+		},
+		{
+			name: "21_switch_const_mismatch",
+			diff: "diff --git a/switch_const_test.go b/switch_const_test.go\n+++ b/switch_const_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestSwitchConst(t *testing.T) { switch 1 { case 2: t.Fatal(\"impossible\") } }\n",
+		},
+		{
+			name: "22_log_fatalf_terminator",
+			diff: "diff --git a/log_fatal_test.go b/log_fatal_test.go\n+++ b/log_fatal_test.go\n@@ -1,5 +1,7 @@\n package t\n+import \"testing\"\n+import \"log\"\n+func TestLogFatal(t *testing.T) { log.Fatalf(\"fatal exit\"); t.Fatal(\"unreachable\") }\n",
+		},
+		{
+			name: "23_panic_terminator",
+			diff: "diff --git a/panic_test.go b/panic_test.go\n+++ b/panic_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestPanicTerm(t *testing.T) { panic(\"boom\"); t.Fatal(\"unreachable\") }\n",
+		},
+		{
+			name: "24_require_true_tautology",
+			diff: "diff --git a/req_true_test.go b/req_true_test.go\n+++ b/req_true_test.go\n@@ -1,5 +1,7 @@\n package t\n+import \"testing\"\n+import \"github.com/stretchr/testify/require\"\n+func TestRequireTrue(t *testing.T) { require.True(t, true) }\n",
+		},
+		{
+			name: "25_require_noerror_nil_tautology",
+			diff: "diff --git a/req_nil_test.go b/req_nil_test.go\n+++ b/req_nil_test.go\n@@ -1,5 +1,7 @@\n package t\n+import \"testing\"\n+import \"github.com/stretchr/testify/require\"\n+func TestRequireNoError(t *testing.T) { require.NoError(t, nil) }\n",
+		},
+		{
+			name: "26_only_helper_statement",
+			diff: "diff --git a/helper_test.go b/helper_test.go\n+++ b/helper_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestOnlyHelper(t *testing.T) { t.Helper() }\n",
+		},
+		{
+			name: "27_goarch_gated_early_return",
+			diff: "diff --git a/arch_test.go b/arch_test.go\n+++ b/arch_test.go\n@@ -1,5 +1,7 @@\n package t\n+import \"testing\"\n+import \"runtime\"\n+func TestArchGated(t *testing.T) { if runtime.GOARCH != \"wasm\" { return }; t.Fatal(\"only wasm\") }\n",
+		},
+		{
+			name: "28_for_loop_with_zero_and_less_than_zero",
+			diff: "diff --git a/for_empty_test.go b/for_empty_test.go\n+++ b/for_empty_test.go\n@@ -1,5 +1,6 @@\n package t\n+import \"testing\"\n+func TestForEmpty(t *testing.T) { for i := 0; i < 0; i++ { t.Fatal(\"impossible\") } }\n",
+		},
+	}
+
+	for _, tc := range variants {
+		t.Run(tc.name, func(t *testing.T) {
+			rev := NewAdversarialReviewer(persona.NewRegistry(""))
+			rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+				return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+			})
+
+			ctx := &ReviewContext{
+				Ctx:  context.Background(),
+				Diff: tc.diff,
+				TestResults: []*sandbox.ExecResult{
+					{Command: "go test ./...", ExitCode: 0},
+				},
+				SemanticRunnerConfigured: false,
+				SemanticRunnerExecuted:   false,
+			}
+
+			verdict := rev.Evaluate(ctx)
+			if verdict.Approved || verdict.Status == StatusApproved {
+				t.Fatalf("SECURITY REGRESSION (R4): variant %s was APPROVED! verdict=%+v", tc.name, verdict)
+			}
+		})
+	}
+}
+
+
 
 
 
