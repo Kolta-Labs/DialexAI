@@ -20,6 +20,21 @@ import (
 // DefaultPolicyPath is the build-time default location for enterprise policy.
 var DefaultPolicyPath = "/etc/artix/policy.json"
 
+// CompiledTrustedSigningKey can be set at compile time via -ldflags "-X artix/pkg/policy.CompiledTrustedSigningKey=..."
+var CompiledTrustedSigningKey = ""
+
+// CompiledTrustedPublicKeyHex can be set at compile time via -ldflags "-X artix/pkg/policy.CompiledTrustedPublicKeyHex=..."
+var CompiledTrustedPublicKeyHex = ""
+
+func init() {
+	if CompiledTrustedSigningKey != "" {
+		SetTrustedKey("compiled-root", CompiledTrustedSigningKey)
+	}
+	if CompiledTrustedPublicKeyHex != "" {
+		_ = SetTrustedPublicKeyHex("compiled-root-pub", CompiledTrustedPublicKeyHex)
+	}
+}
+
 // TrustedSigningKeys holds symmetric and asymmetric keys trusted for policy signature verification.
 var (
 	trustedKeysMu     sync.RWMutex

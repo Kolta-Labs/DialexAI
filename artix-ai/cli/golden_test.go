@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -983,6 +984,85 @@ As an enterprise security officer, I want policy trust roots isolated from the e
 
 	if err == nil {
 		t.Fatalf("SECURITY VIOLATION (R2 d): enterprise binary allowed autonomous code generation using self-signed policy with env keys! (Stdout: %s)", stdout.String())
+	}
+	outStr := stdout.String() + stderr.String()
+	expectedRefusal := "Enterprise safety violation: --autonomy autonomous is disabled by default in enterprise/CI environments or disallowed by enterprise policy"
+	if !strings.Contains(outStr, expectedRefusal) {
+		t.Fatalf("expected specific refusal string %q in IsolateEnvKeys check, got stdout=%s stderr=%s", expectedRefusal, stdout.String(), stderr.String())
+	}
+}
+
+func TestR13_7_EnterpriseLdflag_CompiledKeyPolicyFixture_Success(t *testing.T) {
+	tempDir := t.TempDir()
+	binPath := filepath.Join(tempDir, "artix-enterprise-compiled")
+
+	pubMaster, privMaster, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	masterPubHex := hex.EncodeToString(pubMaster)
+	workDir := t.TempDir()
+
+	// Story spec
+	specDir := filepath.Join(workDir, "docs", "specs")
+	_ = os.MkdirAll(specDir, 0755)
+	specPath := filepath.Join(specDir, "STORY-ENT-01.md")
+	specContent := `---
+id: STORY-ENT-01
+title: Enterprise Compiled Key Fixture Test
+---
+# User Story
+As an enterprise user, verified compiled-key policies must allow enterprise operation.
+# Acceptance Criteria
+- Scenario 1: Enterprise policy allowed
+# Test Commands
+- echo ok
+`
+	_ = os.WriteFile(specPath, []byte(specContent), 0644)
+
+	// Generate enterprise audit key outside workspace in protected .artix dir
+	keyDir := t.TempDir()
+	secDir := filepath.Join(keyDir, ".artix")
+	_ = os.MkdirAll(secDir, 0700)
+	auditKeyPath := filepath.Join(secDir, "audit.key")
+	_, privKey, _ := ed25519.GenerateKey(nil)
+	_ = os.WriteFile(auditKeyPath, []byte(hex.EncodeToString(privKey)), 0600)
+
+	// Valid policy file signed with compiled master Ed25519 key
+	policyPath := filepath.Join(workDir, "enterprise_policy.json")
+	policyJSON := fmt.Sprintf(`{
+		"enterpriseMode": true,
+		"allowAutonomous": true,
+		"requireSignedPolicy": true,
+		"auditPrivateKeyPath": %q,
+		"allowedTestCommands": ["echo ok"]
+	}`, auditKeyPath)
+	_ = os.WriteFile(policyPath, []byte(policyJSON), 0644)
+	if err := policy.SignPolicyFileEd25519(policyPath, privMaster); err != nil {
+		t.Fatalf("failed to sign policy file with ed25519: %v", err)
+	}
+
+	// Build enterprise binary with compiled key and policy path injected via ldflags
+	ldflags := fmt.Sprintf("-X artix/pkg/policy.RequireSignedPolicyFlag=true -X artix/pkg/policy.CompiledTrustedPublicKeyHex=%s -X artix/pkg/policy.DefaultPolicyPath=%s", masterPubHex, policyPath)
+	buildCmd := exec.Command("go", "build", "-ldflags", ldflags, "-o", binPath, ".")
+	buildCmd.Dir = "."
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build enterprise binary with compiled key: %v (%s)", err, string(out))
+	}
+
+	// Run artix code --print-test-commands --json
+	cmd := exec.Command(binPath, "code", "--print-test-commands", "--json", specPath)
+	cmd.Dir = workDir
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("expected enterprise binary with compiled key to succeed, got error: %v (stdout: %s, stderr: %s)", err, stdout.String(), stderr.String())
+	}
+	var res map[string]any
+	_ = json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &res)
+	if res["ok"] != true {
+		t.Fatalf("expected ok:true, got: %+v", res)
 	}
 }
 
