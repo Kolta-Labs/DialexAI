@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"artix/pkg/coder"
+	"artix/pkg/policy"
 	"artix/pkg/spec"
 )
 
@@ -311,6 +312,32 @@ func TestRuleConflictDetection(t *testing.T) {
 	}
 	if DetectConflict(r1, r3) {
 		t.Errorf("did not expect conflict between sqlite and coroutine rules")
+	}
+}
+
+func TestR13_6_KnowledgeStore_EnterpriseMode_ViaPolicyIsEnterprise(t *testing.T) {
+	policy.EnforceSignedPolicy()
+	defer func() {
+		policy.RequireSignedPolicyFlag = "false"
+		policy.ResetCachedPolicy()
+	}()
+	policy.ResetCachedPolicy()
+
+	t.Setenv("ARTIX_ENTERPRISE", "")
+	t.Setenv("KRITIX_ENTERPRISE", "")
+
+	if !policy.IsEnterprise() {
+		t.Fatalf("policy.IsEnterprise() must be true when EnforceSignedPolicy() is active")
+	}
+
+	tempDir := t.TempDir()
+	store := NewStore(tempDir)
+
+	if !store.IsEnterpriseMode() {
+		t.Errorf("R13-6 VIOLATION: NewStore must have enterpriseMode=true when policy.IsEnterprise() is true")
+	}
+	if store.globalDir != "" {
+		t.Errorf("R13-6 VIOLATION: NewStore must disable globalDir when policy.IsEnterprise() is true, got: %q", store.globalDir)
 	}
 }
 

@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"artix/pkg/policy"
 )
 
 func TestConfinementBlocksNetworkAndOutsideWrites(t *testing.T) {
@@ -85,6 +87,30 @@ func TestEnterpriseModeBlocksSandboxEscape(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		if iso != IsolationOSSandbox {
 			t.Errorf("enterprise mode must ignore ARTIX_SANDBOX=off on darwin, got isolation: %s", iso)
+		}
+	}
+}
+
+func TestR13_6_EnterpriseMode_ViaPolicyIsEnterprise_BlocksSandboxEscape(t *testing.T) {
+	policy.EnforceSignedPolicy()
+	defer func() {
+		policy.RequireSignedPolicyFlag = "false"
+		policy.ResetCachedPolicy()
+	}()
+	policy.ResetCachedPolicy()
+
+	t.Setenv("ARTIX_ENTERPRISE", "")
+	t.Setenv("KRITIX_ENTERPRISE", "")
+	t.Setenv("ARTIX_SANDBOX", "off")
+
+	if !policy.IsEnterprise() {
+		t.Fatalf("policy.IsEnterprise() must be true when EnforceSignedPolicy() is active")
+	}
+
+	_, iso := confine(t.TempDir(), "echo hi")
+	if runtime.GOOS == "darwin" {
+		if iso != IsolationOSSandbox {
+			t.Errorf("R13-6 VIOLATION: policy.IsEnterprise() must ignore ARTIX_SANDBOX=off on darwin, got isolation: %s", iso)
 		}
 	}
 }
