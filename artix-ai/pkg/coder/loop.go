@@ -47,6 +47,7 @@ type LoopOptions struct {
 	ForgeApproval                      *policy.PRApproval  `json:"forgeApproval,omitempty"`
 	ForgeVerifier                      func(ctx context.Context, commitSHA string) (*policy.PRApproval, error)
 	ForgePusher                        func(ctx context.Context, commitSHA string) error
+	TwoPhaseAutonomous                 bool                `json:"twoPhaseAutonomous,omitempty"`
 	MaxConsecutiveIdenticalRejections int                 `json:"maxConsecutiveIdenticalRejections,omitempty"`
 	TestCommandsConfirmed              bool                `json:"testCommandsConfirmed,omitempty"`
 	ConfirmTestCommands                func(commands []string) bool
@@ -58,13 +59,14 @@ type LoopOptions struct {
 
 // LoopResult represents the final convergence outcome.
 type LoopResult struct {
-	Success      bool                    `json:"success"`
-	RoundsRun    int                     `json:"roundsRun"`
-	FinalVerdict *reviewer.ReviewVerdict `json:"finalVerdict"`
-	AppliedPatch string                  `json:"appliedPatch,omitempty"`
-	CommitHash   string                  `json:"commitHash,omitempty"`
-	CostReport   *CostReport             `json:"costReport,omitempty"`
-	Error        string                  `json:"error,omitempty"`
+	Success          bool                    `json:"success"`
+	AwaitingApproval bool                    `json:"awaitingApproval,omitempty"`
+	RoundsRun        int                     `json:"roundsRun"`
+	FinalVerdict     *reviewer.ReviewVerdict `json:"finalVerdict"`
+	AppliedPatch     string                  `json:"appliedPatch,omitempty"`
+	CommitHash       string                  `json:"commitHash,omitempty"`
+	CostReport       *CostReport             `json:"costReport,omitempty"`
+	Error            string                  `json:"error,omitempty"`
 }
 
 // ConvergenceCoordinator manages the iterative Coder <--> Reviewer <--> Sandbox loop.
@@ -613,21 +615,30 @@ func (c *ConvergenceCoordinator) Run(
 						res.Error = "autonomous commit blocked: separation of duties violation: caller-supplied ForgeApproval is strictly forbidden in enterprise mode; approvals must be verified server-side from forge API"
 						return res
 					}
-					if opts == nil || opts.ForgeVerifier == nil {
-						safeRollbackCandidate()
-						res.Success = false
-						res.Error = "autonomous commit blocked: separation of duties violation: server-side forge verification is required in enterprise mode"
-						return res
-					}
 
 					// If ForgePusher is configured, push the candidate commit to the PR branch on the remote
-					if opts.ForgePusher != nil {
+					if opts != nil && opts.ForgePusher != nil {
 						if pushErr := opts.ForgePusher(ctx, newCommitSHA); pushErr != nil {
 							safeRollbackCandidate()
 							res.Success = false
 							res.Error = fmt.Sprintf("autonomous candidate push to PR branch failed: %v (commit aborted, changes rolled back)", pushErr)
 							return res
 						}
+						// In two-phase autonomous mode or when verification is handled asynchronously by a later step
+						if opts.TwoPhaseAutonomous || opts.ForgeVerifier == nil {
+							res.Success = true
+							res.AwaitingApproval = true
+							res.CommitHash = newCommitSHA
+							res.Error = ""
+							return res
+						}
+					}
+
+					if opts == nil || opts.ForgeVerifier == nil {
+						safeRollbackCandidate()
+						res.Success = false
+						res.Error = "autonomous commit blocked: separation of duties violation: server-side forge verification is required in enterprise mode"
+						return res
 					}
 
 					var err error

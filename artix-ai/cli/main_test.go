@@ -62,3 +62,17 @@ func TestRunCLI_PersonaAndUnknown(t *testing.T) {
 		t.Errorf("expected unknown command error on stderr, got: %s", stderr.String())
 	}
 }
+
+func TestRunCLI_MergeCommandValidation(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	// 1. Missing flags -> error
+	code := RunCLI("", nil, []string{"merge"}, &stdout, &stderr)
+	if code != 1 {
+		t.Errorf("expected exit code 1 for merge without arguments, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "--pr") || !strings.Contains(stderr.String(), "--sha") {
+		t.Errorf("expected stderr mentioning required flags, got: %s", stderr.String())
+	}
+}
+

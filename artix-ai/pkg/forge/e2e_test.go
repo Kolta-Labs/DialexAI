@@ -649,4 +649,175 @@ func TestR5_2_ResetHard_NeverResetsPreExistingUserCommit(t *testing.T) {
 	}
 }
 
+// TestR6_2_TwoPhaseAutonomousPRFlow_RealBareRepo exercises the full two-phase autonomous flow:
+// Phase 1 pushes candidate commit to a PR branch on a real local bare git repo with branch-protection enforcement
+// and exits with AwaitingApproval: true; Phase 2 verifies forge approval on that exact candidate commit SHA
+// and cleans up remote branches on verification failure.
+func TestR6_2_TwoPhaseAutonomousPRFlow_RealBareRepo(t *testing.T) {
+	policy.ResetCache()
+	defer policy.ResetCache()
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+	t.Setenv("ARTIX_ALLOW_AUTONOMOUS", "1")
+	policy.SetActivePolicyForTest(&policy.Policy{
+		EnterpriseMode:       true,
+		AllowAutonomous:      true,
+		RequireForgeApproval: true,
+		AllowedTestCommands:  []string{"test -f counter.txt"},
+		IsVerified:           true,
+	})
+
+	// 1. Create a real bare git repository to act as the remote forge repository
+	bareDir, err := os.MkdirTemp("", "artix_remote_bare_repo")
+	if err != nil {
+		t.Fatalf("failed to create bare repo dir: %v", err)
+	}
+	defer os.RemoveAll(bareDir)
+
+	if err := exec.Command("git", "init", "--bare", bareDir).Run(); err != nil {
+		t.Fatalf("failed to init bare git repo: %v", err)
+	}
+
+	// 2. Create local working clone
+	workDir, driver := setupTestRepoForForge(t)
+	defer os.RemoveAll(workDir)
+
+	// Set remote 'origin' to the bare repo
+	_ = exec.Command("git", "-C", workDir, "remote", "add", "origin", bareDir).Run()
+	// Push initial main branch to remote
+	if out, err := exec.Command("git", "-C", workDir, "push", "origin", "HEAD:refs/heads/main").CombinedOutput(); err != nil {
+		t.Fatalf("failed to push initial main to bare repo: %v (%s)", err, string(out))
+	}
+
+	repoCtx, err := repo.DetectContext(workDir)
+	if err != nil {
+		t.Fatalf("failed to detect repo context: %v", err)
+	}
+
+	reg := persona.NewRegistry("")
+	coderObj, _ := coder.NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(workDir)
+	coord := coder.NewCoordinator(coderObj, rev, driver, box)
+
+	storySpec := &spec.StorySpec{
+		ID:           "SPEC-GH-R6-2",
+		Title:        "Two-Phase Autonomous Flow Verification",
+		TestCommands: []string{"test -f counter.txt"},
+	}
+
+	// Subtest A: Branch Protection - direct push to protected branch (main) is rejected
+	protectedPusher := NewForgePusher(driver, "origin", "main")
+	if err := protectedPusher(context.Background(), "some-commit-sha"); err == nil {
+		t.Fatalf("SECURITY VIOLATION: ForgePusher permitted direct push to protected branch 'main'!")
+	} else if !strings.Contains(err.Error(), "branch protection") {
+		t.Fatalf("expected error mentioning branch protection, got: %v", err)
+	}
+
+	// Subtest B: Phase 1 - Coordinator pushes candidate commit to PR branch on real bare remote
+	prBranch := "artix-pr-42"
+	pusher := NewForgePusher(driver, "origin", prBranch)
+
+	optsPhase1 := &coder.LoopOptions{
+		MaxRounds:          1,
+		Autonomy:           coder.AutonomyAutonomous,
+		TwoPhaseAutonomous: true,
+		ForgePusher:        pusher,
+		MockPatchGen: func(round int, feedback string) string {
+			return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+100\n"
+		},
+	}
+
+	resPhase1 := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, optsPhase1)
+	if !resPhase1.Success {
+		t.Fatalf("Phase 1 failed: %s", resPhase1.Error)
+	}
+	if !resPhase1.AwaitingApproval {
+		t.Fatalf("expected Phase 1 to return AwaitingApproval: true, got false")
+	}
+	candidateSHA := resPhase1.CommitHash
+	if candidateSHA == "" {
+		t.Fatalf("expected Phase 1 to return candidate commit SHA")
+	}
+
+	// Assert that the real bare repo now has the candidate commit on refs/heads/artix-pr-42
+	out, err := exec.Command("git", "-C", bareDir, "rev-parse", "refs/heads/"+prBranch).CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to query bare repo for PR branch: %v (%s)", err, string(out))
+	}
+	remoteRefSHA := strings.TrimSpace(string(out))
+	if remoteRefSHA != candidateSHA {
+		t.Fatalf("expected bare repo PR branch SHA %s to equal candidate SHA %s", remoteRefSHA, candidateSHA)
+	}
+
+	// Subtest C: Phase 2 Rejection and Remote Branch Cleanup
+	// Setup mock GitHub forge server
+	var remoteReviewState string = "CHANGES_REQUESTED"
+	var remoteApprover string = "lead-security-alice"
+
+	ghServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/pulls/42") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"user": map[string]any{"login": "developer-bob", "type": "User"},
+				"head": map[string]any{"sha": candidateSHA},
+			})
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/pulls/42/reviews") {
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"id":        1,
+					"user":      map[string]any{"login": remoteApprover, "type": "User"},
+					"state":     remoteReviewState,
+					"commit_id": candidateSHA,
+				},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer ghServer.Close()
+
+	ghClient := NewGitHubClient(ForgeAuth{
+		Type:    ForgeGitHub,
+		Token:   "test-token",
+		BaseURL: ghServer.URL,
+	})
+	targetRepo := &RemoteRepoTarget{Owner: "acme", Repo: "core"}
+	prodVerifier := NewGitHubVerifier(ghClient, targetRepo, 42)
+
+	// In Subtest C, review is CHANGES_REQUESTED -> VerifyAndMergeCandidate must fail and clean up remote branch
+	_, err = VerifyAndMergeCandidate(context.Background(), driver, prodVerifier, candidateSHA, nil, storySpec.ID, "origin", prBranch)
+	if err == nil {
+		t.Fatalf("expected VerifyAndMergeCandidate to fail when verifier rejects")
+	}
+
+	// Verify that the remote candidate branch was deleted from the bare repo
+	delOut, delErr := exec.Command("git", "-C", bareDir, "rev-parse", "--verify", "refs/heads/"+prBranch).CombinedOutput()
+	if delErr == nil {
+		t.Fatalf("expected remote branch %s to be deleted after rejection cleanup, but rev-parse succeeded: %s", prBranch, string(delOut))
+	}
+
+	// Subtest D: Phase 2 Approval and Merge
+	// Re-push candidate to remote PR branch
+	if err := pusher(context.Background(), candidateSHA); err != nil {
+		t.Fatalf("failed to re-push candidate commit: %v", err)
+	}
+
+	// Change review state on forge to APPROVED
+	remoteReviewState = "APPROVED"
+
+	approval, err := VerifyAndMergeCandidate(context.Background(), driver, prodVerifier, candidateSHA, nil, storySpec.ID, "origin", prBranch)
+	if err != nil {
+		t.Fatalf("expected Phase 2 VerifyAndMergeCandidate to SUCCEED with valid approval, got error: %v", err)
+	}
+	if approval == nil || approval.ApproverUsername != "lead-security-alice" {
+		t.Fatalf("expected valid approval for lead-security-alice, got: %+v", approval)
+	}
+}
+
+
 

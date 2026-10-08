@@ -142,6 +142,16 @@ func (d *Driver) ResetHard(ref string) error {
 	return err
 }
 
+// Push pushes refspec to the specified remote.
+func (d *Driver) Push(remote, refspec string) (string, error) {
+	return d.runGit("push", remote, refspec)
+}
+
+// DeleteRemoteBranch deletes a branch on the remote.
+func (d *Driver) DeleteRemoteBranch(remote, branch string) (string, error) {
+	return d.runGit("push", remote, "--delete", branch)
+}
+
 func (d *Driver) runGit(args ...string) (string, error) {
 	cmd := exec.Command("git", append([]string{"-C", d.repoDir}, args...)...)
 	var stdout, stderr bytes.Buffer

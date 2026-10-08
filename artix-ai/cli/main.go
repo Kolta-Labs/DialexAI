@@ -44,6 +44,7 @@ Commands:
   lsp           Launch Language Server Protocol backend for IDEs (VS Code, Zed, etc.)
   plan, spec    Deliberate with Stakeholder Council to produce Story Spec
   code          Execute Domain Coder <-> Reviewer convergence loop
+  merge         Verify forge approval and merge candidate commit (Phase 2)
   review        Run Adversarial Reviewer against current git diff and tests
   audit         Audit log management and tamper verification (audit verify)
   steering      Manage dynamic steering rules (list, sync, bind)
@@ -148,6 +149,9 @@ func RunCLIWithIO(cwd string, reg *persona.Registry, rawArgs []string, stdin io.
 
 	case "code":
 		return runCode(cwd, reg, cmdArgs, stdin, humanOut, sendJSON, isJSON, stderr)
+
+	case "merge":
+		return runMerge(cwd, cmdArgs, humanOut, sendJSON, isJSON, stderr)
 
 	case "review":
 		return runReview(cwd, reg, cmdArgs, humanOut, sendJSON, isJSON, stderr)
@@ -469,6 +473,20 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 		})
 	}
 
+	remote := os.Getenv("ARTIX_FORGE_REMOTE")
+	if remote == "" {
+		remote = "origin"
+	}
+	prBranch := os.Getenv("ARTIX_PR_BRANCH")
+	if prBranch == "" && prNum > 0 {
+		prBranch = fmt.Sprintf("artix-pr-%d", prNum)
+	}
+
+	if prBranch != "" {
+		opts.ForgePusher = forge.NewForgePusher(driver, remote, prBranch)
+		opts.TwoPhaseAutonomous = true
+	}
+
 	if *analyzerFlag != "" {
 		for _, cmd := range strings.Split(*analyzerFlag, ",") {
 			cmd = strings.TrimSpace(cmd)
@@ -651,6 +669,73 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 		fmt.Fprintf(human, "\nFAILED to converge: %s\n", res.Error)
 		return 1
 	}
+}
+
+func runMerge(cwd string, args []string, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
+	fs := flag.NewFlagSet("merge", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	prFlag := fs.Int("pr", 0, "Pull Request / Merge Request number")
+	shaFlag := fs.String("sha", "", "Candidate commit SHA to verify and merge")
+	forgeFlag := fs.String("forge", os.Getenv("ARTIX_FORGE_TYPE"), "Forge provider: github or gitlab")
+	tokenFlag := fs.String("forge-token", "", "Forge API token (defaults to GITHUB_TOKEN or GITLAB_TOKEN)")
+	urlFlag := fs.String("forge-url", os.Getenv("ARTIX_FORGE_URL"), "Forge Base API URL")
+	ownerFlag := fs.String("forge-owner", "", "Forge repository owner")
+	repoFlag := fs.String("forge-repo", "", "Forge repository name")
+	remoteFlag := fs.String("remote", "origin", "Git remote name")
+	branchFlag := fs.String("branch", "", "Remote PR branch to verify and clean up on failure")
+	specIDFlag := fs.String("spec", "", "Story Spec ID")
+
+	if err := fs.Parse(args); err != nil {
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
+		}
+		return 1
+	}
+
+	if *shaFlag == "" || *prFlag <= 0 {
+		errStr := "Error: --pr <number> and --sha <commit-sha> are required for merge verification"
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+		}
+		fmt.Fprintf(stderr, "%s\n", errStr)
+		return 1
+	}
+
+	verifier := forge.NewProductionVerifier(forge.ProductionVerifierConfig{
+		ForgeType: *forgeFlag,
+		BaseURL:   *urlFlag,
+		Token:     *tokenFlag,
+		Owner:     *ownerFlag,
+		Repo:      *repoFlag,
+		PRNumber:  *prFlag,
+	})
+
+	driver := git.NewDriver(cwd)
+	prBranch := *branchFlag
+	if prBranch == "" {
+		prBranch = fmt.Sprintf("artix-pr-%d", *prFlag)
+	}
+
+	approval, err := forge.VerifyAndMergeCandidate(context.Background(), driver, verifier, *shaFlag, audit.Default(cwd), *specIDFlag, *remoteFlag, prBranch)
+	if err != nil {
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "rejected", "error": err.Error()})
+		}
+		fmt.Fprintf(stderr, "Merge verification failed: %v\n", err)
+		return 1
+	}
+
+	if isJSON {
+		sendJSON(map[string]any{
+			"ok":         true,
+			"status":     "merged",
+			"approver":   approval.ApproverUsername,
+			"commitHash": *shaFlag,
+			"prNumber":   *prFlag,
+		})
+	}
+	fmt.Fprintf(human, "Phase 2 Merge Verification Succeeded: Approved by %s (Commit: %s, PR: #%d)\n", approval.ApproverUsername, *shaFlag, *prFlag)
+	return 0
 }
 
 func runReview(cwd string, reg *persona.Registry, args []string, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
