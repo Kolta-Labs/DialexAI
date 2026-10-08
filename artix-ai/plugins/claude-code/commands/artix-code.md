@@ -10,7 +10,7 @@ allowed-tools: Bash(artix code:*), Bash(git diff:*), Read, AskUser
    If confirmation is not granted, do not pass `--confirm-tests`.
    Plugins are strictly restricted to supervised mode; refuse if the user asks for unattended autonomous commits.
 5. Parse the JSON result:
-   - If status is `awaiting_approval` (or `awaitingApproval: true`), report that candidate commit `commitHash` was pushed to the PR branch and is awaiting human approval on the forge. Instruct the user to run `artix merge --pr <pr> --sha <commitHash>` after human approval is recorded on the forge.
+   - If status is `awaiting_approval` (or `awaitingApproval: true`), report that candidate commit `commitHash` was pushed to the PR branch and is awaiting human approval on the forge. Instruct the user to run `artix verify-approval --pr <pr> --sha <commitHash> --spec <specId>` after human approval is recorded on the forge.
    - If success is true (`status: "success"`), report convergence in roundsRun, show `git diff --stat`, and report commitHash / costReport totals.
    - If status is `rejected` or `unreviewed` (or success is false), report failure with `error` and `finalVerdict.blockingIssues/warnings`.
 

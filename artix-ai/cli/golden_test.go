@@ -669,8 +669,8 @@ func TestR8_4_Phase1_AwaitingApproval_ReportsSuccessFalse_StatusAwaitingApproval
 	if !strings.Contains(claudeStr, "awaiting_approval") && !strings.Contains(claudeStr, "awaitingApproval") {
 		t.Fatalf("R8-4 VIOLATION: plugins/claude-code/commands/artix-code.md has no awaiting_approval handling: %s", claudeStr)
 	}
-	if !strings.Contains(claudeStr, "artix merge") {
-		t.Fatalf("R8-4 VIOLATION: plugins/claude-code/commands/artix-code.md does not instruct user to execute artix merge after forge review")
+	if !strings.Contains(claudeStr, "artix verify-approval") {
+		t.Fatalf("R8-4 VIOLATION: plugins/claude-code/commands/artix-code.md does not instruct user to execute artix verify-approval after forge review")
 	}
 
 	// 2. Check VS Code extension contract
@@ -897,7 +897,28 @@ As an enterprise security officer, I want policy trust roots isolated from the e
 }
 
 func TestR13_5_Phase1_CandidateAuditRecord_StatusAwaitingApproval_NotFailed(t *testing.T) {
-	t.Setenv("ARTIX_ALLOW_AUTONOMOUS", "1")
+	_, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyDir := t.TempDir()
+	secDir := filepath.Join(keyDir, ".artix")
+	_ = os.MkdirAll(secDir, 0700)
+	keyPath := filepath.Join(secDir, "audit.key")
+	if err := os.WriteFile(keyPath, []byte(hex.EncodeToString(priv)), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	policy.SetActivePolicyForTest(&policy.Policy{
+		EnterpriseMode:          true,
+		AllowAutonomous:         true,
+		RequireSeparateApprover: true,
+		AllowedTestCommands:     []string{"test -f counter.txt"},
+		AuditPrivateKeyPath:     keyPath,
+		IsVerified:              true,
+	})
+	defer policy.ResetTestPolicy()
+
 	tempDir, err := os.MkdirTemp("", "artix-audit-status-test-*")
 	if err != nil {
 		t.Fatal(err)
@@ -947,6 +968,7 @@ func TestR13_5_Phase1_CandidateAuditRecord_StatusAwaitingApproval_NotFailed(t *t
 	res := coordinator.Run(context.Background(), storySpec, repoCtx, nil, nil, &coder.LoopOptions{
 		MaxRounds:             1,
 		Autonomy:              coder.AutonomyAutonomous,
+		Approver:              "lead-architect@corp.internal",
 		TwoPhaseAutonomous:    true,
 		ForgePusher:           pusher,
 		TestCommandsConfirmed: true,
@@ -956,7 +978,7 @@ func TestR13_5_Phase1_CandidateAuditRecord_StatusAwaitingApproval_NotFailed(t *t
 	})
 
 	if !pushed || !res.AwaitingApproval {
-		t.Fatalf("expected candidate push to succeed, got pushed=%v awaiting=%v err=%s", pushed, res.AwaitingApproval, res.Error)
+		t.Fatalf("expected candidate push to succeed, got pushed=%v awaiting=%v err=%q verdict=%+v", pushed, res.AwaitingApproval, res.Error, res.FinalVerdict)
 	}
 
 	// CLI also emits the outer audit event

@@ -44,7 +44,7 @@ Commands:
   lsp           Launch Language Server Protocol backend for IDEs (VS Code, Zed, etc.)
   plan, spec    Deliberate with Stakeholder Council to produce Story Spec
   code          Execute Domain Coder <-> Reviewer convergence loop
-  merge         Verify forge approval and merge candidate commit (Phase 2)
+  verify-approval Verify forge approval and merge candidate commit (Phase 2)
   review        Run Adversarial Reviewer against current git diff and tests
   audit         Audit log management and tamper verification (audit verify)
   steering      Manage dynamic steering rules (list, sync, bind)
@@ -150,8 +150,16 @@ func RunCLIWithIO(cwd string, reg *persona.Registry, rawArgs []string, stdin io.
 	case "code":
 		return runCode(cwd, reg, cmdArgs, stdin, humanOut, sendJSON, isJSON, stderr)
 
+	case "verify-approval":
+		return runVerifyApproval(cwd, cmdArgs, humanOut, sendJSON, isJSON, stderr)
+
 	case "merge":
-		return runMerge(cwd, cmdArgs, humanOut, sendJSON, isJSON, stderr)
+		errStr := "Error: 'artix merge' is deprecated in enterprise mode. Use 'artix verify-approval' instead."
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "deprecated", "error": errStr})
+		}
+		fmt.Fprintf(stderr, "%s\n", errStr)
+		return 1
 
 	case "review":
 		return runReview(cwd, reg, cmdArgs, humanOut, sendJSON, isJSON, stderr)
@@ -622,7 +630,9 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 	res := coord.Run(context.Background(), storySpec, repoCtx, coderSteering, revSteering, opts)
 
 	auditStatus := "SUCCESS"
-	if !res.Success {
+	if res.AwaitingApproval {
+		auditStatus = "AWAITING_APPROVAL"
+	} else if !res.Success {
 		auditStatus = "FAILED"
 	}
 	_ = audit.Default(cwd).Emit(audit.AuditEvent{
@@ -678,8 +688,8 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 	}
 }
 
-func runMerge(cwd string, args []string, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
-	fs := flag.NewFlagSet("merge", flag.ContinueOnError)
+func runVerifyApproval(cwd string, args []string, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
+	fs := flag.NewFlagSet("verify-approval", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	prFlag := fs.Int("pr", 0, "Pull Request / Merge Request number")
 	shaFlag := fs.String("sha", "", "Candidate commit SHA to verify and merge")
