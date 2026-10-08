@@ -32,7 +32,7 @@ var SensitiveReadDenyPaths = []string{
 
 // BuildBwrapArgs builds the bubblewrap execution arguments for Linux environments.
 func BuildBwrapArgs(writable []string, net bool, cmdStr string) []string {
-	args := []string{"--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--die-with-parent"}
+	args := []string{"--unshare-user-try", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--die-with-parent"}
 
 	// Hide sensitive credential directories from reads via empty tmpfs mounts
 	home, _ := os.UserHomeDir()

@@ -42,6 +42,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y bubblewrap
+          sudo chmod u+s /usr/bin/bwrap || true
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
 
       - name: Run Unit Tests with Race Detector & Coverage
         working-directory: artix-ai
