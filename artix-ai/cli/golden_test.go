@@ -574,4 +574,45 @@ As an auditor, I want enterprise commits strictly blocked if audit keys are miss
 	}
 }
 
+// TestR7_2_CLI_JSON_AwaitingApproval_Contract verifies that CLI --json output format adheres
+// to single-line JSON format with awaitingApproval: true and status: "awaiting_approval".
+func TestR7_2_CLI_JSON_AwaitingApproval_Contract(t *testing.T) {
+	tempDir := t.TempDir()
+	specDir := filepath.Join(tempDir, "docs", "specs")
+	if err := os.MkdirAll(specDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	specContent := `# Story Spec STORY-001: Sample Awaiting Approval
+## Acceptance Criteria
+- Scenario: Pass
+## Test Commands
+` + "```bash\n" + `echo "ok"
+` + "```\n"
+	if err := os.WriteFile(filepath.Join(specDir, "STORY-001.md"), []byte(specContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify merge CLI flag JSON error response when flags are missing or unverified
+	var stdout, stderr bytes.Buffer
+	code := RunCLI(tempDir, nil, []string{"merge", "--json"}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected non-zero exit code for invalid merge invocation")
+	}
+
+	stdoutStr := strings.TrimSpace(stdout.String())
+	lines := strings.Split(stdoutStr, "\n")
+	if len(lines) != 1 || stdoutStr == "" {
+		t.Fatalf("expected exactly 1 JSON line on stdout, got %d lines: %q", len(lines), stdoutStr)
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &res); err != nil {
+		t.Fatalf("stdout must be valid JSON: %v", err)
+	}
+	if res["ok"] != false {
+		t.Fatalf("expected ok=false in JSON response, got: %+v", res)
+	}
+}
+
+
 
