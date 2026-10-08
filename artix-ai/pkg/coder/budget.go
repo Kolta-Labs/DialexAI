@@ -135,25 +135,32 @@ func LoadBudgetFromEnv() *TokenBudget {
 
 var ledgerMu sync.Mutex
 
-func withFileLock(path string, fn func()) {
+func withFileLock(path string, fn func() error) error {
 	ledgerMu.Lock()
 	defer ledgerMu.Unlock()
 
 	dir := filepath.Dir(path)
 	if dir != "" {
-		_ = os.MkdirAll(dir, 0755)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return fmt.Errorf("failed to create ledger directory %s: %w", dir, err)
+		}
 	}
 
 	lockPath := path + ".lock"
 	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
-	if err == nil {
-		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_EX)
-		defer func() {
-			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-			_ = f.Close()
-		}()
+	if err != nil {
+		return fmt.Errorf("failed to open lock file %s: %w", lockPath, err)
 	}
-	fn()
+	defer f.Close()
+
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("failed to acquire flock on %s: %w", lockPath, err)
+	}
+	defer func() {
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	}()
+
+	return fn()
 }
 
 // HasFinancialCap returns true if any USD budget cap is configured.
@@ -201,8 +208,11 @@ func (b *TokenBudget) GetModelPrice(modelKey string) (float64, error) {
 	return 0, nil
 }
 
-// CheckExhaustion checks if any token or USD cap is exceeded.
+// CheckExhaustion checks if any token or USD cap is exceeded or if ledger operations failed with a cap active.
 func (b *TokenBudget) CheckExhaustion() (bool, string) {
+	if b.LedgerError != nil && (b.HasFinancialCap() || b.MaxStoryTokens > 0 || b.MaxTeamTokens > 0 || b.MaxDayTokens > 0) {
+		return true, fmt.Sprintf("budget aborted due to ledger failure: %v", b.LedgerError)
+	}
 	if b.MaxStoryTokens > 0 && b.UsedStoryTokens > b.MaxStoryTokens {
 		return true, fmt.Sprintf("story token budget exceeded: %d used > %d max cap", b.UsedStoryTokens, b.MaxStoryTokens)
 	}
@@ -279,18 +289,19 @@ func (b *TokenBudget) ValidateLedgerSecurity() error {
 // from the atomic shared cross-process ledger file using kernel file locking.
 func (b *TokenBudget) SyncWithSharedLedger() {
 	if err := b.ValidateLedgerSecurity(); err != nil {
+		b.LedgerError = err
 		return
 	}
 	path := b.getEffectiveLedgerPath()
-	withFileLock(path, func() {
+	errLock := withFileLock(path, func() error {
 		data, err := os.ReadFile(path)
 		if err != nil || len(data) == 0 {
-			return
+			return nil
 		}
 
 		var state sharedLedgerData
 		if err := json.Unmarshal(data, &state); err != nil {
-			return
+			return err
 		}
 
 		today := time.Now().Format("2006-01-02")
@@ -311,7 +322,11 @@ func (b *TokenBudget) SyncWithSharedLedger() {
 		if state.DayCost != nil {
 			b.UsedDayCost = state.DayCost[today]
 		}
+		return nil
 	})
+	if errLock != nil {
+		b.LedgerError = errLock
+	}
 }
 
 // ProviderUsage contains actual metered token consumption reported by the model provider API.
@@ -326,6 +341,7 @@ type ProviderUsage struct {
 // under an OS kernel file lock.
 func (b *TokenBudget) RecordRoundUsage(roundTokens int, roundCostUSD float64, providerUsage ...*ProviderUsage) {
 	if err := b.ValidateLedgerSecurity(); err != nil {
+		b.LedgerError = err
 		return
 	}
 
@@ -350,7 +366,7 @@ func (b *TokenBudget) RecordRoundUsage(roundTokens int, roundCostUSD float64, pr
 	b.UsedStoryCost += roundCostUSD
 
 	path := b.getEffectiveLedgerPath()
-	withFileLock(path, func() {
+	errLock := withFileLock(path, func() error {
 		var state sharedLedgerData
 		data, err := os.ReadFile(path)
 		if err == nil && len(data) > 0 {
@@ -396,15 +412,24 @@ func (b *TokenBudget) RecordRoundUsage(roundTokens int, roundCostUSD float64, pr
 		b.UsedDayTokens = state.DayTokens[today]
 		b.UsedDayCost = state.DayCost[today]
 
-		if marshaled, err := json.MarshalIndent(state, "", "  "); err == nil {
-			dir := filepath.Dir(path)
-			if dir != "" {
-				_ = os.MkdirAll(dir, 0700)
-			}
-			_ = os.WriteFile(path, marshaled, 0600)
-			_ = os.Chmod(path, 0600)
+		marshaled, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			return err
 		}
+		dir := filepath.Dir(path)
+		if dir != "" {
+			if err := os.MkdirAll(dir, 0700); err != nil {
+				return err
+			}
+		}
+		if err := os.WriteFile(path, marshaled, 0600); err != nil {
+			return err
+		}
+		return os.Chmod(path, 0600)
 	})
+	if errLock != nil {
+		b.LedgerError = errLock
+	}
 }
 
 func getEnv(keys ...string) string {

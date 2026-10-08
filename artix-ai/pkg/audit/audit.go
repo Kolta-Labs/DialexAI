@@ -676,6 +676,15 @@ func (l *Logger) SetPrivateKeyPath(path string) error {
 		}
 	}
 
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return fmt.Errorf("failed to stat private key file: %w", err)
+	}
+	// Require owner-only mode (0600 or 0400), reject group/other read/write bits
+	if info.Mode().Perm()&0077 != 0 {
+		return fmt.Errorf("signing key refused: private key file %s has insecure permissions %04o (must be owner-only 0600 or 0400)", absPath, info.Mode().Perm())
+	}
+
 	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return fmt.Errorf("failed to read private key: %w", err)
@@ -684,6 +693,10 @@ func (l *Logger) SetPrivateKeyPath(path string) error {
 	raw := strings.TrimSpace(string(data))
 	if keyBytes, err := hex.DecodeString(raw); err == nil && len(keyBytes) == ed25519.PrivateKeySize {
 		l.SetAsymmetricSigningKey(ed25519.PrivateKey(keyBytes))
+		return nil
+	} else if keyBytes, err := hex.DecodeString(raw); err == nil && len(keyBytes) == ed25519.SeedSize {
+		priv := ed25519.NewKeyFromSeed(keyBytes)
+		l.SetAsymmetricSigningKey(priv)
 		return nil
 	} else if len(data) == ed25519.PrivateKeySize {
 		l.SetAsymmetricSigningKey(ed25519.PrivateKey(data))
@@ -694,7 +707,7 @@ func (l *Logger) SetPrivateKeyPath(path string) error {
 		return nil
 	}
 
-	return nil
+	return fmt.Errorf("invalid ed25519 private key in file %s (expected 32-byte seed or 64-byte private key)", absPath)
 }
 
 // RecordSpoolLoss records that spooled audit records were lost due to unrecoverable delivery failure.
