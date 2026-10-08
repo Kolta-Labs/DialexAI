@@ -266,7 +266,7 @@ func TestAutonomousModeBlockedInEnterpriseWithoutOptIn(t *testing.T) {
 	opts.Approver = "security-lead" // Provide valid approver for SoD
 	opts.ForgeApproval = nil
 	opts.ForgeVerifier = func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
-		return policy.MintVerifiedForgeApprovalForTest("security-lead", "artix-agent", "APPROVED", commitSHA, "github_api_server_verified"), nil
+		return mintVerifiedApprovalForTest("security-lead", "artix-agent", "APPROVED", commitSHA, "github_api_server_verified"), nil
 	}
 	resWithPolicy := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
 	if !resWithPolicy.Success || resWithPolicy.CommitHash == "" {
@@ -548,7 +548,7 @@ func TestAutonomousCommitBlockedWhenSelfApprovalAttempted(t *testing.T) {
 		MaxRounds: 1,
 		Autonomy:  AutonomyAutonomous,
 		ForgeVerifier: func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
-			return policy.MintVerifiedForgeApprovalForTest("alice", "alice", "APPROVED", commitSHA, "forge"), nil
+			return mintVerifiedApprovalForTest("alice", "alice", "APPROVED", commitSHA, "forge"), nil
 		},
 		MockPatchGen: func(round int, feedback string) string {
 			return validPatch
@@ -1054,7 +1054,7 @@ func TestR2_2_Coordinator_AcceptsMockedForgeApprovalInEnterprise(t *testing.T) {
 		Autonomy:  AutonomyAutonomous,
 		ForgeVerifier: func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
 			// Mocked forge verification returning server-verified approval
-			return policy.MintVerifiedForgeApprovalForTest("alice", "artix-agent", "APPROVED", commitSHA, "github_api_server_verified"), nil
+			return mintVerifiedApprovalForTest("alice", "artix-agent", "APPROVED", commitSHA, "github_api_server_verified"), nil
 		},
 		MockPatchGen: func(round int, feedback string) string {
 			return validPatch

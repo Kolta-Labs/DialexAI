@@ -18,10 +18,12 @@ type ForgeAuth struct {
 
 // RemoteRepoTarget identifies a remote repository to operate against.
 type RemoteRepoTarget struct {
-	CloneURL string `json:"cloneUrl"`
-	Owner    string `json:"owner"`
-	Repo     string `json:"repo"`
-	Branch   string `json:"branch"` // Base branch (e.g. main / master)
+	CloneURL    string `json:"cloneUrl"`
+	Owner       string `json:"owner"`
+	Repo        string `json:"repo"`
+	Branch      string `json:"branch"` // Base branch (e.g. main / master)
+	PRNumber    int    `json:"prNumber,omitempty"`
+	IssueNumber int    `json:"issueNumber,omitempty"`
 }
 
 // PullRequestRequest defines parameters to open a Pull Request / Merge Request.

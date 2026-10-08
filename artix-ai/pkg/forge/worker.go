@@ -195,6 +195,22 @@ func (w *RemoteWorker) Execute(ctx context.Context, task *RemoteWorkerTask) *Rem
 		MockPatchGen: task.MockPatchGen,
 	}
 
+	if task.Auth.Type == ForgeGitLab {
+		glClient := NewGitLabClient(task.Auth)
+		prNum := task.Target.PRNumber
+		if prNum <= 0 {
+			prNum = task.Target.IssueNumber
+		}
+		opts.ForgeVerifier = NewGitLabVerifier(glClient, &task.Target, prNum)
+	} else if task.Auth.Type == ForgeGitHub {
+		ghClient := NewGitHubClient(task.Auth)
+		prNum := task.Target.PRNumber
+		if prNum <= 0 {
+			prNum = task.Target.IssueNumber
+		}
+		opts.ForgeVerifier = NewGitHubVerifier(ghClient, &task.Target, prNum)
+	}
+
 	loopRes := coord.Run(ctx, storySpec, repoCtx, coderSteering, revSteering, opts)
 	res.LoopResult = loopRes
 

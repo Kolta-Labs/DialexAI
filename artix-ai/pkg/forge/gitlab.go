@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"artix/internal/forgesec"
 	"artix/pkg/policy"
 )
 
@@ -217,7 +218,7 @@ func (c *GitLabClient) VerifyMRApproval(ctx context.Context, target *RemoteRepoT
 			}
 		}
 
-		sig := policy.SignForgeToken(u, mrDetails.Author.Username, "APPROVED", targetCommitSHA, "gitlab_api_server_verified")
+		sig := forgesec.SignToken(u, mrDetails.Author.Username, "APPROVED", targetCommitSHA, "gitlab_api_server_verified")
 		return &policy.PRApproval{
 			ApproverUsername: u,
 			AuthorUsername:   mrDetails.Author.Username,
@@ -230,4 +231,11 @@ func (c *GitLabClient) VerifyMRApproval(ctx context.Context, target *RemoteRepoT
 	}
 
 	return nil, fmt.Errorf("forge approval verification failed: no valid human APPROVED review found")
+}
+
+// NewGitLabVerifier creates a LoopOptions.ForgeVerifier callback wired to the GitLab API client.
+func NewGitLabVerifier(client *GitLabClient, target *RemoteRepoTarget, mrIID int) func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+	return func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+		return client.VerifyMRApproval(ctx, target, mrIID, commitSHA)
+	}
 }

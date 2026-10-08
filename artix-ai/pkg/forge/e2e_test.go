@@ -49,6 +49,13 @@ func TestR3_2_MockedGitHub_CoordinatorRun_FullE2E(t *testing.T) {
 	defer policy.ResetCache()
 	t.Setenv("ARTIX_ENTERPRISE", "1")
 	t.Setenv("ARTIX_ALLOW_AUTONOMOUS", "1")
+	policy.SetActivePolicyForTest(&policy.Policy{
+		EnterpriseMode:       true,
+		AllowAutonomous:      true,
+		RequireForgeApproval: true,
+		AllowedTestCommands:  []string{"test -f counter.txt"},
+		IsVerified:           true,
+	})
 
 	tempDir, driver := setupTestRepoForForge(t)
 	defer os.RemoveAll(tempDir)
@@ -233,6 +240,13 @@ func TestR3_2_MockedGitLab_CoordinatorRun_FullE2E(t *testing.T) {
 	defer policy.ResetCache()
 	t.Setenv("ARTIX_ENTERPRISE", "1")
 	t.Setenv("ARTIX_ALLOW_AUTONOMOUS", "1")
+	policy.SetActivePolicyForTest(&policy.Policy{
+		EnterpriseMode:       true,
+		AllowAutonomous:      true,
+		RequireForgeApproval: true,
+		AllowedTestCommands:  []string{"test -f counter.txt"},
+		IsVerified:           true,
+	})
 
 	tempDir, driver := setupTestRepoForForge(t)
 	defer os.RemoveAll(tempDir)

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"artix/internal/forgesec"
 	"artix/pkg/policy"
 )
 
@@ -248,7 +249,7 @@ func (c *GitHubClient) VerifyPRApproval(ctx context.Context, target *RemoteRepoT
 				}
 			}
 
-			sig := policy.SignForgeToken(rev.User.Login, prDetails.User.Login, "APPROVED", rev.CommitID, "github_api_server_verified")
+			sig := forgesec.SignToken(rev.User.Login, prDetails.User.Login, "APPROVED", rev.CommitID, "github_api_server_verified")
 			return &policy.PRApproval{
 				ApproverUsername: rev.User.Login,
 				AuthorUsername:   prDetails.User.Login,
@@ -262,6 +263,13 @@ func (c *GitHubClient) VerifyPRApproval(ctx context.Context, target *RemoteRepoT
 	}
 
 	return nil, fmt.Errorf("forge approval verification failed: no valid human APPROVED review found")
+}
+
+// NewGitHubVerifier creates a LoopOptions.ForgeVerifier callback wired to the GitHub API client.
+func NewGitHubVerifier(client *GitHubClient, target *RemoteRepoTarget, prNumber int) func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+	return func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+		return client.VerifyPRApproval(ctx, target, prNumber, commitSHA)
+	}
 }
 
 

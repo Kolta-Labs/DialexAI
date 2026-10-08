@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -331,6 +332,13 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 	confirmTestsFlag := fs.Bool("confirm-tests", false, "Explicitly confirm proposed test commands without interactive prompt")
 	yesFlag := fs.Bool("yes", false, "Alias for --confirm-tests")
 	fs.BoolVar(yesFlag, "y", false, "Short alias for --confirm-tests")
+	forgeFlag := fs.String("forge", os.Getenv("ARTIX_FORGE_TYPE"), "Forge provider: github or gitlab")
+	forgePRFlag := fs.Int("forge-pr", 0, "Pull Request / Merge Request number for forge approval verification")
+	forgeTokenFlag := fs.String("forge-token", "", "Forge API token (defaults to GITHUB_TOKEN or GITLAB_TOKEN)")
+	forgeURLFlag := fs.String("forge-url", os.Getenv("ARTIX_FORGE_URL"), "Forge Base API URL")
+	forgeOwnerFlag := fs.String("forge-owner", "", "Forge repository owner/organization")
+	forgeRepoFlag := fs.String("forge-repo", "", "Forge repository name")
+	approverFlag := fs.String("approver", "", "Human approver identity")
 	if err := fs.Parse(args); err != nil {
 		if isJSON {
 			sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
@@ -433,6 +441,31 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 	opts := &coder.LoopOptions{
 		MaxRounds: *maxRoundsFlag,
 		Autonomy:  coder.AutonomyLevel(*autonomyFlag),
+		Approver:  *approverFlag,
+	}
+
+	prNum := *forgePRFlag
+	if prNum <= 0 {
+		if val := os.Getenv("ARTIX_PR_NUMBER"); val != "" {
+			if n, err := strconv.Atoi(val); err == nil {
+				prNum = n
+			}
+		} else if val := os.Getenv("CI_MERGE_REQUEST_IID"); val != "" {
+			if n, err := strconv.Atoi(val); err == nil {
+				prNum = n
+			}
+		}
+	}
+
+	if prNum > 0 || *forgeFlag != "" || *forgeTokenFlag != "" {
+		opts.ForgeVerifier = forge.NewProductionVerifier(forge.ProductionVerifierConfig{
+			ForgeType: *forgeFlag,
+			BaseURL:   *forgeURLFlag,
+			Token:     *forgeTokenFlag,
+			Owner:     *forgeOwnerFlag,
+			Repo:      *forgeRepoFlag,
+			PRNumber:  prNum,
+		})
 	}
 
 	// G4: Test-command trust outside enterprise:
