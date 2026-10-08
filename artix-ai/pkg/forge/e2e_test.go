@@ -345,3 +345,97 @@ func TestR3_2_MockedGitLab_CoordinatorRun_FullE2E(t *testing.T) {
 		t.Fatalf("expected commit hash upon autonomous convergence")
 	}
 }
+
+// TestR4_2_ApprovePRAtPreCommitHead_BotAddsCommit_RejectedUntilReapproved verifies that
+// if human approved PR at pre-commit SHA X, but the bot generates a new commit Y,
+// enterprise autonomous merge is rejected because the new commit Y is unapproved,
+// preventing unapproved code from bypassing the human approval gate.
+func TestR4_2_ApprovePRAtPreCommitHead_BotAddsCommit_RejectedUntilReapproved(t *testing.T) {
+	policy.ResetCache()
+	defer policy.ResetCache()
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+	t.Setenv("ARTIX_ALLOW_AUTONOMOUS", "1")
+	policy.SetActivePolicyForTest(&policy.Policy{
+		EnterpriseMode:       true,
+		AllowAutonomous:      true,
+		RequireForgeApproval: true,
+		AllowedTestCommands:  []string{"test -f counter.txt"},
+		IsVerified:           true,
+	})
+
+	tempDir, driver := setupTestRepoForForge(t)
+	defer os.RemoveAll(tempDir)
+
+	headSHA, err := driver.HeadHash()
+	if err != nil {
+		t.Fatalf("failed to get head hash: %v", err)
+	}
+
+	reg := persona.NewRegistry("")
+	coderObj, _ := coder.NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := coder.NewCoordinator(coderObj, rev, driver, box)
+
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+	storySpec := &spec.StorySpec{
+		ID:           "SPEC-GH-R4-2",
+		Title:        "Post-commit Head Approval Enforcement",
+		TestCommands: []string{"test -f counter.txt"},
+	}
+
+	// Forge server has approval for the PRE-commit headSHA X, but not the new bot commit Y
+	ghServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/pulls/201") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"user": map[string]any{"login": "developer-bob", "type": "User"},
+				"head": map[string]any{"sha": headSHA}, // pre-commit head SHA
+			})
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/pulls/201/reviews") {
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"id":        1,
+					"user":      map[string]any{"login": "alice-lead", "type": "User"},
+					"state":     "APPROVED",
+					"commit_id": headSHA, // approved old SHA X
+				},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer ghServer.Close()
+
+	ghClient := NewGitHubClient(ForgeAuth{
+		Type:    ForgeGitHub,
+		Token:   "gh-secret-token",
+		BaseURL: ghServer.URL,
+	})
+
+	target := &RemoteRepoTarget{Owner: "acme", Repo: "core"}
+	verifier := NewGitHubVerifier(ghClient, target, 201)
+
+	opts := &coder.LoopOptions{
+		MaxRounds:     1,
+		Autonomy:      coder.AutonomyAutonomous,
+		ForgeVerifier: verifier,
+		MockPatchGen: func(round int, feedback string) string {
+			return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+99\n"
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, &steering.PersonaSteeringContext{}, &steering.PersonaSteeringContext{}, opts)
+	if res.Success {
+		t.Fatalf("SECURITY VIOLATION (R4-2): coordinator converged and committed bot patch even though human approval was only on pre-commit SHA %s!", headSHA)
+	}
+	if !strings.Contains(res.Error, "stale") && !strings.Contains(res.Error, "differs") && !strings.Contains(res.Error, "approval") {
+		t.Fatalf("expected error mentioning stale commit or approval on old head, got: %s", res.Error)
+	}
+}
+
