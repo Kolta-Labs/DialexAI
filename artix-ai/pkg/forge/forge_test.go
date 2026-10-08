@@ -1289,3 +1289,101 @@ func TestR4_6_Daemon_TriggerAuthority_IssueAuthorAndCommentAuthor(t *testing.T) 
 	}
 }
 
+func TestR5_4_Daemon_DefaultDeny_And_IssueComment_Authorization(t *testing.T) {
+	// Server configured WITHOUT AllowedUsers: must rely on author_association with default-deny
+	ws := NewWebhookServer(WebhookServerConfig{})
+	handler := ws.Handler()
+
+	// 1. Default-deny: Author association empty outside enterprise mode -> must be 403 Forbidden (not permitted by default)
+	payloadEmptyAssoc := []byte(`{
+		"action": "opened",
+		"issue": {
+			"title": "/artix: task",
+			"body": "do something",
+			"author_association": "",
+			"user": {"login": "unknown-user"}
+		},
+		"sender": {"login": "unknown-user"},
+		"repository": {"clone_url": "https://github.com/org/repo.git", "name": "repo", "owner": {"login": "org"}, "default_branch": "main"}
+	}`)
+	req1 := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(payloadEmptyAssoc))
+	req1.Header.Set("X-GitHub-Event", "issues")
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for empty author_association under default-deny, got %d", rec1.Code)
+	}
+
+	// 2. Sender authorization always checked: authorized issue author ("MEMBER") but unauthorized sender ("NONE") applying label
+	payloadUnauthorizedSender := []byte(`{
+		"action": "labeled",
+		"issue": {
+			"title": "valid issue",
+			"body": "valid spec",
+			"author_association": "MEMBER",
+			"user": {"login": "member-alice"},
+			"labels": [{"name": "artix"}]
+		},
+		"sender": {"login": "random-attacker", "author_association": "NONE"},
+		"repository": {"clone_url": "https://github.com/org/repo.git", "name": "repo", "owner": {"login": "org"}, "default_branch": "main"}
+	}`)
+	req2 := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(payloadUnauthorizedSender))
+	req2.Header.Set("X-GitHub-Event", "issues")
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden when trigger sender is unauthorized, got %d", rec2.Code)
+	}
+
+	// 3. Issue comment: /artix comment by unauthorized commenter -> must be 403 Forbidden
+	payloadCommentUnauthorized := []byte(`{
+		"action": "created",
+		"issue": {
+			"title": "core feature",
+			"body": "spec description",
+			"author_association": "MEMBER",
+			"user": {"login": "member-alice"}
+		},
+		"comment": {
+			"body": "/artix run task",
+			"author_association": "NONE",
+			"user": {"login": "mallory-attacker"}
+		},
+		"sender": {"login": "mallory-attacker", "author_association": "NONE"},
+		"repository": {"clone_url": "https://github.com/org/repo.git", "name": "repo", "owner": {"login": "org"}, "default_branch": "main"}
+	}`)
+	req3 := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(payloadCommentUnauthorized))
+	req3.Header.Set("X-GitHub-Event", "issue_comment")
+	rec3 := httptest.NewRecorder()
+	handler.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for unauthorized /artix comment author, got %d", rec3.Code)
+	}
+
+	// 4. Issue comment: /artix comment by authorized commenter ("COLLABORATOR") on authorized issue ("MEMBER") -> 200/202
+	payloadCommentAuthorized := []byte(`{
+		"action": "created",
+		"issue": {
+			"title": "core feature",
+			"body": "spec description",
+			"author_association": "MEMBER",
+			"user": {"login": "member-alice"}
+		},
+		"comment": {
+			"body": "/artix implement feature",
+			"author_association": "COLLABORATOR",
+			"user": {"login": "collab-bob"}
+		},
+		"sender": {"login": "collab-bob", "author_association": "COLLABORATOR"},
+		"repository": {"clone_url": "https://github.com/org/repo.git", "name": "repo", "owner": {"login": "org"}, "default_branch": "main"}
+	}`)
+	req4 := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(payloadCommentAuthorized))
+	req4.Header.Set("X-GitHub-Event", "issue_comment")
+	rec4 := httptest.NewRecorder()
+	handler.ServeHTTP(rec4, req4)
+	if rec4.Code != http.StatusOK && rec4.Code != http.StatusAccepted {
+		t.Errorf("expected 200/202 for authorized /artix comment, got %d (body: %s)", rec4.Code, rec4.Body.String())
+	}
+}
+
+
