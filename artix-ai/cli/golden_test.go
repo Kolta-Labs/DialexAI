@@ -798,6 +798,103 @@ func TestR8_4_Phase1_AwaitingApproval_ReportsSuccessFalse_StatusAwaitingApproval
 	}
 }
 
+// TestR2_Phase2_EnterpriseLdflag_SelfSignedPolicyWithEnvKeys_MustFailClosed tests that
+// an executable built with enterprise ldflags strictly refuses self-signed policies and env keys,
+// and fails closed.
+func TestR2_Phase2_EnterpriseLdflag_SelfSignedPolicyWithEnvKeys_MustFailClosed(t *testing.T) {
+	tempDir := t.TempDir()
+	binPath := filepath.Join(tempDir, "artix-enterprise")
+
+	buildCmd := exec.Command("go", "build", "-ldflags", "-X artix/pkg/policy.RequireSignedPolicyFlag=true", "-o", binPath, ".")
+	buildCmd.Dir = "."
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build enterprise binary: %v\nOutput: %s", err, string(out))
+	}
+
+	workDir := t.TempDir()
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", workDir}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git command failed: %v\nOutput: %s", err, string(out))
+		}
+	}
+	runGit("init")
+	runGit("config", "user.email", "evaluator@artix.ai")
+	runGit("config", "user.name", "Evaluator")
+	_ = os.WriteFile(filepath.Join(workDir, "README.md"), []byte("# Target Repo\n"), 0644)
+	runGit("add", ".")
+	runGit("commit", "-m", "initial commit")
+
+	// Story spec
+	specDir := filepath.Join(workDir, "docs", "specs")
+	_ = os.MkdirAll(specDir, 0755)
+	specPath := filepath.Join(specDir, "STORY-R2-ENTERPRISE.md")
+	specContent := `---
+id: STORY-R2-ENTERPRISE
+title: Enterprise Isolation Test
+---
+# User Story
+As an enterprise security officer, I want policy trust roots isolated from the environment.
+# Acceptance Criteria
+- Scenario 1: Refuse env trust roots
+# Test Commands
+- echo ok
+`
+	_ = os.WriteFile(specPath, []byte(specContent), 0644)
+	runGit("add", ".")
+	runGit("commit", "-m", "add spec")
+
+	// Self-signed policy
+	policyFile := filepath.Join(workDir, "self_signed_policy.json")
+	policyJSON := `{
+		"enterpriseMode": true,
+		"allowAutonomous": true,
+		"requireSignedPolicy": true,
+		"allowedTestCommands": ["echo ok"]
+	}`
+	_ = os.WriteFile(policyFile, []byte(policyJSON), 0644)
+	rogueSecret := "rogue-secret-env"
+	_ = policy.SignPolicyFile(policyFile, rogueSecret)
+
+	// Mock Forge whose PR head SHA does NOT come from local state
+	forgeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/pulls/99") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"user": map[string]any{"login": "developer-bob", "type": "User"},
+				"head": map[string]any{"sha": "foreign-forge-sha-not-from-local-state-9999"},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer forgeServer.Close()
+
+	// Run enterprise binary with self-signed policy and env keys
+	cmd := exec.Command(binPath, "code", "--json",
+		"--autonomy", "autonomous",
+		"--forge", "github",
+		"--forge-pr", "99",
+		"--forge-url", forgeServer.URL,
+		specPath,
+	)
+	cmd.Dir = workDir
+	cmd.Env = append(os.Environ(),
+		"ARTIX_POLICY_PATH="+policyFile,
+		"ARTIX_POLICY_SIGNING_KEY="+rogueSecret,
+		"ARTIX_POLICY_TRUSTED_PUBKEY=abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+		"ARTIX_AUDIT_PUBLIC_KEY=abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+	)
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+
+	if err == nil {
+		t.Fatalf("SECURITY VIOLATION (R2 d): enterprise binary allowed autonomous code generation using self-signed policy with env keys! (Stdout: %s)", stdout.String())
+	}
+}
+
 
 
 

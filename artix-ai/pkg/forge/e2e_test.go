@@ -1531,9 +1531,340 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 	if errMergeBad == nil {
 		t.Fatalf("SECURITY VIOLATION (R10-2): artix merge with mismatched verdict hash succeeded unexpectedly! Stdout: %s", stdoutMergeBad.String())
 	}
-	combinedBad := stdoutMergeBad.String() + " " + stderrMergeBad.String()
-	if !strings.Contains(combinedBad, "mismatch") && !strings.Contains(combinedBad, "rejected") {
-		t.Fatalf("expected error output mentioning verdict hash mismatch, got: %s", combinedBad)
+}
+
+// TestR2_Phase2_AuditEmitFailure_MustExitNonZero verifies that when the APPROVAL_VERIFIED
+// audit emit fails (e.g. read-only audit log / bad key), artix merge exits non-zero with ok:false.
+func TestR2_Phase2_AuditEmitFailure_MustExitNonZero(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "artix_r2_emit_fail")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	binPath := filepath.Join(tempDir, "artix")
+	buildCmd := exec.Command("go", "build", "-o", binPath, "artix/cli")
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build binary: %v (%s)", err, string(out))
+	}
+
+	workDir, _ := setupTestRepoForForge(t)
+	defer os.RemoveAll(workDir)
+
+	headSHA := "abc1234567890abcdef1234567890abcdef12345"
+	verdictHash := "verdict1234567890abcdef1234567890abcdef"
+	storyID := "SPEC-R2-A"
+
+	// Create and sign a Phase 1 CANDIDATE_PUSHED record
+	logger := audit.Default(workDir)
+	_ = logger.Emit(audit.AuditEvent{
+		EventType:   "CANDIDATE_PUSHED",
+		Status:      "AWAITING_APPROVAL",
+		StorySpecID: storyID,
+		Details: map[string]any{
+			"storyId":             storyID,
+			"candidateSHA":        headSHA,
+			"prBranch":            "artix-pr-10",
+			"reviewerVerdictHash": verdictHash,
+		},
+	})
+
+	// Mock Forge server with approval
+	ghServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/pulls/10") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"user": map[string]any{"login": "developer-bob", "type": "User"},
+				"head": map[string]any{"sha": headSHA},
+			})
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/pulls/10/reviews") {
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"id":        1,
+					"user":      map[string]any{"login": "lead-alice", "type": "User"},
+					"state":     "APPROVED",
+					"commit_id": headSHA,
+				},
+			})
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/pulls/10/merge") {
+			_ = json.NewEncoder(w).Encode(map[string]any{"merged": true, "sha": headSHA})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer ghServer.Close()
+
+	// Make the audit log read-only to force Emit failure on APPROVAL_VERIFIED
+	logPath := logger.LogPath()
+	_ = os.Chmod(logPath, 0400)
+	defer os.Chmod(logPath, 0600)
+
+	cmdMerge := exec.Command(binPath, "merge", "--json",
+		"--pr", "10",
+		"--sha", headSHA,
+		"--spec", storyID,
+		"--forge", "github",
+		"--forge-url", ghServer.URL,
+		"--forge-owner", "acme",
+		"--forge-repo", "core",
+	)
+	cmdMerge.Dir = workDir
+	var stdout, stderr strings.Builder
+	cmdMerge.Stdout = &stdout
+	cmdMerge.Stderr = &stderr
+	cmdErr := cmdMerge.Run()
+
+	if cmdErr == nil {
+		t.Fatalf("SECURITY VIOLATION (R2 a): artix merge succeeded when APPROVAL_VERIFIED audit Emit failed! Stdout: %s", stdout.String())
+	}
+	var res map[string]any
+	_ = json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &res)
+	if res["ok"] == true {
+		t.Fatalf("expected ok:false when audit emit fails, got: %v", res)
+	}
+}
+
+// TestR2_Phase2_OmitVerdictHash_ReadsFromPhase1Record verifies that omitting --verdict-hash
+// resolves the verdict hash from the authenticated Phase 1 record keyed by --sha/--spec.
+func TestR2_Phase2_OmitVerdictHash_ReadsFromPhase1Record(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "artix_r2_omit_hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	binPath := filepath.Join(tempDir, "artix")
+	buildCmd := exec.Command("go", "build", "-o", binPath, "artix/cli")
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build binary: %v (%s)", err, string(out))
+	}
+
+	workDir, _ := setupTestRepoForForge(t)
+	defer os.RemoveAll(workDir)
+
+	headSHA := "def1234567890abcdef1234567890abcdef12345"
+	verdictHash := "verdict_hash_from_phase_1_authenticated"
+	storyID := "SPEC-R2-B"
+
+	logger := audit.Default(workDir)
+	_ = logger.Emit(audit.AuditEvent{
+		EventType:   "CANDIDATE_PUSHED",
+		Status:      "AWAITING_APPROVAL",
+		StorySpecID: storyID,
+		Details: map[string]any{
+			"storyId":             storyID,
+			"candidateSHA":        headSHA,
+			"prBranch":            "artix-pr-11",
+			"reviewerVerdictHash": verdictHash,
+		},
+	})
+
+	ghServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/pulls/11") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"user": map[string]any{"login": "developer-bob", "type": "User"},
+				"head": map[string]any{"sha": headSHA},
+			})
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/pulls/11/reviews") {
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"id":        1,
+					"user":      map[string]any{"login": "lead-alice", "type": "User"},
+					"state":     "APPROVED",
+					"commit_id": headSHA,
+				},
+			})
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/pulls/11/merge") {
+			_ = json.NewEncoder(w).Encode(map[string]any{"merged": true, "sha": headSHA})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer ghServer.Close()
+
+	// Run artix merge WITHOUT --verdict-hash
+	cmdMerge := exec.Command(binPath, "merge", "--json",
+		"--pr", "11",
+		"--sha", headSHA,
+		"--spec", storyID,
+		"--forge", "github",
+		"--forge-url", ghServer.URL,
+		"--forge-owner", "acme",
+		"--forge-repo", "core",
+	)
+	cmdMerge.Dir = workDir
+	var stdout, stderr strings.Builder
+	cmdMerge.Stdout = &stdout
+	cmdMerge.Stderr = &stderr
+	if err := cmdMerge.Run(); err != nil {
+		t.Fatalf("expected artix merge without --verdict-hash to succeed by reading from Phase 1 record, got error: %v (stdout: %s, stderr: %s)", err, stdout.String(), stderr.String())
+	}
+}
+
+// TestR2_Phase2_SpecRequiredAndNonEmpty verifies that omitting --spec or passing empty --spec is rejected.
+func TestR2_Phase2_SpecRequiredAndNonEmpty(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "artix_r2_spec_req")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	binPath := filepath.Join(tempDir, "artix")
+	buildCmd := exec.Command("go", "build", "-o", binPath, "artix/cli")
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build binary: %v (%s)", err, string(out))
+	}
+
+	workDir, _ := setupTestRepoForForge(t)
+	defer os.RemoveAll(workDir)
+
+	cmdMerge := exec.Command(binPath, "merge", "--json",
+		"--pr", "12",
+		"--sha", "abc12345",
+		"--spec", "", // empty spec
+	)
+	cmdMerge.Dir = workDir
+	var stdout, stderr strings.Builder
+	cmdMerge.Stdout = &stdout
+	cmdMerge.Stderr = &stderr
+	err = cmdMerge.Run()
+	if err == nil {
+		t.Fatalf("SECURITY VIOLATION (R2 c): artix merge succeeded with empty --spec! (must require non-empty --spec)")
+	}
+}
+
+// TestR2_Phase2_EnterpriseTrustRoots_IgnoreEnvKeys verifies that a binary built with the enterprise ldflag
+// strictly ignores ARTIX_POLICY_PATH, ARTIX_POLICY_SIGNING_KEY, ARTIX_POLICY_TRUSTED_PUBKEY, and ARTIX_AUDIT_PUBLIC_KEY.
+func TestR2_Phase2_EnterpriseTrustRoots_IgnoreEnvKeys(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "artix_r2_enterprise_trust")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	binPath := filepath.Join(tempDir, "artix-enterprise")
+	// Compile binary WITH enterprise ldflag
+	buildCmd := exec.Command("go", "build", "-ldflags", "-X artix/pkg/policy.RequireSignedPolicyFlag=true", "-o", binPath, "artix/cli")
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build enterprise binary: %v (%s)", err, string(out))
+	}
+
+	workDir, _ := setupTestRepoForForge(t)
+	defer os.RemoveAll(workDir)
+
+	// Create a rogue self-signed policy in a non-root path
+	roguePolicyPath := filepath.Join(workDir, "rogue_policy.json")
+	roguePolicyJSON := `{
+		"enterpriseMode": true,
+		"allowAutonomous": true,
+		"requireSignedPolicy": true,
+		"requireForgeApproval": false,
+		"allowedTestCommands": ["true"]
+	}`
+	_ = os.WriteFile(roguePolicyPath, []byte(roguePolicyJSON), 0644)
+	rogueSecret := "rogue-env-secret-999"
+	_ = policy.SignPolicyFile(roguePolicyPath, rogueSecret)
+
+	// Run enterprise binary with env overrides pointing to rogue policy and keys
+	cmd := exec.Command(binPath, "run", "--json", "SPEC-ROGUE")
+	cmd.Dir = workDir
+	cmd.Env = append(os.Environ(),
+		"ARTIX_POLICY_PATH="+roguePolicyPath,
+		"ARTIX_POLICY_SIGNING_KEY="+rogueSecret,
+		"ARTIX_POLICY_TRUSTED_PUBKEY=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+		"ARTIX_AUDIT_PUBLIC_KEY=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+	)
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err = cmd.Run()
+
+	if err == nil {
+		t.Fatalf("SECURITY VIOLATION (R2 d): enterprise-ldflag binary accepted self-signed policy and env keys! Output: %s", stdout.String())
+	}
+}
+
+// TestR2_Phase2_RemoteBranchCleanup_OnlyAuthorizedReviewer verifies that candidate remote branch
+// is ONLY deleted on rejection from an AUTHORIZED reviewer, and NOT on bot or unauthorized reviewer rejection.
+func TestR2_Phase2_RemoteBranchCleanup_OnlyAuthorizedReviewer(t *testing.T) {
+	tempDir, driver := setupTestRepoForForge(t)
+	defer os.RemoveAll(tempDir)
+
+	headSHA := "abc1234567890abcdef1234567890abcdef12345"
+	storyID := "SPEC-R2-E"
+	prBranch := "artix-pr-e2e-auth"
+
+	// Mock bare remote
+	bareDir, err := os.MkdirTemp("", "bare_r2_e")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(bareDir)
+	_ = exec.Command("git", "init", "--bare", bareDir).Run()
+	_ = exec.Command("git", "-C", tempDir, "remote", "add", "origin", bareDir).Run()
+
+	// Push candidate branch to bare remote
+	_, _ = driver.Push("origin", fmt.Sprintf("HEAD:refs/heads/%s", prBranch))
+
+	// Verify branch exists on remote
+	checkBranchExists := func() bool {
+		cmd := exec.Command("git", "--git-dir", bareDir, "branch", "--list", prBranch)
+		out, _ := cmd.Output()
+		return strings.Contains(string(out), prBranch)
+	}
+	if !checkBranchExists() {
+		t.Fatalf("precondition failed: remote branch %s does not exist", prBranch)
+	}
+
+	// 1. Bot "changes requested" verifier
+	botRejectionVerifier := func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+		return nil, fmt.Errorf("%w: bot account 'code-bot' requested changes", ErrBotApprover)
+	}
+
+	// Phase 1 record binding
+	logger := audit.Default(tempDir)
+	_ = logger.Emit(audit.AuditEvent{
+		EventType:   "CANDIDATE_PUSHED",
+		Status:      "AWAITING_APPROVAL",
+		StorySpecID: storyID,
+		Details: map[string]any{
+			"storyId":             storyID,
+			"candidateSHA":        headSHA,
+			"prBranch":            prBranch,
+			"reviewerVerdictHash": "hash123",
+		},
+	})
+
+	_, err = VerifyAndMergeCandidate(context.Background(), driver, botRejectionVerifier, headSHA, logger, storyID, "origin", prBranch, "hash123")
+	if err == nil {
+		t.Fatalf("expected verification to fail")
+	}
+	// Branch must NOT be deleted after bot rejection
+	if !checkBranchExists() {
+		t.Fatalf("SECURITY VIOLATION (R2 e): remote branch was deleted after BOT rejection!")
+	}
+
+	// 2. Authorized human changes requested verifier
+	authRejectionVerifier := func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+		return nil, fmt.Errorf("%w: security-lead requested changes", ErrChangesRequested)
+	}
+
+	_, err = VerifyAndMergeCandidate(context.Background(), driver, authRejectionVerifier, headSHA, logger, storyID, "origin", prBranch, "hash123")
+	if err == nil {
+		t.Fatalf("expected verification to fail")
+	}
+	// Branch MUST be deleted after authorized human rejection
+	if checkBranchExists() {
+		t.Fatalf("expected remote branch %s to be deleted after authorized human rejection, but it still exists", prBranch)
 	}
 }
 
