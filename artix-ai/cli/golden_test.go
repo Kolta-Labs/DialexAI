@@ -466,3 +466,112 @@ func TestR2_7_PluginContract_RealBinaryOutputsExpectedJSONForPlugins(t *testing.
 	}
 }
 
+// TestR4_5_Executable_EnterpriseMode_MissingAuditKey_RefusesCommitAndRollsBack provides an executable
+// end-to-end binary test showing commit refusal and working tree rollback when ed25519 audit key is missing/unreadable in enterprise mode.
+func TestR4_5_Executable_EnterpriseMode_MissingAuditKey_RefusesCommitAndRollsBack(t *testing.T) {
+	tempDir := t.TempDir()
+	binPath := filepath.Join(tempDir, "artix-enterprise")
+
+	// Build artix binary with enterprise require-signed-policy flag
+	buildCmd := exec.Command("go", "build", "-ldflags", "-X artix/pkg/policy.RequireSignedPolicyFlag=true", "-o", binPath, ".")
+	buildCmd.Dir = "."
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build enterprise artix binary: %v\nOutput: %s", err, string(out))
+	}
+
+	workDir := t.TempDir()
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", workDir}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git command failed: %v\nOutput: %s", err, string(out))
+		}
+	}
+	runGit("init")
+	runGit("config", "user.email", "evaluator@artix.ai")
+	runGit("config", "user.name", "Evaluator")
+	_ = os.WriteFile(filepath.Join(workDir, "README.md"), []byte("# Target Repo\n"), 0644)
+	runGit("add", ".")
+	runGit("commit", "-m", "initial commit")
+
+	// Create story spec
+	specDir := filepath.Join(workDir, "docs", "specs")
+	_ = os.MkdirAll(specDir, 0755)
+	specPath := filepath.Join(specDir, "STORY-AUDIT-FAIL.md")
+	specContent := `---
+id: STORY-AUDIT-FAIL
+title: Enterprise Audit Rollback Check
+---
+# User Story
+As an auditor, I want enterprise commits strictly blocked if audit keys are missing.
+# Acceptance Criteria
+- Scenario 1: Missing key causes rollback
+# Test Commands
+- echo ok
+`
+	_ = os.WriteFile(specPath, []byte(specContent), 0644)
+	runGit("add", ".")
+	runGit("commit", "-m", "add spec")
+
+	// Start fake LLM server returning code changes
+	fakeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]any{
+						"role":    "assistant",
+						"content": "```diff\n--- /dev/null\n+++ b/unauthorized.txt\n@@ -0,0 +1 @@\n+this must be rolled back\n```",
+					},
+				},
+			},
+			"usage": map[string]any{
+				"prompt_tokens":     100,
+				"completion_tokens": 50,
+				"total_tokens":      150,
+			},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer fakeServer.Close()
+
+	// Execute artix code in enterprise mode without an audit signing key
+	codeCmd := exec.Command(binPath, "code", "--autonomy", "supervised", "--confirm-tests",
+		"--provider", "openai", "--model", "gpt-4o", "--rounds", "1")
+	codeCmd.Dir = workDir
+	codeCmd.Env = append(os.Environ(),
+		"ARTIX_ENTERPRISE=1",
+		"OPENAI_API_KEY=mock-key",
+		"ARTIX_API_URL="+fakeServer.URL,
+		"ARTIX_AUDIT_PRIVATE_KEY_PATH=/nonexistent/path/to/key.ed25519",
+		"ARTIX_AUDIT_KEY_PATH=",
+	)
+	var codeOut, codeErr bytes.Buffer
+	codeCmd.Stdout = &codeOut
+	codeCmd.Stderr = &codeErr
+	err := codeCmd.Run()
+
+	// 1. Process must fail
+	if err == nil {
+		t.Fatalf("SECURITY VIOLATION (R4-5): enterprise artix code succeeded despite missing audit signing key! (stdout: %s, stderr: %s)", codeOut.String(), codeErr.String())
+	}
+
+	// 2. Output must mention audit failure
+	combined := codeOut.String() + "\n" + codeErr.String()
+	if !strings.Contains(combined, "audit") {
+		t.Fatalf("expected output to report audit failure, got: %s", combined)
+	}
+
+	// 3. Working tree must NOT contain unauthorized.txt
+	if _, statErr := os.Stat(filepath.Join(workDir, "unauthorized.txt")); statErr == nil {
+		t.Fatalf("SECURITY VIOLATION (R4-5): uncommitted file unauthorized.txt was not rolled back after audit failure!")
+	}
+
+	// 4. Git log must not contain new commit
+	logCmd := exec.Command("git", "-C", workDir, "log", "-n", "1", "--oneline")
+	logOut, _ := logCmd.CombinedOutput()
+	if strings.Contains(string(logOut), "Enterprise Audit Rollback Check") {
+		t.Fatalf("SECURITY VIOLATION (R4-5): commit was created in git despite audit failure: %s", string(logOut))
+	}
+}
+
+
