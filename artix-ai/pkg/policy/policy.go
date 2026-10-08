@@ -88,14 +88,52 @@ var defaultAllowedSemanticRunners = []string{
 
 // IsAllowedSemanticRunner checks whether a command uses an allowlisted static analysis / semantic runner tool.
 func IsAllowedSemanticRunner(cmdStr string) bool {
-	fields := strings.Fields(strings.TrimSpace(cmdStr))
+	trimmed := strings.TrimSpace(cmdStr)
+	if trimmed == "" {
+		return false
+	}
+
+	// 1. Strictly forbid shell metacharacters and control operators
+	if strings.ContainsAny(trimmed, ";|&`$><\n\r()") {
+		return false
+	}
+
+	fields := strings.Fields(trimmed)
 	if len(fields) == 0 {
 		return false
 	}
-	tool := strings.ToLower(filepath.Base(fields[0]))
-	// Strictly forbidden trivial / bypass commands
+
+	rawTool := fields[0]
+	// 2. Forbid relative paths, /tmp paths, or arbitrary directories
+	if strings.Contains(rawTool, "/") || strings.Contains(rawTool, "\\") {
+		cleanPath := filepath.Clean(rawTool)
+		if strings.HasPrefix(cleanPath, "/tmp/") || strings.HasPrefix(cleanPath, "/var/") ||
+			strings.HasPrefix(cleanPath, "./") || strings.HasPrefix(cleanPath, "../") ||
+			(!strings.HasPrefix(cleanPath, "/usr/bin/") && !strings.HasPrefix(cleanPath, "/usr/local/bin/") && !strings.HasPrefix(cleanPath, "/opt/homebrew/bin/")) {
+			return false
+		}
+	}
+
+	tool := strings.ToLower(filepath.Base(rawTool))
+	// 3. Reject trivial / bypass tools
 	if tool == "true" || tool == "false" || tool == "exit" || tool == "cat" || tool == "echo" ||
 		tool == ":" || tool == "sh" || tool == "bash" || tool == "zsh" || tool == "printf" || tool == "tee" {
+		return false
+	}
+
+	// 4. Reject help/version-only invocations that do not analyze code
+	isNoopFlagOnly := true
+	for _, arg := range fields[1:] {
+		argLower := strings.ToLower(arg)
+		if argLower == "--version" || argLower == "-v" || argLower == "-V" || argLower == "--help" || argLower == "-h" {
+			continue
+		}
+		if argLower == "./nothing/..." {
+			return false
+		}
+		isNoopFlagOnly = false
+	}
+	if isNoopFlagOnly && len(fields) > 1 {
 		return false
 	}
 
@@ -103,12 +141,20 @@ func IsAllowedSemanticRunner(cmdStr string) bool {
 	allowed := append(defaultAllowedSemanticRunners, pol.Reviewer.AllowedSemanticRunners...)
 	for _, a := range allowed {
 		aLower := strings.ToLower(strings.TrimSpace(a))
-		if tool == aLower || strings.HasPrefix(strings.ToLower(cmdStr), aLower) {
+		if strings.Contains(aLower, " ") {
+			if strings.HasPrefix(strings.ToLower(trimmed), aLower) {
+				rest := strings.TrimSpace(strings.TrimPrefix(strings.ToLower(trimmed), aLower))
+				if rest != "" && rest != "./nothing/..." && !strings.HasPrefix(rest, "--version") && !strings.HasPrefix(rest, "--help") {
+					return true
+				}
+			}
+		} else if tool == aLower {
 			return true
 		}
 	}
 	return false
 }
+
 
 
 // Policy specifies security, autonomy, audit, and resource constraints for Artix.

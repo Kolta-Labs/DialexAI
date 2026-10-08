@@ -120,7 +120,7 @@ func CheckTestIntegrity(diff string) []string {
 				continue
 			}
 
-			if strings.Contains(trimmed, "t.Skip(") || strings.Contains(trimmed, "t.SkipNow()") {
+			if strings.Contains(trimmed, "t.Skip(") || strings.Contains(trimmed, "t.SkipNow()") || strings.Contains(trimmed, "t.Skip") || strings.Contains(trimmed, "t.Skipf") {
 				violations = append(violations, "test integrity violation: Go test skipping is forbidden (t.Skip)")
 			} else if strings.Contains(trimmed, "@Ignore") || strings.Contains(trimmed, "@Disabled") {
 				violations = append(violations, "test integrity violation: test disablement is forbidden (@Ignore/@Disabled)")
@@ -145,9 +145,26 @@ func CheckTestIntegrity(diff string) []string {
 				violations = append(violations, fmt.Sprintf("test integrity violation: impossible/weakened assertion detected (%s)", trimmed))
 			}
 
-			// Detect tautology / dead test condition (e.g. 1 != 1, 1 == 1, if false, if !ok)
+			// Detect tautology / dead test condition (e.g. 1 != 1, 1 == 1, if false, if !ok, a != a)
 			if strings.Contains(trimmed, "1 != 1") || strings.Contains(trimmed, "1 == 1") || strings.Contains(trimmed, "if false") || strings.Contains(trimmed, "assert.True(t, true)") || strings.Contains(trimmed, "assert.False(t, false)") || strings.Contains(trimmed, "if !ok") || strings.Contains(trimmed, "if !valid") || strings.Contains(trimmed, "if !pass") {
 				violations = append(violations, fmt.Sprintf("test integrity violation: tautological assertion / dead test condition detected (%s)", trimmed))
+			}
+
+			// Detect self-comparison e.g. "a != a" or "x != x" or "a == a"
+			if strings.Contains(trimmed, "!=") || strings.Contains(trimmed, "==") {
+				for _, op := range []string{"!=", "=="} {
+					if strings.Contains(trimmed, op) {
+						parts := strings.Split(trimmed, op)
+						if len(parts) == 2 {
+							lhs := strings.TrimSpace(strings.Trim(strings.TrimPrefix(strings.TrimSpace(parts[0]), "if "), "(){}"))
+							rhs := strings.TrimSpace(strings.Trim(strings.TrimSuffix(strings.TrimSpace(parts[1]), "{"), "(){}"))
+							if lhs != "" && lhs == rhs {
+								violations = append(violations, fmt.Sprintf("test integrity violation: self-comparison tautology detected (%s)", trimmed))
+								break
+							}
+						}
+					}
+				}
 			}
 
 			// Detect defer recover() panic swallowing in tests
@@ -182,6 +199,8 @@ func isAssertionStatement(s string) bool {
 }
 
 // CheckSemanticASTTaboos checks diff against taboo patterns using AST parsing for Go and comment-aware filtering.
+// Note: The deterministic rule and taboo checks serve as defense-in-depth pre-filters and are not claimed to be exhaustive.
+// Autonomous approval strictly requires passing both the deterministic layer and the model-backed Critic evaluation.
 // If workspaceDir is provided, whole post-patch files on disk are parsed to catch multi-statement and cross-declaration patterns.
 func CheckSemanticASTTaboos(diff string, tabooList []string, workspaceDir ...string) []string {
 	var violations []string
@@ -357,14 +376,27 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 						}
 						if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 							sName := sel.Sel.Name
-							if sName == "Post" || sName == "Get" || sName == "Do" || sName == "Dial" || sName == "NewRequest" {
+							if sName == "Post" || sName == "Get" || sName == "Do" || sName == "Dial" || sName == "NewRequest" || sName == "Head" {
 								funcHasNet[fnName] = true
 							}
 							if sName == "Getenv" {
 								for _, arg := range call.Args {
 									if lit, ok := arg.(*ast.BasicLit); ok {
 										v := strings.ToUpper(lit.Value)
-										if strings.Contains(v, "SECRET") || strings.Contains(v, "KEY") || strings.Contains(v, "TOKEN") || strings.Contains(v, "AWS") || strings.Contains(v, "GITHUB") {
+										if strings.Contains(v, "SECRET") || strings.Contains(v, "KEY") || strings.Contains(v, "TOKEN") || strings.Contains(v, "AWS") || strings.Contains(v, "GITHUB") || strings.Contains(v, "PASS") || strings.Contains(v, "CRED") {
+											funcHasSecret[fnName] = true
+										}
+									}
+								}
+							}
+							if sName == "Environ" {
+								funcHasSecret[fnName] = true
+							}
+							if sName == "ReadFile" || sName == "Open" {
+								for _, arg := range call.Args {
+									if lit, ok := arg.(*ast.BasicLit); ok {
+										v := strings.ToLower(lit.Value)
+										if strings.Contains(v, "credential") || strings.Contains(v, ".aws") || strings.Contains(v, ".ssh") || strings.Contains(v, "token") || strings.Contains(v, "secret") || strings.Contains(v, "/etc/passwd") {
 											funcHasSecret[fnName] = true
 										}
 									}
@@ -377,14 +409,12 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 			}
 		}
 
-		// Check transitive secret exfiltration reachable from init() or other functions
+		// Check transitive secret exfiltration reachable from any non-test function
 		for fnName := range funcCalls {
-			if fnName == "init" {
-				netReachable := transitivelyHasProp(fnName, funcCalls, funcHasNet, make(map[string]bool))
-				secretReachable := transitivelyHasProp(fnName, funcCalls, funcHasSecret, make(map[string]bool))
-				if netReachable && secretReachable {
-					violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in production init() function")
-				}
+			netReachable := transitivelyHasProp(fnName, funcCalls, funcHasNet, make(map[string]bool))
+			secretReachable := transitivelyHasProp(fnName, funcCalls, funcHasSecret, make(map[string]bool))
+			if netReachable && secretReachable {
+				violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in non-test code")
 			}
 		}
 
@@ -449,34 +479,18 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 				}
 			}
 
-			// 4. Secret access and network egress in init() or production functions
-			if fn, ok := n.(*ast.FuncDecl); ok {
-				if fn.Name.Name == "init" && fn.Body != nil {
-					hasNet := false
-					hasSecret := false
-					ast.Inspect(fn.Body, func(in ast.Node) bool {
-						if call, ok := in.(*ast.CallExpr); ok {
-							if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-								name := sel.Sel.Name
-								if name == "Post" || name == "Get" || name == "Do" || name == "Dial" || name == "NewRequest" {
-									hasNet = true
-								}
-								if name == "Getenv" {
-									for _, arg := range call.Args {
-										if lit, ok := arg.(*ast.BasicLit); ok {
-											v := strings.ToUpper(lit.Value)
-											if strings.Contains(v, "SECRET") || strings.Contains(v, "KEY") || strings.Contains(v, "TOKEN") || strings.Contains(v, "AWS") || strings.Contains(v, "GITHUB") {
-												hasSecret = true
-											}
-										}
-									}
-								}
+			// 4. Secret access and network egress in closures or functions
+			if call, ok := n.(*ast.CallExpr); ok {
+				if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+					name := sel.Sel.Name
+					if name == "Post" || name == "Get" || name == "Do" || name == "Dial" || name == "NewRequest" {
+						// Inspect call arguments for direct secret / env reads
+						for _, arg := range call.Args {
+							argStr := fmt.Sprintf("%v", arg)
+							if strings.Contains(argStr, "Environ") || strings.Contains(argStr, "Getenv") || strings.Contains(argStr, "ReadFile") {
+								violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in non-test code")
 							}
 						}
-						return true
-					})
-					if hasNet && hasSecret {
-						violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in production init() function")
 					}
 				}
 			}
@@ -485,9 +499,11 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 		})
 	}
 
-	// Also perform string-level check on code blob for init/egress patterns
-	if strings.Contains(code, "func init()") && (strings.Contains(code, "http.Post") || strings.Contains(code, "http.Get")) && (strings.Contains(code, "AWS_SECRET_ACCESS_KEY") || strings.Contains(code, "SECRET") || strings.Contains(code, "API_KEY") || strings.Contains(code, "GITHUB_TOKEN")) {
-		violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in production init() function")
+	// Also perform string-level check on code blob for egress/secret patterns
+	codeLower := strings.ToLower(code)
+	if (strings.Contains(codeLower, "http.post") || strings.Contains(codeLower, "http.get") || strings.Contains(codeLower, "http.do") || strings.Contains(codeLower, "net.dial")) &&
+		(strings.Contains(codeLower, "os.environ") || strings.Contains(codeLower, "os.readfile") || strings.Contains(codeLower, "credentials") || strings.Contains(codeLower, "secret_key") || strings.Contains(codeLower, "os.getenv") || strings.Contains(codeLower, "aws_secret")) {
+		violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in non-test code")
 	}
 
 	return deduplicateStrings(violations)
@@ -503,12 +519,17 @@ func inspectMultiLanguageSemantics(code string, taboos []string) []string {
 		strings.Contains(diffLower, "processbuilder") ||
 		strings.Contains(diffLower, "rm -rf") ||
 		strings.Contains(diffLower, "child_process.exec") ||
+		strings.Contains(diffLower, "child_process.execsync") ||
+		strings.Contains(diffLower, "execsync(") ||
 		strings.Contains(diffLower, "os.system(") ||
 		strings.Contains(diffLower, "os.system \"") ||
 		strings.Contains(diffLower, "subprocess.call") ||
 		strings.Contains(diffLower, "subprocess.popen") ||
 		strings.Contains(diffLower, "subprocess.run") {
 		violations = append(violations, "Security Taboo: forbidden arbitrary shell/command execution detected")
+	}
+	if strings.Contains(diffLower, "process()") && (strings.Contains(diffLower, "/bin/sh") || strings.Contains(diffLower, "/bin/bash") || strings.Contains(diffLower, "executableurl") || strings.Contains(diffLower, "launchpath") || strings.Contains(diffLower, "fileurlwithpath")) {
+		violations = append(violations, "Security Taboo: forbidden arbitrary shell/command execution detected in Swift (Process)")
 	}
 	if (strings.Contains(diffLower, "java.io.file") || strings.Contains(diffLower, "files.delete") || strings.Contains(diffLower, "file(")) && (strings.Contains(diffLower, "/etc/") || strings.Contains(diffLower, "delete()") || strings.Contains(diffLower, "paths.get") || strings.Contains(diffLower, "delete(")) {
 		violations = append(violations, "Security Taboo: forbidden destructive system file deletion detected")

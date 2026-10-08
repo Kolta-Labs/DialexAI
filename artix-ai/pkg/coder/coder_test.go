@@ -1534,6 +1534,51 @@ func TestR4_3_CoordinatorRun_HostileCorpus_AllRejected(t *testing.T) {
 	}
 }
 
+func TestR5_3_ModelCriticMandatoryForApproval(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	storySpec := &spec.StorySpec{
+		ID:           "STORY-CRITIC-MANDATORY",
+		Title:        "Feature requiring model review",
+		UserStory:    "Implement feature with review",
+		TestCommands: []string{"grep '1' counter.txt"},
+	}
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+
+	// Reviewer with NO critic configured (nil critic)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	opts := &LoopOptions{
+		MaxRounds:             1,
+		Autonomy:              AutonomySupervised,
+		TestCommandsConfirmed: true,
+		MockPatchGen: func(round int, feedback string) string {
+			return `diff --git a/counter.txt b/counter.txt
+--- a/counter.txt
++++ b/counter.txt
+@@ -1,1 +1,1 @@
+-0
++1
+`
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if res.Success {
+		t.Fatalf("SECURITY VIOLATION: Coordinator.Run succeeded without a configured Critic model!")
+	}
+	if res.FinalVerdict == nil || res.FinalVerdict.Status != reviewer.StatusUnreviewed {
+		t.Fatalf("Expected StatusUnreviewed when Critic is missing, got: %v", res.FinalVerdict)
+	}
+}
+
+
+
 
 
 

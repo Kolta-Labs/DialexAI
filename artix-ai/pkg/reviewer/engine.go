@@ -230,6 +230,27 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 		verdict.BlockingIssues = append(verdict.BlockingIssues, tabooViolations...)
 	}
 
+	// 4b. Review Escalation: Modifications to go.work, testdata/, or //go:generate directives must escalate to unreviewed (human review required)
+	for _, tf := range touchedFiles {
+		base := filepath.Base(tf)
+		if base == "go.work" || base == "go.work.sum" || strings.Contains(tf, "testdata/") || strings.HasPrefix(tf, "testdata/") {
+			if verdict.Status != StatusRejected {
+				verdict.Approved = false
+				verdict.Status = StatusUnreviewed
+				verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("UNREVIEWED: review escalation required for modification to baseline/governance file %q; fail-closed for human review", tf))
+				return verdict
+			}
+		}
+	}
+	if strings.Contains(ctx.Diff, "//go:generate") {
+		if verdict.Status != StatusRejected {
+			verdict.Approved = false
+			verdict.Status = StatusUnreviewed
+			verdict.BlockingIssues = append(verdict.BlockingIssues, "UNREVIEWED: review escalation required for //go:generate directive; fail-closed for human review")
+			return verdict
+		}
+	}
+
 	// 5. Deterministic Pre-Filter: Fail Closed for Non-Go Languages without Semantic Runner
 	hasNonGo := false
 	for _, tf := range touchedFiles {
