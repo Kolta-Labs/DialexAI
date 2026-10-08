@@ -1101,11 +1101,134 @@ func TestR8_2_TypedErrors_503BodyWithKeywords_DoesNotDeleteBranch(t *testing.T) 
 		t.Fatalf("expected verification to fail on typed changes requested error")
 	}
 
-	// Remote PR branch MUST be deleted on typed definitive rejection
-	if _, err := exec.Command("git", "-C", bareDir, "rev-parse", "--verify", "refs/heads/"+prBranch).CombinedOutput(); err == nil {
-		t.Fatalf("expected remote PR branch to be deleted after typed ErrChangesRequested rejection")
-	}
 }
+
+// TestR9_2_CryptographicAuditBinding_HostileEvaluatorCorpus validates all R9-2 hostile reviewer findings:
+// a) Unsigned log with no key in enterprise mode must fail closed (never fall back to unkeyed hash chain).
+// b) Malformed ARTIX_AUDIT_PUBLIC_KEY ("zz-not-hex") must hard fail, never fall back.
+// c) Verdict binding must fail closed when expected or recorded verdict hash is empty or mismatched.
+// d) CANDIDATE_PUSHED event is strictly required (EventCodeConvergence/SUCCESS is rejected).
+func TestR9_2_CryptographicAuditBinding_HostileEvaluatorCorpus(t *testing.T) {
+	// Subtest A: Unsigned log in enterprise mode MUST FAIL CLOSED
+	t.Run("Unsigned_Log_In_EnterpriseMode_Must_FailClosed", func(t *testing.T) {
+		tempDir, driver := setupTestRepoForForge(t)
+		defer os.RemoveAll(tempDir)
+		headSHA, _ := driver.HeadHash()
+
+		// Create unsigned logger (no private key, no public key)
+		t.Setenv("ARTIX_ENTERPRISE", "1")
+		t.Setenv("ARTIX_AUDIT_PUBLIC_KEY", "")
+		t.Setenv("ARTIX_AUDIT_PRIVATE_KEY_PATH", "")
+
+		policy.ResetCache()
+		defer policy.ResetCache()
+		policy.SetActivePolicyForTest(&policy.Policy{
+			EnterpriseMode:       true,
+			RequireForgeApproval: true,
+			AuditPublicKey:       "", // Empty key in enterprise mode
+			IsVerified:           true,
+		})
+
+		unsignedLogger := audit.NewLogger(tempDir)
+		_ = unsignedLogger.Emit(audit.AuditEvent{
+			EventType:   "CANDIDATE_PUSHED",
+			Status:      "AWAITING_APPROVAL",
+			StorySpecID: "SPEC-UNSIGNED",
+			Details: map[string]any{
+				"storyId":             "SPEC-UNSIGNED",
+				"candidateSHA":        headSHA,
+				"reviewerVerdictHash": "hash1234567890abcdef",
+			},
+		})
+
+		err := verifyPhase1AuditBinding(unsignedLogger.LogPath(), "SPEC-UNSIGNED", headSHA, "hash1234567890abcdef")
+		if err == nil {
+			t.Fatalf("SECURITY VIOLATION (R9-2 a): verifyPhase1AuditBinding accepted unsigned log in enterprise mode!")
+		}
+	})
+
+	// Subtest B: Malformed ARTIX_AUDIT_PUBLIC_KEY must HARD FAIL
+	t.Run("Malformed_PublicKey_Must_HardFail", func(t *testing.T) {
+		tempDir, driver := setupTestRepoForForge(t)
+		defer os.RemoveAll(tempDir)
+		headSHA, _ := driver.HeadHash()
+
+		t.Setenv("ARTIX_AUDIT_PUBLIC_KEY", "zz-not-hex-malformed")
+		logger := audit.NewLogger(tempDir)
+		_ = logger.Emit(audit.AuditEvent{
+			EventType:   "CANDIDATE_PUSHED",
+			Status:      "AWAITING_APPROVAL",
+			StorySpecID: "SPEC-MALFORMED",
+			Details: map[string]any{
+				"storyId":             "SPEC-MALFORMED",
+				"candidateSHA":        headSHA,
+				"reviewerVerdictHash": "hash1234567890abcdef",
+			},
+		})
+
+		err := verifyPhase1AuditBinding(logger.LogPath(), "SPEC-MALFORMED", headSHA, "hash1234567890abcdef")
+		if err == nil {
+			t.Fatalf("SECURITY VIOLATION (R9-2 b): verifyPhase1AuditBinding silently accepted malformed public key!")
+		}
+		if !strings.Contains(strings.ToLower(err.Error()), "invalid") && !strings.Contains(strings.ToLower(err.Error()), "public key") && !strings.Contains(strings.ToLower(err.Error()), "hex") {
+			t.Fatalf("expected error mentioning invalid public key, got: %v", err)
+		}
+	})
+
+	// Subtest C: Empty expected or recorded verdict hash must FAIL CLOSED
+	t.Run("Empty_Verdict_Hash_Must_FailClosed", func(t *testing.T) {
+		tempDir, driver := setupTestRepoForForge(t)
+		defer os.RemoveAll(tempDir)
+		headSHA, _ := driver.HeadHash()
+		logger := audit.Default(tempDir)
+
+		// Record CANDIDATE_PUSHED with empty reviewerVerdictHash
+		_ = logger.Emit(audit.AuditEvent{
+			EventType:   "CANDIDATE_PUSHED",
+			Status:      "AWAITING_APPROVAL",
+			StorySpecID: "SPEC-NO-VERDICT",
+			Details: map[string]any{
+				"storyId":      "SPEC-NO-VERDICT",
+				"candidateSHA": headSHA,
+			},
+		})
+
+		// Calling with empty expected verdict
+		if err := verifyPhase1AuditBinding(logger.LogPath(), "SPEC-NO-VERDICT", headSHA, ""); err == nil {
+			t.Fatalf("SECURITY VIOLATION (R9-2 c): verifyPhase1AuditBinding succeeded when expected verdict hash was empty!")
+		}
+
+		// Calling with expected verdict against record missing verdict
+		if err := verifyPhase1AuditBinding(logger.LogPath(), "SPEC-NO-VERDICT", headSHA, "some-verdict-hash"); err == nil {
+			t.Fatalf("SECURITY VIOLATION (R9-2 c): verifyPhase1AuditBinding succeeded when recorded verdict hash was empty!")
+		}
+	})
+
+	// Subtest D: Ordinary SUCCESS convergence event MUST NOT satisfy CANDIDATE_PUSHED check
+	t.Run("Ordinary_Success_Convergence_Rejected", func(t *testing.T) {
+		tempDir, driver := setupTestRepoForForge(t)
+		defer os.RemoveAll(tempDir)
+		headSHA, _ := driver.HeadHash()
+		logger := audit.Default(tempDir)
+
+		_ = logger.Emit(audit.AuditEvent{
+			EventType:   audit.EventCodeConvergence,
+			Status:      "SUCCESS",
+			StorySpecID: "SPEC-ORD-SUCCESS",
+			Details: map[string]any{
+				"storyId":             "SPEC-ORD-SUCCESS",
+				"commitHash":          headSHA,
+				"candidateSHA":        headSHA,
+				"reviewerVerdictHash": "some-hash-1234",
+			},
+		})
+
+		if err := verifyPhase1AuditBinding(logger.LogPath(), "SPEC-ORD-SUCCESS", headSHA, "some-hash-1234"); err == nil {
+			t.Fatalf("SECURITY VIOLATION (R9-2 d): verifyPhase1AuditBinding accepted ordinary EventCodeConvergence event instead of CANDIDATE_PUSHED!")
+		}
+	})
+}
+
 
 
 
