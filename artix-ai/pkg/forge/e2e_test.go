@@ -913,7 +913,7 @@ func TestR7_2_NonDestructiveCleanup_NoReviewsYet_And_503(t *testing.T) {
 
 	// 3. Definitive rejection (CHANGES_REQUESTED) -> MUST delete remote candidate branch
 	changesRequestedVerifier := func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
-		return nil, fmt.Errorf("forge approval verification failed: review changes requested by \"reviewer-bob\"")
+		return nil, fmt.Errorf("%w: review changes requested by \"reviewer-bob\"", ErrChangesRequested)
 	}
 
 	_, err = VerifyAndMergeCandidate(context.Background(), driver, changesRequestedVerifier, headSHA, nil, "SPEC-1", "origin", prBranch)

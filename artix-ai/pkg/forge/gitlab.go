@@ -139,7 +139,7 @@ func (c *GitLabClient) VerifyMRApproval(ctx context.Context, target *RemoteRepoT
 	}
 
 	if mrDetails.SHA != targetCommitSHA {
-		return nil, fmt.Errorf("forge approval verification failed: MR head commit %s differs from target commit %s (stale commit)", mrDetails.SHA, targetCommitSHA)
+		return nil, fmt.Errorf("%w: MR head commit %s differs from target commit %s (stale commit)", ErrStaleCommitMismatch, mrDetails.SHA, targetCommitSHA)
 	}
 
 	// 2. Fetch MR approvals
@@ -152,12 +152,12 @@ func (c *GitLabClient) VerifyMRApproval(ctx context.Context, target *RemoteRepoT
 
 	appResp, err := c.httpClient.Do(appReq)
 	if err != nil {
-		return nil, fmt.Errorf("forge api error fetching MR approvals: %w", err)
+		return nil, fmt.Errorf("%w: fetching MR approvals: %v", ErrForgeUnavailable, err)
 	}
 	defer appResp.Body.Close()
 
 	if appResp.StatusCode < 200 || appResp.StatusCode >= 300 {
-		return nil, fmt.Errorf("forge api error fetching MR approvals: status %d", appResp.StatusCode)
+		return nil, fmt.Errorf("%w: status %d fetching MR approvals", ErrForgeUnavailable, appResp.StatusCode)
 	}
 
 	var approvalsResp struct {
@@ -174,7 +174,7 @@ func (c *GitLabClient) VerifyMRApproval(ctx context.Context, target *RemoteRepoT
 	}
 
 	if len(approvalsResp.ApprovedBy) == 0 {
-		return nil, fmt.Errorf("forge approval verification failed: no approvals found on MR !%d", mrIID)
+		return nil, fmt.Errorf("%w: no approvals found on MR !%d", ErrNoReviewsYet, mrIID)
 	}
 
 	type approverInfo struct {
@@ -192,7 +192,7 @@ func (c *GitLabClient) VerifyMRApproval(ctx context.Context, target *RemoteRepoT
 		u := a.username
 		// Approver == author check
 		if strings.EqualFold(u, mrDetails.Author.Username) {
-			return nil, fmt.Errorf("forge approval verification failed: MR author %q cannot approve their own MR", u)
+			return nil, fmt.Errorf("%w: MR author %q cannot approve their own MR", ErrAuthorSelfApproval, u)
 		}
 		// Bot check
 		uLower := strings.ToLower(u)
@@ -201,7 +201,7 @@ func (c *GitLabClient) VerifyMRApproval(ctx context.Context, target *RemoteRepoT
 			uLower == "artix-agent" ||
 			uLower == "artix-bot" ||
 			uLower == "bot" {
-			return nil, fmt.Errorf("forge approval verification failed: bot or App account %q cannot approve MR", u)
+			return nil, fmt.Errorf("%w: bot or App account %q cannot approve MR", ErrBotApprover, u)
 		}
 		// Allowed approvers check
 		pol := policy.Active()
@@ -214,7 +214,7 @@ func (c *GitLabClient) VerifyMRApproval(ctx context.Context, target *RemoteRepoT
 				}
 			}
 			if !allowed {
-				return nil, fmt.Errorf("forge approval verification failed: approver %q is not authorized in allowedApprovers list %v", u, pol.AllowedApprovers)
+				return nil, fmt.Errorf("%w: approver %q is not authorized in allowedApprovers list %v", ErrUnauthorizedApprover, u, pol.AllowedApprovers)
 			}
 		}
 
@@ -230,7 +230,7 @@ func (c *GitLabClient) VerifyMRApproval(ctx context.Context, target *RemoteRepoT
 		}, nil
 	}
 
-	return nil, fmt.Errorf("forge approval verification failed: no valid human APPROVED review found")
+	return nil, fmt.Errorf("%w: no valid human APPROVED review found", ErrNoReviewsYet)
 }
 
 // NewGitLabVerifier creates a LoopOptions.ForgeVerifier callback wired to the GitLab API client.

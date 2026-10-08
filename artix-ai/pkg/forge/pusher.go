@@ -3,7 +3,9 @@ package forge
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -37,24 +39,47 @@ func IsDefinitiveRejection(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "changes requested") ||
-		strings.Contains(msg, "dismissed") ||
-		strings.Contains(msg, "stale commit") ||
-		strings.Contains(msg, "cannot approve their own") ||
-		strings.Contains(msg, "not authorized in allowedapprovers") ||
-		strings.Contains(msg, "unverified or forged") ||
-		strings.Contains(msg, "bot or app account") {
+	if errors.Is(err, ErrChangesRequested) ||
+		errors.Is(err, ErrReviewDismissed) ||
+		errors.Is(err, ErrStaleCommitMismatch) ||
+		errors.Is(err, ErrAuthorSelfApproval) ||
+		errors.Is(err, ErrUnauthorizedApprover) ||
+		errors.Is(err, ErrBotApprover) ||
+		errors.Is(err, ErrForgedApproval) {
 		return true
 	}
 	return false
 }
 
 // verifyPhase1AuditBinding asserts that the candidate SHA and spec ID are bound to a Phase 1 audit record.
-func verifyPhase1AuditBinding(logPath, storyID, candidateSHA string) error {
-	if logPath == "" {
-		return nil
+func verifyPhase1AuditBinding(logPath, storyID, candidateSHA string, expectedVerdictHash ...string) error {
+	if strings.TrimSpace(logPath) == "" {
+		return fmt.Errorf("phase 1 audit log path is required (fail closed)")
 	}
+
+	// Cryptographic whole-log verification
+	pubKeyHex := os.Getenv("ARTIX_AUDIT_PUBLIC_KEY")
+	if pubKeyHex == "" {
+		pubKeyHex = policy.Active().AuditPublicKey
+	}
+
+	if pubKeyHex != "" {
+		pubKeyBytes, decodeErr := hex.DecodeString(strings.TrimSpace(pubKeyHex))
+		if decodeErr == nil && len(pubKeyBytes) > 0 {
+			if _, vErr := audit.VerifyLogWithPubKey(logPath, pubKeyBytes); vErr != nil {
+				return fmt.Errorf("phase 1 audit log cryptographic integrity verification failed: %w", vErr)
+			}
+		} else {
+			if _, vErr := audit.VerifyLog(logPath); vErr != nil {
+				return fmt.Errorf("phase 1 audit log cryptographic integrity verification failed: %w", vErr)
+			}
+		}
+	} else {
+		if _, vErr := audit.VerifyLog(logPath); vErr != nil {
+			return fmt.Errorf("phase 1 audit log cryptographic integrity verification failed: %w", vErr)
+		}
+	}
+
 	f, err := os.Open(logPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -63,6 +88,11 @@ func verifyPhase1AuditBinding(logPath, storyID, candidateSHA string) error {
 		return fmt.Errorf("cannot read audit log: %w", err)
 	}
 	defer f.Close()
+
+	expVerdict := ""
+	if len(expectedVerdictHash) > 0 {
+		expVerdict = expectedVerdictHash[0]
+	}
 
 	scanner := bufio.NewScanner(f)
 	foundBinding := false
@@ -79,6 +109,7 @@ func verifyPhase1AuditBinding(logPath, storyID, candidateSHA string) error {
 
 		evStoryID := ev.StorySpecID
 		evCandidateSHA := ""
+		evVerdict := ""
 		if ev.Details != nil {
 			if s, ok := ev.Details["storyId"].(string); ok && s != "" {
 				evStoryID = s
@@ -88,17 +119,26 @@ func verifyPhase1AuditBinding(logPath, storyID, candidateSHA string) error {
 			} else if c, ok := ev.Details["commitHash"].(string); ok && c != "" {
 				evCandidateSHA = c
 			}
+			if v, ok := ev.Details["reviewerVerdictHash"].(string); ok && v != "" {
+				evVerdict = v
+			} else if v, ok := ev.Details["verdictHash"].(string); ok && v != "" {
+				evVerdict = v
+			}
 		}
 
 		if (ev.EventType == "CANDIDATE_PUSHED" || ev.EventType == audit.EventCodeConvergence || ev.EventType == "code.convergence") &&
+			(ev.Status == "AWAITING_APPROVAL" || ev.Status == "SUCCESS" || ev.Status == "APPROVAL_VERIFIED") &&
 			evStoryID == storyID && evCandidateSHA == candidateSHA {
+			if expVerdict != "" && evVerdict != "" && evVerdict != expVerdict {
+				return fmt.Errorf("reviewer verdict hash mismatch in Phase 1 audit record: expected %s, got %s", expVerdict, evVerdict)
+			}
 			foundBinding = true
 			break
 		}
 	}
 
 	if !foundBinding {
-		return fmt.Errorf("candidate SHA %s is not bound to a signed Phase 1 audit record for spec %s", candidateSHA, storyID)
+		return fmt.Errorf("candidate SHA %s is not bound to a valid verified Phase 1 audit record for spec %s", candidateSHA, storyID)
 	}
 	return nil
 }
@@ -135,14 +175,18 @@ func CleanupCandidateBranch(ctx context.Context, driver *git.Driver, remote, prB
 
 // VerifyAndMergeCandidate executes Phase 2 of the autonomous flow: verifies server-side forge approval
 // on the exact candidate commit SHA and commits audit records.
-func VerifyAndMergeCandidate(ctx context.Context, driver *git.Driver, verifier func(ctx context.Context, commitSHA string) (*policy.PRApproval, error), candidateSHA string, auditLogger *audit.Logger, storyID, remote, prBranch string) (*policy.PRApproval, error) {
+func VerifyAndMergeCandidate(ctx context.Context, driver *git.Driver, verifier func(ctx context.Context, commitSHA string) (*policy.PRApproval, error), candidateSHA string, auditLogger *audit.Logger, storyID, remote, prBranch string, expectedVerdictHash ...string) (*policy.PRApproval, error) {
 	if verifier == nil {
 		return nil, fmt.Errorf("verifier is required for Phase 2 forge verification")
 	}
 
 	// Verify Phase 1 audit binding when audit logger is configured
 	if auditLogger != nil {
-		if err := verifyPhase1AuditBinding(auditLogger.LogPath(), storyID, candidateSHA); err != nil {
+		expVerdict := ""
+		if len(expectedVerdictHash) > 0 {
+			expVerdict = expectedVerdictHash[0]
+		}
+		if err := verifyPhase1AuditBinding(auditLogger.LogPath(), storyID, candidateSHA, expVerdict); err != nil {
 			return nil, fmt.Errorf("phase 2 verification error: %w", err)
 		}
 	}
@@ -157,10 +201,11 @@ func VerifyAndMergeCandidate(ctx context.Context, driver *git.Driver, verifier f
 	}
 
 	if approval == nil || !approval.VerifiedByForge {
-		if driver != nil && remote != "" && prBranch != "" {
+		sepErr := fmt.Errorf("separation of duties violation: %w", ErrForgedApproval)
+		if IsDefinitiveRejection(sepErr) && driver != nil && remote != "" && prBranch != "" {
 			_ = CleanupCandidateBranch(ctx, driver, remote, prBranch)
 		}
-		return nil, fmt.Errorf("separation of duties violation: unverified or forged approval")
+		return nil, sepErr
 	}
 
 	if err := policy.ValidateForgeApproval(approval, "artix-agent", "artix-agent"); err != nil {
@@ -186,4 +231,5 @@ func VerifyAndMergeCandidate(ctx context.Context, driver *git.Driver, verifier f
 
 	return approval, nil
 }
+
 

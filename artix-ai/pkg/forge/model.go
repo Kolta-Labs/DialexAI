@@ -1,5 +1,20 @@
 package forge
 
+import "errors"
+
+// Typed forge errors for deterministic error handling and safe branch cleanup
+var (
+	ErrChangesRequested     = errors.New("forge approval verification failed: review changes requested")
+	ErrReviewDismissed      = errors.New("forge approval verification failed: review dismissed")
+	ErrStaleCommitMismatch  = errors.New("forge approval verification failed: stale commit mismatch")
+	ErrAuthorSelfApproval   = errors.New("forge approval verification failed: author cannot approve own PR/MR")
+	ErrUnauthorizedApprover = errors.New("forge approval verification failed: approver not authorized in allowedApprovers")
+	ErrBotApprover          = errors.New("forge approval verification failed: bot or app account cannot approve")
+	ErrForgedApproval       = errors.New("separation of duties violation: unverified or forged approval token")
+	ErrNoReviewsYet         = errors.New("forge approval verification failed: no reviews submitted yet")
+	ErrForgeUnavailable     = errors.New("forge service unavailable")
+)
+
 // ForgeType identifies the remote git hosting provider.
 type ForgeType string
 
