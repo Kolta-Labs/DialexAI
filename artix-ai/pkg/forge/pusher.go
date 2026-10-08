@@ -57,23 +57,32 @@ func verifyPhase1AuditBinding(logPath, storyID, candidateSHA string, expectedVer
 		return fmt.Errorf("phase 1 audit log path is required (fail closed)")
 	}
 
-	// Cryptographic whole-log verification
-	pubKeyHex := os.Getenv("ARTIX_AUDIT_PUBLIC_KEY")
-	if pubKeyHex == "" {
-		pubKeyHex = policy.Active().AuditPublicKey
+	expVerdict := ""
+	if len(expectedVerdictHash) > 0 {
+		expVerdict = strings.TrimSpace(expectedVerdictHash[0])
+	}
+	if expVerdict == "" {
+		return fmt.Errorf("phase 2 verification requires expected reviewer verdict hash (fail closed)")
 	}
 
+	// Cryptographic whole-log verification
+	pubKeyHex := strings.TrimSpace(os.Getenv("ARTIX_AUDIT_PUBLIC_KEY"))
+	if pubKeyHex == "" {
+		pubKeyHex = strings.TrimSpace(policy.Active().AuditPublicKey)
+	}
+
+	isEnterprise := policy.IsEnterprise() || policy.Active().EnterpriseMode || policy.Active().RequireSignedPolicy || os.Getenv("ARTIX_ENTERPRISE") != ""
+
 	if pubKeyHex != "" {
-		pubKeyBytes, decodeErr := hex.DecodeString(strings.TrimSpace(pubKeyHex))
-		if decodeErr == nil && len(pubKeyBytes) > 0 {
-			if _, vErr := audit.VerifyLogWithPubKey(logPath, pubKeyBytes); vErr != nil {
-				return fmt.Errorf("phase 1 audit log cryptographic integrity verification failed: %w", vErr)
-			}
-		} else {
-			if _, vErr := audit.VerifyLog(logPath); vErr != nil {
-				return fmt.Errorf("phase 1 audit log cryptographic integrity verification failed: %w", vErr)
-			}
+		pubKeyBytes, decodeErr := hex.DecodeString(pubKeyHex)
+		if decodeErr != nil || len(pubKeyBytes) == 0 {
+			return fmt.Errorf("invalid ARTIX_AUDIT_PUBLIC_KEY: %w", decodeErr)
 		}
+		if _, vErr := audit.VerifyLogWithPubKey(logPath, pubKeyBytes); vErr != nil {
+			return fmt.Errorf("phase 1 audit log cryptographic integrity verification failed: %w", vErr)
+		}
+	} else if isEnterprise {
+		return fmt.Errorf("enterprise mode requires an asymmetric audit public key for verification; unkeyed logs are strictly forbidden (fail closed)")
 	} else {
 		if _, vErr := audit.VerifyLog(logPath); vErr != nil {
 			return fmt.Errorf("phase 1 audit log cryptographic integrity verification failed: %w", vErr)
@@ -88,11 +97,6 @@ func verifyPhase1AuditBinding(logPath, storyID, candidateSHA string, expectedVer
 		return fmt.Errorf("cannot read audit log: %w", err)
 	}
 	defer f.Close()
-
-	expVerdict := ""
-	if len(expectedVerdictHash) > 0 {
-		expVerdict = expectedVerdictHash[0]
-	}
 
 	scanner := bufio.NewScanner(f)
 	foundBinding := false
@@ -126,10 +130,13 @@ func verifyPhase1AuditBinding(logPath, storyID, candidateSHA string, expectedVer
 			}
 		}
 
-		if (ev.EventType == "CANDIDATE_PUSHED" || ev.EventType == audit.EventCodeConvergence || ev.EventType == "code.convergence") &&
-			(ev.Status == "AWAITING_APPROVAL" || ev.Status == "SUCCESS" || ev.Status == "APPROVAL_VERIFIED") &&
-			evStoryID == storyID && evCandidateSHA == candidateSHA {
-			if expVerdict != "" && evVerdict != "" && evVerdict != expVerdict {
+		if ev.EventType == "CANDIDATE_PUSHED" &&
+			(ev.Status == "AWAITING_APPROVAL" || ev.Status == "SUCCESS") &&
+			(storyID == "" || evStoryID == storyID) && evCandidateSHA == candidateSHA {
+			if evVerdict == "" {
+				return fmt.Errorf("phase 1 audit record missing reviewer verdict hash (fail closed)")
+			}
+			if evVerdict != expVerdict {
 				return fmt.Errorf("reviewer verdict hash mismatch in Phase 1 audit record: expected %s, got %s", expVerdict, evVerdict)
 			}
 			foundBinding = true
@@ -138,7 +145,7 @@ func verifyPhase1AuditBinding(logPath, storyID, candidateSHA string, expectedVer
 	}
 
 	if !foundBinding {
-		return fmt.Errorf("candidate SHA %s is not bound to a valid verified Phase 1 audit record for spec %s", candidateSHA, storyID)
+		return fmt.Errorf("candidate SHA %s is not bound to a valid verified Phase 1 CANDIDATE_PUSHED audit record for spec %s", candidateSHA, storyID)
 	}
 	return nil
 }

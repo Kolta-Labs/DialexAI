@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -63,6 +64,7 @@ type LoopResult struct {
 	AwaitingApproval bool                    `json:"awaitingApproval,omitempty"`
 	RoundsRun        int                     `json:"roundsRun"`
 	FinalVerdict     *reviewer.ReviewVerdict `json:"finalVerdict"`
+	VerdictHash      string                  `json:"verdictHash,omitempty"`
 	AppliedPatch     string                  `json:"appliedPatch,omitempty"`
 	CommitHash       string                  `json:"commitHash,omitempty"`
 	CostReport       *CostReport             `json:"costReport,omitempty"`
@@ -616,30 +618,49 @@ func (c *ConvergenceCoordinator) Run(
 						return res
 					}
 
+					verdictBytes, _ := json.Marshal(verdict)
+					verdictHash := fmt.Sprintf("%x", sha256.Sum256(verdictBytes))
+					res.VerdictHash = verdictHash
+
 					// If ForgePusher is configured, push the candidate commit to the PR branch on the remote
 					if opts != nil && opts.ForgePusher != nil {
+						// Emit Phase 1 CANDIDATE_PUSHED audit record BEFORE pushing, failing closed on emit error
+						if auditLogger != nil {
+							emitErr := auditLogger.Emit(audit.AuditEvent{
+								EventType:   "CANDIDATE_PUSHED",
+								Status:      "AWAITING_APPROVAL",
+								StorySpecID: s.ID,
+								Details: map[string]any{
+									"storyId":             s.ID,
+									"title":               s.Title,
+									"candidateSHA":        newCommitSHA,
+									"commitHash":          newCommitSHA,
+									"roundsRun":           round,
+									"reviewerVerdictHash": verdictHash,
+								},
+							})
+							if emitErr != nil {
+								safeRollbackCandidate()
+								res.Success = false
+								res.Error = fmt.Sprintf("phase 1 candidate audit emission failed: %v (commit aborted, changes rolled back)", emitErr)
+								return res
+							}
+						} else if policy.IsEnterprise() || policy.Active().RequireForgeApproval || os.Getenv("ARTIX_ENTERPRISE") != "" {
+							safeRollbackCandidate()
+							res.Success = false
+							res.Error = "phase 1 candidate push blocked: audit logger is required in enterprise mode"
+							return res
+						}
+
 						if pushErr := opts.ForgePusher(ctx, newCommitSHA); pushErr != nil {
 							safeRollbackCandidate()
 							res.Success = false
 							res.Error = fmt.Sprintf("autonomous candidate push to PR branch failed: %v (commit aborted, changes rolled back)", pushErr)
 							return res
 						}
+
 						// In two-phase autonomous mode or when verification is handled asynchronously by a later step
 						if opts.TwoPhaseAutonomous || opts.ForgeVerifier == nil {
-							if auditLogger != nil {
-								_ = auditLogger.Emit(audit.AuditEvent{
-									EventType:   "CANDIDATE_PUSHED",
-									Status:      "AWAITING_APPROVAL",
-									StorySpecID: s.ID,
-									Details: map[string]any{
-										"storyId":      s.ID,
-										"title":        s.Title,
-										"candidateSHA": newCommitSHA,
-										"commitHash":   newCommitSHA,
-										"roundsRun":    round,
-									},
-								})
-							}
 							res.Success = false
 							res.AwaitingApproval = true
 							res.CommitHash = newCommitSHA

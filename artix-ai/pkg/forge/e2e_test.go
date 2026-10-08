@@ -946,7 +946,7 @@ func TestR7_2_Phase2_BoundToPhase1AuditRecord(t *testing.T) {
 		}, nil
 	}
 
-	_, err := VerifyAndMergeCandidate(context.Background(), driver, approvedVerifier, "unbound-foreign-candidate-sha-99999", logger, "SPEC-BOUND-001", "origin", "artix-pr-1")
+	_, err := VerifyAndMergeCandidate(context.Background(), driver, approvedVerifier, "unbound-foreign-candidate-sha-99999", logger, "SPEC-BOUND-001", "origin", "artix-pr-1", "verdict-hash-123")
 	if err == nil {
 		t.Fatalf("SECURITY VIOLATION (R7-2 e): Phase 2 accepted candidate SHA without Phase 1 audit record binding!")
 	}
@@ -955,18 +955,20 @@ func TestR7_2_Phase2_BoundToPhase1AuditRecord(t *testing.T) {
 	}
 
 	// Subtest 2: Record Phase 1 candidate pushed event in audit log
+	verdictHash := "bound-verdict-hash-1234"
 	_ = logger.Emit(audit.AuditEvent{
 		EventType: "CANDIDATE_PUSHED",
 		Status:    "AWAITING_APPROVAL",
 		Details: map[string]any{
-			"storyId":      "SPEC-BOUND-001",
-			"candidateSHA": headSHA,
-			"prBranch":     "artix-pr-1",
+			"storyId":             "SPEC-BOUND-001",
+			"candidateSHA":        headSHA,
+			"reviewerVerdictHash": verdictHash,
+			"prBranch":            "artix-pr-1",
 		},
 	})
 
-	// Now Phase 2 verification succeeds with matching candidate SHA and Spec ID
-	approval, err := VerifyAndMergeCandidate(context.Background(), driver, approvedVerifier, headSHA, logger, "SPEC-BOUND-001", "origin", "artix-pr-1")
+	// Now Phase 2 verification succeeds with matching candidate SHA, Spec ID, and verdict hash
+	approval, err := VerifyAndMergeCandidate(context.Background(), driver, approvedVerifier, headSHA, logger, "SPEC-BOUND-001", "origin", "artix-pr-1", verdictHash)
 	if err != nil {
 		t.Fatalf("expected Phase 2 verification to succeed when bound to Phase 1 audit record, got: %v", err)
 	}
@@ -1034,7 +1036,7 @@ func TestR8_2_VerifyPhase1AuditBinding_CryptographicIntegrity(t *testing.T) {
 			"candidateSHA": headSHA,
 		},
 	})
-	if err := verifyPhase1AuditBinding(failedLogger.LogPath(), "SPEC-FAILED", headSHA, ""); err == nil {
+	if err := verifyPhase1AuditBinding(failedLogger.LogPath(), "SPEC-FAILED", headSHA, "some-verdict-hash"); err == nil {
 		t.Fatalf("SECURITY VIOLATION (R8-2): verifyPhase1AuditBinding accepted a FAILED candidate push event")
 	}
 
