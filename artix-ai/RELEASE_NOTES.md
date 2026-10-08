@@ -1,7 +1,14 @@
-# Artix Enterprise Release Notes — v0.4.0-enterprise
+# Artix Enterprise Release Notes — v0.5.0-enterprise
 
 ## Release Summary
-Artix Enterprise `v0.4.0-enterprise` implements two-phase autonomous PR candidate push and merge verification, branch protection, AST exfiltration inspection, strict runner allowlists, atomic per-task budget ledger accounting, and secure file permission enforcement.
+Artix Enterprise `v0.5.0-enterprise` implements complete remediation for Round 7 evaluator findings:
+- Generic AST secret-source-to-sink data flow analysis across network, process, file write, log/stdout, and error text sinks.
+- AST and token-based identical operand comparison detection (`if a != a`).
+- Dynamic code loading (`plugin.Open`), low-level execution (`syscall.Exec`, Cgo `C.system`), and dynamic linker manipulation (`LD_PRELOAD`) detection.
+- Non-destructive remote candidate branch cleanup (preserves candidate branch on missing reviews and HTTP 5xx/network errors; deletes only on definitive negative reviews).
+- Branch protection heuristics protecting `develop`, `dev`, `staging`, `main`, `master`, `trunk`, `prod`, `production`, `release/*`, `releases/*`, `hotfix/*`, `hotfixes/*` without false-positiving standard feature branches (`verify-login`, `validation-fix`, `vendor-update`).
+- Cryptographic Phase 1 to Phase 2 audit trail binding in `VerifyAndMergeCandidate` / `artix merge`.
+- Accurate IDE plugin and CLI output handling for `status: "awaiting_approval"`.
 
 ---
 
@@ -16,48 +23,42 @@ Artix Enterprise `v0.4.0-enterprise` implements two-phase autonomous PR candidat
 ### Verifying the Tag
 To independently verify the cryptographic signature on this tag:
 ```bash
-git tag -v v0.4.0-enterprise
+git tag -v v0.5.0-enterprise
 ```
 Using SSH allowed signers configuration:
 ```bash
-git -c gpg.ssh.allowedSignersFile=.allowed_signers tag -v v0.4.0-enterprise
+git -c gpg.ssh.allowedSignersFile=.allowed_signers tag -v v0.5.0-enterprise
 ```
 
 ### Tag Immutability Declaration
 In accordance with release integrity standards:
 - **`v0.2.0-enterprise`** is permanently anchored at commit `7b4164992fd24a9e6154db382b2d8d87f68cab89`.
 - **`v0.3.0-enterprise`** is permanently anchored at commit `22a0773663677610113f01bbdd37be9d96ca418c`.
-- **`v0.4.0-enterprise`** is the canonical, newly signed release encompassing all Round 6 remediations.
+- **`v0.4.0-enterprise`** is permanently anchored at commit `3cb016dbb96238b6d3bc091cbe04620f4f9810bb`.
+- **`v0.5.0-enterprise`** is the canonical, newly signed release encompassing all Round 7 remediations.
 
 ---
 
-## Round 6 Remediation Breakdown
+## Round 7 Remediation Breakdown & Verified Test Suites
 
-### R6-1 (R5-1): Signed Release & External Trust Root
-- Release tag `v0.4.0-enterprise` cryptographically signed with ED25519 key matching `releases@artix.ai`.
+### R7-1 (R6-1): Signed Release & External Trust Root
+- Release tag `v0.5.0-enterprise` cryptographically signed with ED25519 key matching `releases@artix.ai`.
 - Published external key fingerprint `SHA256:Dh5vIjePKsm29xfvnLukrKDTOzLM/w5u6rYBcB3hmNg`.
 - CI workflow builds `./cli` and `./cmd/artixd` with `-ldflags "-X artix/pkg/policy.RequireSignedPolicyFlag=true"`, runs `go test -race -count=1 ./...`, and publishes `SHA256SUMS`.
 
-### R6-2 (R5-2): Two-Phase Autonomous PR Flow & ForgePusher
-- **Phase 1 (`artix code`)**: Pushes autonomous candidate commits to dedicated PR branches (`refs/heads/artix-pr-*`) via `ForgePusher` with strict branch protection (refuses direct pushes to `main`, `master`, `trunk`, `prod`, `production`, `release/*`), returning `AwaitingApproval: true` and candidate SHA.
-- **Phase 2 (`artix merge` / daemon review event)**: Verifies server-side forge approval on the exact candidate SHA via `VerifyAndMergeCandidate` before merging and logging audit records.
-- **Rejection Cleanup**: On forge rejection or verification error, automatically deletes remote candidate branches (`CleanupCandidateBranch`).
-- **End-to-End Verification**: Validated in `TestR6_2_TwoPhaseAutonomousPRFlow_RealBareRepo` against a real local bare git repository.
+### R7-2 (R6-2): Two-Phase Flow Deficiencies Remediated
+- **Accurate Audit State**: Renamed verify-only audit state to `APPROVAL_VERIFIED` in `VerifyAndMergeCandidate` and `artix merge` (Verified in `TestR6_2_TwoPhaseAutonomousPRFlow_RealBareRepo`, `TestR7_2_Phase2_BoundToPhase1AuditRecord`).
+- **Non-Destructive Cleanup**: `IsDefinitiveRejection` deletes remote candidate branch only on explicit human/policy rejection (`CHANGES_REQUESTED`, dismissal, stale commit SHA mismatch, author self-approval). Never deletes on "no reviews yet" or HTTP 503 / network errors (Verified in `TestR7_2_NonDestructiveCleanup_NoReviewsYet_And_503`).
+- **Strict Branch Protection Heuristics**: `IsProtectedBranch` protects `develop`, `dev`, `staging`, `main`, `master`, `trunk`, `prod`, `production`, `release/*`, `releases/*`, `hotfix/*`, `hotfixes/*`, and removes erroneous `v*` prefix matching so `verify-login`, `validation-fix`, `vendor-update` are not false-positived (Verified in `TestR7_2_BranchProtection_NoFalsePositives_ProtectsDevelopStaging`).
+- **Phase 1 to Phase 2 Cryptographic Audit Binding**: `VerifyAndMergeCandidate` verifies that candidate SHA and spec ID are bound to a Phase 1 audit record (`CANDIDATE_PUSHED` / `EventCodeConvergence`), rejecting unbound or foreign candidate commits (Verified in `TestR7_2_Phase2_BoundToPhase1AuditRecord`).
+- **IDE Plugins & CLI Contract**: CLI, VS Code extension, and IntelliJ plugin handle `status: "awaiting_approval"` and `awaitingApproval: true` distinctly from committed/uncommitted states (Verified in `TestR7_2_CLI_JSON_AwaitingApproval_Contract`).
 
-### R6-3 (R5-3): AST Exfiltration Sinks, Credential Inspection, & Runner Allowlist
-- **Exfiltration Sinks**: Flags DNS exfiltration (`net.LookupHost`, `net.LookupIP`), process execution exfiltration (`exec.Command("curl", ...)`), and package/variable HTTP client POSTs (`c.Post(...)`).
-- **Credential Protection**: Flags reading credential files (`.aws/credentials`, `.ssh`, `id_rsa`, etc.) in non-test code as prohibited exfiltration risks.
-- **Language Security**: Detects Swift `NSTask()` / `NSTask.launchedTask` and TypeScript `new Function(...)` / string-concatenated `require('child_' + 'process')`.
-- **Tautology & Assertion Checks**: Rejects self-comparisons on identical operands (`if a != a`).
-- **Runner Allowlist Hardening**: Rejects no-op/dummy configs (`--no-eslintrc`, `--rule {}`, `-c /dev/null`, `nothing.js`).
-
-### R6-4 (R5-5): Per-Task Budget Ledger & Secure File Permissions
-- **Per-Task Entries**: `RecordRoundUsage` atomically records `tasks[taskId]` entries containing `Tokens` and `USD`, allowing exact join verification in `pilot.VerifyLedgerEntryMatch`.
-- **Secure Default Path**: Relocated default ledger from world-writable `/tmp` to secure per-user directory `~/.artix/budget-ledger.json` (`0700` dir, `0600` file).
-- **Permission Verification**: `ValidateLedgerSecurity` strictly refuses any ledger file with group or world write bits (`mode.Perm()&0077 != 0`) or owned by an untrusted UID.
-
-### R6-5 (R5-4): Comment Author Authorization
-- Daemon webhook handler strictly verifies the comment author's identity and permission on `issue_comment` events, handling payloads where GitHub's `sender` object lacks `author_association`.
+### R7-3 (R6-3): Generic AST & Semantic Security Rules
+- **Self-Comparison & Tautologies**: Token-based and AST binary expression evaluation rejects self-comparisons on identical operands (`if a != a`, `a == a`, etc.) (Verified in `TestR7_3_HostileReviewCorpus_AllRejectedOrUnreviewed`, `TestR7_3_CoordinatorRun_HostileCorpus_AllRejected`).
+- **Generic Secret Source to Sink Exfiltration**: AST guard inspects non-test Go code for reads of sensitive environment variables (`TOKEN`, `KEY`, `SECRET`, `PASSWORD`, etc.) or credential files (`.aws/credentials`, `.ssh`, `id_rsa`) reaching any sink (network `http.Get`/`Post`/`Dial`, process `exec.Command`, file write `os.WriteFile`, stdout/logging `fmt.Println`, error text `fmt.Errorf`/`errors.New`) in the same package/file, escalating to unreviewed (Verified in `TestR7_3_HostileReviewCorpus_AllRejectedOrUnreviewed`, `TestR7_3_CoordinatorRun_HostileCorpus_AllRejected`).
+- **Dynamic Code Loading & Low-Level Exec**: Escalates `plugin.Open`, `syscall.Exec`, Cgo `C.system`, and `os.Setenv("LD_PRELOAD", ...)` to unreviewed (Verified in `TestR7_3_HostileReviewCorpus_AllRejectedOrUnreviewed`, `TestR7_3_CoordinatorRun_HostileCorpus_AllRejected`).
+- **Git Push Exfiltration**: Detects and rejects `exec.Command("git", "push", ...)` exfiltration attempts (Verified in `TestR7_3_HostileReviewCorpus_AllRejectedOrUnreviewed`, `TestR7_3_CoordinatorRun_HostileCorpus_AllRejected`).
+- **Weak Assertions & Empty Loops**: Detects assertions that only check `err == nil` or assertions nested inside loops iterating over empty slices (Verified in `TestR7_3_HostileReviewCorpus_AllRejectedOrUnreviewed`, `TestR7_3_CoordinatorRun_HostileCorpus_AllRejected`).
 
 ---
 
@@ -74,6 +75,5 @@ go vet ./...
 go test -race -count=1 ./...
 
 # 4. Verify tag signature
-git tag -v v0.4.0-enterprise
+git -c gpg.ssh.allowedSignersFile=.allowed_signers tag -v v0.5.0-enterprise
 ```
-
