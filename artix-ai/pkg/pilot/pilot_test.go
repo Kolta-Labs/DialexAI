@@ -220,3 +220,42 @@ func TestR4_PilotRubric_DocumentedMethodology(t *testing.T) {
 	}
 }
 
+// TestR5_5_PilotHarness_VerifiesLedgerEntryMatchesAuditRecord asserts that the pilot harness
+// not only stats the ledger file, but reads the entry and matches tokens/USD to the task record.
+func TestR5_5_PilotHarness_VerifiesLedgerEntryMatchesAuditRecord(t *testing.T) {
+	tempDir := t.TempDir()
+	ledgerPath := filepath.Join(tempDir, "ledger.json")
+
+	ledgerData := map[string]any{
+		"tasks": map[string]any{
+			"TASK-001": map[string]any{
+				"tokens": 4500,
+				"usd":    0.045,
+			},
+		},
+	}
+	raw, _ := json.Marshal(ledgerData)
+	_ = os.WriteFile(ledgerPath, raw, 0600)
+
+	// 1. Matching tokens & USD -> succeeds
+	if err := VerifyLedgerEntryMatch(ledgerPath, "TASK-001", 4500, 0.045); err != nil {
+		t.Fatalf("expected valid matching ledger entry to succeed: %v", err)
+	}
+
+	// 2. Mismatched token count -> rejected
+	if err := VerifyLedgerEntryMatch(ledgerPath, "TASK-001", 9999, 0.045); err == nil {
+		t.Fatalf("expected token mismatch in ledger entry to fail verification")
+	}
+
+	// 3. Mismatched USD cost -> rejected
+	if err := VerifyLedgerEntryMatch(ledgerPath, "TASK-001", 4500, 1.50); err == nil {
+		t.Fatalf("expected USD cost mismatch in ledger entry to fail verification")
+	}
+
+	// 4. Missing task in ledger -> rejected
+	if err := VerifyLedgerEntryMatch(ledgerPath, "NON-EXISTENT-TASK", 4500, 0.045); err == nil {
+		t.Fatalf("expected missing task in ledger to fail verification")
+	}
+}
+
+
