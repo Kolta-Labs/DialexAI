@@ -40,14 +40,14 @@ func BuildBwrapArgs(writable []string, net bool, cmdStr string) []string {
 		}
 	}
 
-	// Hide sensitive credential directories from reads via empty tmpfs mounts
+	// Hide sensitive credential directories from reads via empty tmpfs mounts and deny writes via remount-ro
 	// Note: Placed after writable binds so tmpfs shadows any parent directory binds (e.g. in /tmp)
 	home, _ := os.UserHomeDir()
 	if home != "" {
 		for _, denyRel := range SensitiveReadDenyPaths {
 			denyPath := filepath.Join(home, denyRel)
 			if _, err := os.Stat(denyPath); err == nil {
-				args = append(args, "--tmpfs", denyPath)
+				args = append(args, "--tmpfs", denyPath, "--remount-ro", denyPath)
 			}
 		}
 	}
