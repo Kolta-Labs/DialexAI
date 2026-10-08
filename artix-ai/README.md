@@ -548,3 +548,46 @@ Options for 'code':
 
 #### Q: Can our team share steering rules across multiple repositories?
 **A:** Yes. You can register a central Git repository or HTTP endpoint in `.artix/steering.json` using `artix steering sync`. All team members inherit the organization's architectural and taboo standards automatically.
+
+---
+
+## 11. Daemon Deployment & Adversarial Attack Verification (R3-8 / G6)
+
+The Artix daemon (`artixd`) provides webhook integration for automated continuous software engineering on GitHub and GitLab.
+
+### 11.1 Security Controls and Threat Defenses
+
+| Threat Vector | Defense Mechanism | Fail-Closed Behavior |
+|---|---|---|
+| **Forged Webhook Sender** | GitHub HMAC-SHA256 (`X-Hub-Signature-256`) & GitLab Token (`X-Gitlab-Token`) | `401 Unauthorized` / `403 Forbidden` |
+| **Unauthorized Triggers** | `author_association` verified (`OWNER`, `MEMBER`, `COLLABORATOR`) or `--allowed-users` allowlist | `403 Forbidden` (rejected before parsing prompt) |
+| **Replay Attacks** | Delivery cache tracking (`X-GitHub-Delivery`, `X-Gitlab-Event-UUID`) with time-window deduplication | `409 Conflict` (ignored without execution) |
+| **Prompt Injection in Issues** | AST prompt sanitizer (`sanitizer.SanitizePrompt`) strips injection keywords and jailbreaks | `400 Bad Request` |
+| **Denial of Service (Oversized Payloads)** | Request body capped by `--max-body-length` (default: 32 KB) | `413 Request Entity Too Large` |
+| **Policy Tampering** | Issue body text cannot modify policy, steering bindings, or bypass taboos | Hard-rejected by deterministic policy validator |
+
+### 11.2 Launching the Daemon
+
+```bash
+artixd \
+  --addr ":8080" \
+  --github-secret "$GITHUB_WEBHOOK_SECRET" \
+  --gitlab-token "$GITLAB_WEBHOOK_TOKEN" \
+  --jobs-token "$JOBS_AUTH_BEARER_TOKEN" \
+  --work-dir "/var/artix/workspaces" \
+  --max-concurrent-jobs 4 \
+  --max-body-length 32768
+```
+
+### 11.3 Running the Adversarial Attack Suite Against the Build
+
+Evaluators and hostile reviewers can reproduce and verify all daemon security controls using the automated adversarial suite:
+
+```bash
+# Run all G6 daemon attack suite tests with race detector:
+go test -race -v -count=1 ./pkg/forge -run "TestG6|TestR2_2|TestWebhook"
+
+# Run daemon entrypoint and server binding authorization tests:
+go test -race -v -count=1 ./cmd/artixd -run "Test"
+```
+
