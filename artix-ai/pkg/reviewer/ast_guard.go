@@ -158,11 +158,16 @@ func CheckTestIntegrity(diff string) []string {
 						lhsTokens := strings.Fields(parts[0])
 						rhsTokens := strings.Fields(parts[1])
 						if len(lhsTokens) > 0 && len(rhsTokens) > 0 {
-							lhs := strings.Trim(lhsTokens[len(lhsTokens)-1], "(){},;[]")
-							rhs := strings.Trim(rhsTokens[0], "(){},;[]")
-							if lhs != "" && lhs == rhs {
-								violations = append(violations, fmt.Sprintf("test integrity violation: self-comparison tautology detected (%s %s %s)", lhs, op, rhs))
-								break
+							rawLhs := lhsTokens[len(lhsTokens)-1]
+							rawRhs := rhsTokens[0]
+							// Exclude function calls e.g. gen() != gen() or rand.Int() == rand.Int()
+							if !strings.Contains(rawLhs, "(") && !strings.Contains(rawRhs, "(") && !strings.Contains(rawLhs, ")") && !strings.Contains(rawRhs, ")") {
+								lhs := strings.Trim(rawLhs, "(){},;[]")
+								rhs := strings.Trim(rawRhs, "(){},;[]")
+								if lhs != "" && lhs == rhs {
+									violations = append(violations, fmt.Sprintf("test integrity violation: self-comparison tautology detected (%s %s %s)", lhs, op, rhs))
+									break
+								}
 							}
 						}
 					}
@@ -181,6 +186,36 @@ func CheckTestIntegrity(diff string) []string {
 
 			if isAssertionStatement(trimmed) {
 				addedAssertions++
+			}
+		}
+	}
+
+	// Detect test functions with only logging and zero assertions in added lines
+	for i, line := range lines {
+		if strings.HasPrefix(line, "+") {
+			trimmed := strings.TrimSpace(line[1:])
+			if strings.HasPrefix(trimmed, "func Test") {
+				hasLog := false
+				hasAssert := false
+				for j := i + 1; j < len(lines); j++ {
+					if strings.HasPrefix(lines[j], "+") {
+						subTrimmed := strings.TrimSpace(lines[j][1:])
+						if strings.HasPrefix(subTrimmed, "func ") {
+							break
+						}
+						if strings.Contains(subTrimmed, "t.Log") {
+							hasLog = true
+						}
+						if isAssertionStatement(subTrimmed) || strings.Contains(subTrimmed, "t.Fatal") || strings.Contains(subTrimmed, "t.Error") || strings.Contains(subTrimmed, "t.Fail") {
+							hasAssert = true
+						}
+					} else if !strings.HasPrefix(lines[j], "-") && !strings.HasPrefix(lines[j], " ") && !strings.HasPrefix(lines[j], "@") {
+						break
+					}
+				}
+				if hasLog && !hasAssert {
+					violations = append(violations, "test integrity violation: test has no assertions (only logging)")
+				}
 			}
 		}
 	}
@@ -247,11 +282,7 @@ func isAssertionCall(call *ast.CallExpr) bool {
 	return false
 }
 
-
 // CheckSemanticASTTaboos checks diff against taboo patterns using AST parsing for Go and comment-aware filtering.
-// Note: The deterministic rule and taboo checks serve as defense-in-depth pre-filters and are not claimed to be exhaustive.
-// Autonomous approval strictly requires passing both the deterministic layer and the model-backed Critic evaluation.
-// If workspaceDir is provided, whole post-patch files on disk are parsed to catch multi-statement and cross-declaration patterns.
 func CheckSemanticASTTaboos(diff string, tabooList []string, workspaceDir ...string) []string {
 	var violations []string
 	if strings.TrimSpace(diff) == "" {
@@ -265,7 +296,7 @@ func CheckSemanticASTTaboos(diff string, tabooList []string, workspaceDir ...str
 		for _, f := range extractTouchedFiles(diff) {
 			if strings.HasSuffix(f, ".go") {
 				fullPath := filepath.Join(workspaceDir[0], f)
-				if node, err := parser.ParseFile(fset, fullPath, nil, parser.AllErrors); err == nil {
+				if node, err := parser.ParseFile(fset, fullPath, nil, parser.ParseComments); err == nil {
 					wholeFiles = append(wholeFiles, node)
 				}
 			}
@@ -318,7 +349,11 @@ func extractAddedCodeLines(diff string) []string {
 	for _, l := range strings.Split(diff, "\n") {
 		if strings.HasPrefix(l, "+") && !strings.HasPrefix(l, "+++") {
 			code := strings.TrimSpace(l[1:])
-			// Filter out pure comment lines to prevent false-positives
+			// Filter out pure comment lines to prevent false-positives (except directives like go:linkname)
+			if strings.HasPrefix(code, "//go:") || strings.HasPrefix(code, "+build") {
+				lines = append(lines, code)
+				continue
+			}
 			if strings.HasPrefix(code, "//") || strings.HasPrefix(code, "/*") || strings.HasPrefix(code, "*") || strings.HasPrefix(code, "#") {
 				continue
 			}
@@ -352,6 +387,11 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 		return violations
 	}
 
+	// Directive checks: //go:linkname
+	if strings.Contains(code, "go:linkname") {
+		violations = append(violations, "AST Taboo Violation: forbidden //go:linkname directive in non-test code")
+	}
+
 	taboosJoined := strings.ToLower(strings.Join(taboos, " "))
 	checkDefaultClient := strings.Contains(taboosJoined, "defaultclient")
 	checkDefaultServeMux := strings.Contains(taboosJoined, "defaultservemux")
@@ -367,18 +407,18 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 
 	// Strategy 0: Direct parse if code already contains a package declaration
 	if strings.Contains(code, "package ") {
-		if node, err := parser.ParseFile(fset, "diff_direct.go", code, parser.AllErrors); err == nil {
+		if node, err := parser.ParseFile(fset, "diff_direct.go", code, parser.ParseComments); err == nil {
 			parsedFiles = append(parsedFiles, node)
 		}
 	}
 
 	// Strategy A: parse as package-level declarations (handles imports, types, consts, funcs)
-	if node, err := parser.ParseFile(fset, "diff_pkg.go", fmt.Sprintf("package p\n%s\n", code), parser.AllErrors); err == nil {
+	if node, err := parser.ParseFile(fset, "diff_pkg.go", fmt.Sprintf("package p\n%s\n", code), parser.ParseComments); err == nil {
 		parsedFiles = append(parsedFiles, node)
 	}
 
 	// Strategy B: parse wrapped in function body (handles bare statements, expressions, local assignments)
-	if node, err := parser.ParseFile(fset, "diff_func.go", fmt.Sprintf("package p\nfunc _() {\n%s\n}\n", code), parser.AllErrors); err == nil {
+	if node, err := parser.ParseFile(fset, "diff_func.go", fmt.Sprintf("package p\nfunc _() {\n%s\n}\n", code), parser.ParseComments); err == nil {
 		parsedFiles = append(parsedFiles, node)
 	}
 
@@ -387,6 +427,15 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 	}
 
 	for _, node := range parsedFiles {
+		// Check comments for directives
+		for _, cg := range node.Comments {
+			for _, c := range cg.List {
+				if strings.Contains(c.Text, "go:linkname") {
+					violations = append(violations, "AST Taboo Violation: forbidden //go:linkname directive in non-test code")
+				}
+			}
+		}
+
 		// Track import aliases: map of local identifier -> package path
 		importAliases := make(map[string]string)
 		for _, imp := range node.Imports {
@@ -411,12 +460,140 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 			}
 		}
 
-		// Build local function call graph and sink tracking
+		// Taint tracking data structures
+		taintedVars := make(map[string]bool)
+		taintedFuncs := make(map[string]bool)
+		aliasMap := make(map[string]string)
 		funcCalls := make(map[string][]string)
 		funcHasNet := make(map[string]bool)
 		funcHasSecret := make(map[string]bool)
 		funcHasSink := make(map[string]bool)
 
+		var isSecretExpr func(expr ast.Expr) bool
+		isSecretExpr = func(expr ast.Expr) bool {
+			if expr == nil {
+				return false
+			}
+			switch e := expr.(type) {
+			case *ast.Ident:
+				nameUpper := strings.ToUpper(e.Name)
+				if taintedVars[e.Name] {
+					return true
+				}
+				if strings.Contains(nameUpper, "SECRET") || strings.Contains(nameUpper, "PASSWORD") ||
+					strings.Contains(nameUpper, "API_KEY") || strings.Contains(nameUpper, "AUTH_TOKEN") ||
+					strings.Contains(nameUpper, "ACCESS_KEY") || strings.Contains(nameUpper, "DB_PASSWORD") {
+					return true
+				}
+			case *ast.CallExpr:
+				funStr := formatExpr(e.Fun)
+				funLower := strings.ToLower(funStr)
+				if funLower == "os.getenv" || funLower == "os.lookupenv" || funLower == "os.environ" ||
+					funLower == "getenv" || funLower == "lookupenv" || funLower == "environ" {
+					return true
+				}
+				if ident, ok := e.Fun.(*ast.Ident); ok && taintedFuncs[ident.Name] {
+					return true
+				}
+				if strings.HasSuffix(funLower, ".get") || strings.HasSuffix(funLower, ".getstring") || strings.HasSuffix(funLower, "get") {
+					for _, arg := range e.Args {
+						if argLit, ok := arg.(*ast.BasicLit); ok {
+							valUpper := strings.ToUpper(argLit.Value)
+							if strings.Contains(valUpper, "SECRET") || strings.Contains(valUpper, "KEY") ||
+								strings.Contains(valUpper, "TOKEN") || strings.Contains(valUpper, "PASSWORD") ||
+								strings.Contains(valUpper, "AUTH") || strings.Contains(valUpper, "ACCESS") {
+								return true
+							}
+						}
+					}
+				}
+				if funLower == "os.readfile" || funLower == "os.open" || funLower == "readfile" {
+					for _, arg := range e.Args {
+						argStr := strings.ToLower(formatExpr(arg))
+						if strings.Contains(argStr, "credential") || strings.Contains(argStr, ".aws") ||
+							strings.Contains(argStr, ".ssh") || strings.Contains(argStr, "secret") {
+							return true
+						}
+					}
+				}
+			case *ast.SelectorExpr:
+				selUpper := strings.ToUpper(e.Sel.Name)
+				if strings.Contains(selUpper, "KEY") || strings.Contains(selUpper, "SECRET") ||
+					strings.Contains(selUpper, "TOKEN") || strings.Contains(selUpper, "PASSWORD") {
+					return true
+				}
+				if id, ok := e.X.(*ast.Ident); ok && taintedVars[id.Name] {
+					return true
+				}
+			case *ast.CompositeLit:
+				for _, elt := range e.Elts {
+					if kv, ok := elt.(*ast.KeyValueExpr); ok {
+						if isSecretExpr(kv.Value) {
+							return true
+						}
+					} else if isSecretExpr(elt) {
+						return true
+					}
+				}
+			case *ast.UnaryExpr:
+				return isSecretExpr(e.X)
+			case *ast.BinaryExpr:
+				return isSecretExpr(e.X) || isSecretExpr(e.Y)
+			case *ast.ParenExpr:
+				return isSecretExpr(e.X)
+			}
+			return false
+		}
+
+		// Pass 1: Scan for tainted variables, tainted struct fields, and functions returning tainted expressions
+		for _, decl := range node.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil {
+				fnName := fn.Name.Name
+				ast.Inspect(fn.Body, func(in ast.Node) bool {
+					if assign, ok := in.(*ast.AssignStmt); ok {
+						for i, rhs := range assign.Rhs {
+							if isSecretExpr(rhs) {
+								if i < len(assign.Lhs) {
+									if lhsIdent, ok := assign.Lhs[i].(*ast.Ident); ok {
+										taintedVars[lhsIdent.Name] = true
+										funcHasSecret[fnName] = true
+									}
+								}
+							}
+							if i < len(assign.Lhs) {
+								if lhsIdent, ok := assign.Lhs[i].(*ast.Ident); ok {
+									if rhsIdent, ok := rhs.(*ast.Ident); ok {
+										aliasMap[lhsIdent.Name] = rhsIdent.Name
+										if taintedVars[rhsIdent.Name] {
+											taintedVars[lhsIdent.Name] = true
+										}
+									}
+								}
+							}
+						}
+					}
+					if valSpec, ok := in.(*ast.ValueSpec); ok {
+						for i, val := range valSpec.Values {
+							if isSecretExpr(val) && i < len(valSpec.Names) {
+								taintedVars[valSpec.Names[i].Name] = true
+								funcHasSecret[fnName] = true
+							}
+						}
+					}
+					if ret, ok := in.(*ast.ReturnStmt); ok {
+						for _, result := range ret.Results {
+							if isSecretExpr(result) {
+								taintedFuncs[fnName] = true
+								funcHasSecret[fnName] = true
+							}
+						}
+					}
+					return true
+				})
+			}
+		}
+
+		// Pass 2: Sinks and taboos inspection
 		for _, decl := range node.Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil {
 				fnName := fn.Name.Name
@@ -424,10 +601,23 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 					// 1. Binary expression self-comparison check
 					if bin, ok := in.(*ast.BinaryExpr); ok {
 						if bin.Op == token.NEQ || bin.Op == token.EQL || bin.Op == token.LSS || bin.Op == token.GTR || bin.Op == token.LEQ || bin.Op == token.GEQ {
-							xStr := formatExpr(bin.X)
-							yStr := formatExpr(bin.Y)
-							if xStr != "" && xStr == yStr {
-								violations = append(violations, fmt.Sprintf("test integrity violation: self-comparison tautology detected (%s %s %s)", xStr, bin.Op.String(), yStr))
+							_, isXCall := bin.X.(*ast.CallExpr)
+							_, isYCall := bin.Y.(*ast.CallExpr)
+							if !isXCall && !isYCall {
+								xStr := formatExpr(bin.X)
+								yStr := formatExpr(bin.Y)
+								xIdent, okX := bin.X.(*ast.Ident)
+								yIdent, okY := bin.Y.(*ast.Ident)
+								isAlias := false
+								if okX && okY {
+									if aliasMap[xIdent.Name] == yIdent.Name || aliasMap[yIdent.Name] == xIdent.Name ||
+										(aliasMap[xIdent.Name] != "" && aliasMap[xIdent.Name] == aliasMap[yIdent.Name]) {
+										isAlias = true
+									}
+								}
+								if (xStr != "" && xStr == yStr) || isAlias {
+									violations = append(violations, fmt.Sprintf("test integrity violation: self-comparison tautology detected (%s %s %s)", xStr, bin.Op.String(), yStr))
+								}
 							}
 						}
 					}
@@ -449,17 +639,49 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 					}
 
 					if call, ok := in.(*ast.CallExpr); ok {
+						callStr := formatExpr(call)
+						funStr := formatExpr(call.Fun)
+						funLower := strings.ToLower(funStr)
+
+						// Reflection call on process/network function
+						if (strings.Contains(callStr, "reflect.ValueOf") || strings.Contains(funStr, "reflect.ValueOf")) &&
+							(strings.Contains(callStr, "exec.Command") || strings.Contains(callStr, "syscall.Exec") ||
+								strings.Contains(callStr, "http.Get") || strings.Contains(callStr, "http.Post") || strings.Contains(callStr, "net.Dial")) {
+							violations = append(violations, "AST Taboo Violation: forbidden reflection call on process/network function")
+						}
+
+						// Sinks receiving secret/tainted arg
+						isSink := false
+						if funLower == "errors.new" || funLower == "fmt.errorf" ||
+							strings.HasPrefix(funLower, "fmt.print") || strings.HasPrefix(funLower, "fmt.fprint") || strings.HasPrefix(funLower, "fmt.sprint") ||
+							strings.HasPrefix(funLower, "log.print") || strings.HasPrefix(funLower, "log.fatal") ||
+							funLower == "os.writefile" || funLower == "os.create" ||
+							strings.HasPrefix(funLower, "http.") || strings.HasPrefix(funLower, "net.") ||
+							funLower == "exec.command" || funLower == "exec.commandcontext" || funLower == "syscall.exec" {
+							isSink = true
+							funcHasSink[fnName] = true
+						}
+
 						if ident, ok := call.Fun.(*ast.Ident); ok {
 							funcCalls[fnName] = append(funcCalls[fnName], ident.Name)
-							// If calling helper with secret or any helper in general
 							for _, arg := range call.Args {
-								argS := fmt.Sprintf("%v", arg)
-								if strings.Contains(argS, "Getenv") || strings.Contains(argS, "SECRET") || strings.Contains(argS, "TOKEN") || strings.Contains(argS, "KEY") {
+								if isSecretExpr(arg) {
 									funcHasSecret[fnName] = true
 									funcHasSink[fnName] = true
+									violations = append(violations, "AST Taboo Violation: forbidden secret read reaching sink in non-test code")
 								}
 							}
 						}
+
+						if isSink {
+							for _, arg := range call.Args {
+								if isSecretExpr(arg) {
+									funcHasSecret[fnName] = true
+									violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden secret read reaching sink in non-test code (%s)", funStr))
+								}
+							}
+						}
+
 						if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 							sName := sel.Sel.Name
 							pkgName := ""
@@ -472,6 +694,11 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 								sName == "LookupHost" || sName == "LookupIP" || sName == "LookupTXT" || sName == "LookupCNAME" || sName == "LookupAddr" {
 								funcHasNet[fnName] = true
 								funcHasSink[fnName] = true
+								for _, arg := range call.Args {
+									if isSecretExpr(arg) {
+										violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in non-test code")
+									}
+								}
 							}
 
 							// Process execution sinks
@@ -483,17 +710,21 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 							// File write sinks
 							if sName == "WriteFile" || sName == "Create" || sName == "OpenFile" || sName == "WriteString" {
 								funcHasSink[fnName] = true
+								for _, arg := range call.Args {
+									if isSecretExpr(arg) {
+										violations = append(violations, "AST Taboo Violation: forbidden secret write to file in non-test code")
+									}
+								}
 							}
 
 							// Output / stdout / log sinks
-							if pkgName == "fmt" && (sName == "Println" || sName == "Printf" || sName == "Print" || sName == "Fprintf" || sName == "Sprintf" || sName == "Errorf") {
+							if pkgName == "fmt" || pkgName == "log" || pkgName == "errors" {
 								funcHasSink[fnName] = true
-							}
-							if pkgName == "log" && (sName == "Println" || sName == "Printf" || sName == "Print" || sName == "Fatal" || sName == "Fatalf") {
-								funcHasSink[fnName] = true
-							}
-							if pkgName == "errors" && sName == "New" {
-								funcHasSink[fnName] = true
+								for _, arg := range call.Args {
+									if isSecretExpr(arg) {
+										violations = append(violations, "AST Taboo Violation: forbidden secret read reaching sink in non-test code")
+									}
+								}
 							}
 
 							// Dynamic code loading & system calls
@@ -513,32 +744,6 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 										if strings.Contains(v, "LD_PRELOAD") || strings.Contains(v, "DYLD_INSERT_LIBRARIES") || strings.Contains(v, "LD_LIBRARY_PATH") {
 											violations = append(violations, "AST Taboo Violation: forbidden dynamic linker environment variable modification (LD_PRELOAD)")
 										}
-									}
-								}
-							}
-
-							// Secret reads
-							if sName == "Getenv" || sName == "LookupEnv" {
-								funcHasSecret[fnName] = true
-								for _, arg := range call.Args {
-									if lit, ok := arg.(*ast.BasicLit); ok {
-										v := strings.ToUpper(lit.Value)
-										if strings.Contains(v, "SECRET") || strings.Contains(v, "KEY") || strings.Contains(v, "TOKEN") || strings.Contains(v, "AWS") || strings.Contains(v, "GITHUB") || strings.Contains(v, "PASS") || strings.Contains(v, "CRED") || strings.Contains(v, "AUTH") || strings.Contains(v, "API") {
-											funcHasSecret[fnName] = true
-										}
-									}
-								}
-							}
-							if sName == "Environ" {
-								funcHasSecret[fnName] = true
-							}
-							if sName == "ReadFile" || sName == "Open" {
-								for _, arg := range call.Args {
-									argStr := fmt.Sprintf("%v", arg)
-									argLower := strings.ToLower(argStr)
-									if strings.Contains(argLower, "credential") || strings.Contains(argLower, ".aws") || strings.Contains(argLower, ".ssh") || strings.Contains(argLower, "token") || strings.Contains(argLower, "secret") || strings.Contains(argLower, "/etc/passwd") || strings.Contains(argLower, "/etc/shadow") {
-										funcHasSecret[fnName] = true
-										violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden direct read of credential file %s in non-test code", argStr))
 									}
 								}
 							}
@@ -622,30 +827,12 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 								}
 							}
 							if val == "curl" || val == "wget" || val == "nc" {
-								// Check if any subsequent argument reads env or secrets
 								for _, arg := range call.Args[argIdx+1:] {
 									argS := fmt.Sprintf("%v", arg)
 									if strings.Contains(argS, "Getenv") || strings.Contains(argS, "SECRET") || strings.Contains(argS, "KEY") {
 										violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden network exfiltration via exec.Command(%q)", val))
 									}
 								}
-							}
-						}
-					}
-				}
-			}
-
-			// 4. Secret access and network/DNS egress in closures or functions
-			if call, ok := n.(*ast.CallExpr); ok {
-				if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-					name := sel.Sel.Name
-					if name == "Post" || name == "Get" || name == "Do" || name == "Dial" || name == "NewRequest" ||
-						name == "LookupHost" || name == "LookupIP" || name == "LookupTXT" || name == "LookupCNAME" {
-						// Inspect call arguments for direct secret / env reads
-						for _, arg := range call.Args {
-							argStr := fmt.Sprintf("%v", arg)
-							if strings.Contains(argStr, "Environ") || strings.Contains(argStr, "Getenv") || strings.Contains(argStr, "ReadFile") || strings.Contains(argStr, "SECRET") || strings.Contains(argStr, "TOKEN") {
-								violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in non-test code")
 							}
 						}
 					}
@@ -680,9 +867,14 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 	if strings.Contains(codeLower, "exec.command(\"git\"") && strings.Contains(codeLower, "\"push\"") {
 		violations = append(violations, "AST Taboo Violation: forbidden remote git push via exec.Command")
 	}
-	if strings.Contains(codeLower, "os.getenv") && (strings.Contains(codeLower, "fmt.printf") || strings.Contains(codeLower, "fmt.println") || strings.Contains(codeLower, "fmt.print") || strings.Contains(codeLower, "fmt.errorf") || strings.Contains(codeLower, "os.writefile") || strings.Contains(codeLower, "sink(")) {
+	if (strings.Contains(codeLower, "os.getenv") || strings.Contains(codeLower, "os.lookupenv") || strings.Contains(codeLower, "cfg.get")) &&
+		(strings.Contains(codeLower, "fmt.printf") || strings.Contains(codeLower, "fmt.println") || strings.Contains(codeLower, "fmt.print") || strings.Contains(codeLower, "fmt.errorf") || strings.Contains(codeLower, "errors.new") || strings.Contains(codeLower, "log.printf") || strings.Contains(codeLower, "log.println") || strings.Contains(codeLower, "os.writefile") || strings.Contains(codeLower, "sink(")) {
 		violations = append(violations, "AST Taboo Violation: forbidden secret read reaching sink in non-test code")
 	}
+	if strings.Contains(codeLower, "reflect.valueof") && (strings.Contains(codeLower, "exec.command") || strings.Contains(codeLower, "syscall.exec") || strings.Contains(codeLower, "http.get") || strings.Contains(codeLower, "http.post")) {
+		violations = append(violations, "AST Taboo Violation: forbidden reflection call on process/network function")
+	}
+
 
 	return deduplicateStrings(violations)
 }
