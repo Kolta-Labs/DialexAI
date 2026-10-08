@@ -339,6 +339,7 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 	forgeOwnerFlag := fs.String("forge-owner", "", "Forge repository owner/organization")
 	forgeRepoFlag := fs.String("forge-repo", "", "Forge repository name")
 	approverFlag := fs.String("approver", "", "Human approver identity")
+	analyzerFlag := fs.String("analyzer", os.Getenv("ARTIX_ANALYZER_COMMANDS"), "Comma-separated analyzer commands (e.g. 'detekt', 'swiftlint')")
 	if err := fs.Parse(args); err != nil {
 		if isJSON {
 			sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
@@ -466,6 +467,25 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 			Repo:      *forgeRepoFlag,
 			PRNumber:  prNum,
 		})
+	}
+
+	if *analyzerFlag != "" {
+		for _, cmd := range strings.Split(*analyzerFlag, ",") {
+			cmd = strings.TrimSpace(cmd)
+			if cmd != "" {
+				opts.AnalyzerCommands = append(opts.AnalyzerCommands, cmd)
+			}
+		}
+	} else {
+		analyzersCfg := filepath.Join(cwd, ".artix", "analyzers.json")
+		if data, err := os.ReadFile(analyzersCfg); err == nil {
+			var cfg struct {
+				Commands []string `json:"commands"`
+			}
+			if err := json.Unmarshal(data, &cfg); err == nil && len(cfg.Commands) > 0 {
+				opts.AnalyzerCommands = cfg.Commands
+			}
+		}
 	}
 
 	// G4: Test-command trust outside enterprise:

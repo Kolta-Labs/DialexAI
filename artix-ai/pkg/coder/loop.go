@@ -355,12 +355,27 @@ func (c *ConvergenceCoordinator) Run(
 			}
 		}
 
-		// 4b. Run configured static analyzers (Konsist, Detekt, Semgrep, go vet) in sandbox
+		// 4b. Run configured static analyzers (Konsist, Detekt, Semgrep, SwiftLint, go vet) in sandbox
 		var analyzerFindings []reviewer.AnalyzerFinding
 		hasAnalyzers := opts != nil && len(opts.AnalyzerCommands) > 0
+		analyzersRanSuccessfully := false
 		if hasAnalyzers {
-			findings, _ := reviewer.RunAnalyzers(ctx, repoCtx.RootDir, c.sandbox, opts.AnalyzerCommands)
+			findings, execResults := reviewer.RunAnalyzers(ctx, repoCtx.RootDir, c.sandbox, opts.AnalyzerCommands)
 			analyzerFindings = findings
+			allSuccess := true
+			hasRealTool := false
+			for i, cmd := range opts.AnalyzerCommands {
+				cmdTrimmed := strings.TrimSpace(cmd)
+				if cmdTrimmed != "true" && cmdTrimmed != ":" && cmdTrimmed != "echo" && cmdTrimmed != "" {
+					hasRealTool = true
+				}
+				if i < len(execResults) && !execResults[i].Success() {
+					allSuccess = false
+				}
+			}
+			if allSuccess && hasRealTool {
+				analyzersRanSuccessfully = true
+			}
 			for _, f := range findings {
 				if f.Severity == "ERROR" {
 					priorFailures = append(priorFailures, fmt.Sprintf("Analyzer %s violation: %s", f.Tool, f.Message))
@@ -395,7 +410,7 @@ func (c *ConvergenceCoordinator) Run(
 			CoverageAfter:            currentCoverage,
 			RequiresTestGates:        initialTestCount > 0,
 			SemanticRunnerConfigured: hasAnalyzers,
-			SemanticRunnerExecuted:   hasAnalyzers,
+			SemanticRunnerExecuted:   analyzersRanSuccessfully,
 		}
 		verdict := c.reviewer.Evaluate(rCtx)
 		res.FinalVerdict = verdict

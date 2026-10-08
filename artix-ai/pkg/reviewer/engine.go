@@ -163,7 +163,7 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 		if ctx.TestCountBefore == 0 && ctx.TestCountAfter == 0 {
 			verdict.Approved = false
 			verdict.Status = StatusRejected
-			verdict.BlockingIssues = append(verdict.BlockingIssues, "test integrity gate violation: missing test count metrics; fail-closed")
+			verdict.BlockingIssues = append(verdict.BlockingIssues, "test integrity gate violation: new implementation requires test coverage for acceptance criteria (found 0 tests); fail-closed")
 		}
 	}
 	if ctx.TestCountBefore > 0 && ctx.TestCountAfter < ctx.TestCountBefore {
@@ -204,25 +204,6 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 		}
 	}
 
-	// 2f. Deterministic Pre-Filter: Fail Closed for Non-Go Languages without Semantic Runner
-	hasNonGo := false
-	for _, tf := range touchedFiles {
-		ext := filepath.Ext(tf)
-		if ext == ".kt" || ext == ".swift" || ext == ".ts" || ext == ".py" || ext == ".js" {
-			hasNonGo = true
-			break
-		}
-	}
-	if hasNonGo {
-		hasRunner := ctx.SemanticRunnerConfigured || ctx.SemanticRunnerExecuted || len(ctx.AnalyzerFindings) > 0
-		if !hasRunner {
-			verdict.Approved = false
-			verdict.Status = StatusUnreviewed
-			verdict.BlockingIssues = append(verdict.BlockingIssues, "UNREVIEWED: diff touches non-Go files (.kt, .swift, .ts, .py) and no semantic rule runner (Konsist/Detekt/Semgrep/SwiftLint) is configured and executed; fail-closed")
-			return verdict
-		}
-	}
-
 	// 3. Deterministic Pre-Filter: Static Analyzer Findings
 	for _, f := range ctx.AnalyzerFindings {
 		if f.Severity == "ERROR" {
@@ -247,6 +228,27 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 		verdict.Approved = false
 		verdict.Status = StatusRejected
 		verdict.BlockingIssues = append(verdict.BlockingIssues, tabooViolations...)
+	}
+
+	// 5. Deterministic Pre-Filter: Fail Closed for Non-Go Languages without Semantic Runner
+	hasNonGo := false
+	for _, tf := range touchedFiles {
+		ext := filepath.Ext(tf)
+		if ext == ".kt" || ext == ".swift" || ext == ".ts" || ext == ".py" || ext == ".js" {
+			hasNonGo = true
+			break
+		}
+	}
+	if hasNonGo {
+		hasRunner := ctx.SemanticRunnerConfigured && ctx.SemanticRunnerExecuted
+		if !hasRunner {
+			if verdict.Status != StatusRejected {
+				verdict.Approved = false
+				verdict.Status = StatusUnreviewed
+				verdict.BlockingIssues = append(verdict.BlockingIssues, "UNREVIEWED: diff touches non-Go files (.kt, .swift, .ts, .py) and no semantic rule runner (Konsist/Detekt/Semgrep/SwiftLint) is configured and executed; fail-closed")
+				return verdict
+			}
+		}
 	}
 
 	// If pre-filter failed, reject immediately without calling model

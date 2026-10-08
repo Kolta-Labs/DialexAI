@@ -909,10 +909,11 @@ func TestR3_3_ZeroBeforeCount_RequiresCriteriaTests_FailsClosed(t *testing.T) {
 	ctx := &ReviewContext{
 		Ctx:             context.Background(),
 		Diff:            "diff --git a/service.go b/service.go\n...",
-		TestCountBefore: 0,
-		TestCountAfter:  0,
-		Criteria:        []string{"Scenario 1: Given user, When login, Then success"},
-		TestResults:     []*sandbox.ExecResult{{Command: "go test ./...", ExitCode: 0}},
+		TestCountBefore:   0,
+		TestCountAfter:    0,
+		Criteria:          []string{"Scenario 1: Given user, When login, Then success"},
+		RequiresTestGates: true,
+		TestResults:       []*sandbox.ExecResult{{Command: "go test ./...", ExitCode: 0}},
 	}
 
 	verdict := rev.Evaluate(ctx)

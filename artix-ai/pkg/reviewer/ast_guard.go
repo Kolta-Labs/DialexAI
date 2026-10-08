@@ -116,6 +116,21 @@ func CheckTestIntegrity(diff string) []string {
 				}
 			}
 
+			// Detect impossible/weakened assertion (len(...) < 0 or len(...) <= -1)
+			if (strings.Contains(trimmed, "len(") || strings.Contains(trimmed, "size()")) && (strings.Contains(trimmed, "< 0") || strings.Contains(trimmed, "<= -1") || strings.Contains(trimmed, "== -1")) {
+				violations = append(violations, fmt.Sprintf("test integrity violation: impossible/weakened assertion detected (%s)", trimmed))
+			}
+
+			// Detect tautology / dead test condition (e.g. 1 != 1, 1 == 1, if false)
+			if strings.Contains(trimmed, "1 != 1") || strings.Contains(trimmed, "1 == 1") || strings.Contains(trimmed, "if false") || strings.Contains(trimmed, "assert.True(t, true)") || strings.Contains(trimmed, "assert.False(t, false)") {
+				violations = append(violations, fmt.Sprintf("test integrity violation: tautological assertion / dead test condition detected (%s)", trimmed))
+			}
+
+			// Detect defer recover() panic swallowing in tests
+			if strings.Contains(trimmed, "recover()") && (strings.Contains(trimmed, "defer") || strings.Contains(trimmed, "func()")) {
+				violations = append(violations, fmt.Sprintf("test integrity violation: defer recover() panic swallowing detected in test (%s)", trimmed))
+			}
+
 			if isAssertionStatement(trimmed) {
 				addedAssertions++
 			}
@@ -336,8 +351,45 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 				}
 			}
 
+			// 4. Secret access and network egress in init() or production functions
+			if fn, ok := n.(*ast.FuncDecl); ok {
+				if fn.Name.Name == "init" && fn.Body != nil {
+					hasNet := false
+					hasSecret := false
+					ast.Inspect(fn.Body, func(in ast.Node) bool {
+						if call, ok := in.(*ast.CallExpr); ok {
+							if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+								name := sel.Sel.Name
+								if name == "Post" || name == "Get" || name == "Do" || name == "Dial" || name == "NewRequest" {
+									hasNet = true
+								}
+								if name == "Getenv" {
+									for _, arg := range call.Args {
+										if lit, ok := arg.(*ast.BasicLit); ok {
+											v := strings.ToUpper(lit.Value)
+											if strings.Contains(v, "SECRET") || strings.Contains(v, "KEY") || strings.Contains(v, "TOKEN") {
+												hasSecret = true
+											}
+										}
+									}
+								}
+							}
+						}
+						return true
+					})
+					if hasNet && hasSecret {
+						violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in production init() function")
+					}
+				}
+			}
+
 			return true
 		})
+	}
+
+	// Also perform string-level check on code blob for init/egress patterns
+	if strings.Contains(code, "func init()") && (strings.Contains(code, "http.Post") || strings.Contains(code, "http.Get")) && (strings.Contains(code, "AWS_SECRET_ACCESS_KEY") || strings.Contains(code, "SECRET") || strings.Contains(code, "API_KEY")) {
+		violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in production init() function")
 	}
 
 	return deduplicateStrings(violations)
@@ -347,13 +399,16 @@ func inspectMultiLanguageSemantics(code string, taboos []string) []string {
 	var violations []string
 	diffLower := strings.ToLower(code)
 
-	// Inherent security taboos across all languages: arbitrary command execution, destructive commands
+	// Inherent security taboos across all languages: arbitrary command execution, destructive commands, file deletions on system paths
 	if strings.Contains(diffLower, "runtime.getruntime().exec") ||
 		strings.Contains(diffLower, "runtime.exec") ||
 		strings.Contains(diffLower, "processbuilder") ||
 		strings.Contains(diffLower, "rm -rf") ||
 		strings.Contains(diffLower, "child_process.exec") {
 		violations = append(violations, "Security Taboo: forbidden arbitrary shell/command execution detected")
+	}
+	if (strings.Contains(diffLower, "java.io.file") || strings.Contains(diffLower, "file(")) && (strings.Contains(diffLower, "/etc/") || strings.Contains(diffLower, "delete()")) {
+		violations = append(violations, "Security Taboo: forbidden destructive system file deletion detected")
 	}
 
 	for _, taboo := range tabooListCanonical(taboos) {
