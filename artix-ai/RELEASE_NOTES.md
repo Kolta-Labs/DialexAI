@@ -1,7 +1,7 @@
 # Artix Enterprise Release Notes — v0.4.0-enterprise
 
 ## Release Summary
-Artix Enterprise `v0.4.0-enterprise` implements security controls, audit protections, two-phase candidate PR push flows, AST exfiltration inspection, and strict permission verification.
+Artix Enterprise `v0.4.0-enterprise` implements two-phase autonomous PR candidate push and merge verification, branch protection, AST exfiltration inspection, strict runner allowlists, atomic per-task budget ledger accounting, and secure file permission enforcement.
 
 ---
 
@@ -16,47 +16,48 @@ Artix Enterprise `v0.4.0-enterprise` implements security controls, audit protect
 ### Verifying the Tag
 To independently verify the cryptographic signature on this tag:
 ```bash
-git tag -v v0.3.0-enterprise
+git tag -v v0.4.0-enterprise
 ```
 Using SSH allowed signers configuration:
 ```bash
-git -c gpg.ssh.allowedSignersFile=.allowed_signers tag -v v0.3.0-enterprise
+git -c gpg.ssh.allowedSignersFile=.allowed_signers tag -v v0.4.0-enterprise
 ```
 
 ### Tag Immutability Declaration
 In accordance with release integrity standards:
-- **`v0.2.0-enterprise`** is permanently anchored at commit `7b4164992fd24a9e6154db382b2d8d87f68cab89` (the original evaluated commit from Round 4). It is immutable and was not reused or rewritten.
-- **`v0.3.0-enterprise`** is the canonical, newly signed release encompassing all Round 5 remediations.
+- **`v0.2.0-enterprise`** is permanently anchored at commit `7b4164992fd24a9e6154db382b2d8d87f68cab89`.
+- **`v0.3.0-enterprise`** is permanently anchored at commit `22a0773663677610113f01bbdd37be9d96ca418c`.
+- **`v0.4.0-enterprise`** is the canonical, newly signed release encompassing all Round 6 remediations.
 
 ---
 
-## Round 5 Remediation Breakdown
+## Round 6 Remediation Breakdown
 
-### R5-1 (R4-1): Release Integrity & External Trust Root
-- Release tag `v0.3.0-enterprise` cryptographically signed with ED25519 key matching `releases@artix.ai`.
+### R6-1 (R5-1): Signed Release & External Trust Root
+- Release tag `v0.4.0-enterprise` cryptographically signed with ED25519 key matching `releases@artix.ai`.
 - Published external key fingerprint `SHA256:Dh5vIjePKsm29xfvnLukrKDTOzLM/w5u6rYBcB3hmNg`.
-- Continuous Integration workflow (`.github/workflows/artix.yml`) builds `./cli` and `./cmd/artixd` with `-ldflags "-X artix/pkg/policy.RequireSignedPolicyFlag=true"`, runs `go test -race -count=1 ./...`, and publishes `SHA256SUMS`.
+- CI workflow builds `./cli` and `./cmd/artixd` with `-ldflags "-X artix/pkg/policy.RequireSignedPolicyFlag=true"`, runs `go test -race -count=1 ./...`, and publishes `SHA256SUMS`.
 
-### R5-2 (R4-2): Real Autonomous PR Push & Forge Approval Flow
-- In autonomous mode, candidate commits are produced locally and pushed to the remote PR branch via `ForgePusher`.
-- The human reviewer inspects and approves that exact pushed head commit on GitHub / GitLab.
-- `ForgeVerifier` queries the server-side forge API to verify approvals against the PR's true remote head commit.
-- Safe rollback mechanism (`safeRollbackCandidate`) guarantees `ResetHard` only rolls back candidate commits produced during the current run, never touching or destroying pre-existing user commits.
+### R6-2 (R5-2): Two-Phase Autonomous PR Flow & ForgePusher
+- **Phase 1 (`artix code`)**: Pushes autonomous candidate commits to dedicated PR branches (`refs/heads/artix-pr-*`) via `ForgePusher` with strict branch protection (refuses direct pushes to `main`, `master`, `trunk`, `prod`, `production`, `release/*`), returning `AwaitingApproval: true` and candidate SHA.
+- **Phase 2 (`artix merge` / daemon review event)**: Verifies server-side forge approval on the exact candidate SHA via `VerifyAndMergeCandidate` before merging and logging audit records.
+- **Rejection Cleanup**: On forge rejection or verification error, automatically deletes remote candidate branches (`CleanupCandidateBranch`).
+- **End-to-End Verification**: Validated in `TestR6_2_TwoPhaseAutonomousPRFlow_RealBareRepo` against a real local bare git repository.
 
-### R5-3 (R4-3): Broadened AST Guard, Review Escalation, & Strict Runner Allowlist
-- **Secret & Egress Sinks**: Broadened AST inspection to flag secret/credential reading (`os.Environ()`, `os.Getenv()`, `os.ReadFile()` for credentials) combined with network egress (`http.Post`, `http.Get`, `http.Do`, `net.Dial`) anywhere in non-test Go code.
-- **Multi-Language Taboos**: Flag Swift `Process()` with `/bin/sh` or arbitrary execution and TypeScript `child_process.execSync` as inherent security taboos.
-- **Test Integrity**: Detect test skipping aliases (`t.Skipf`) and self-comparison tautologies (`if a != a`).
-- **Review Escalation**: Modifications to `go.work`, `go.work.sum`, golden files under `testdata/`, or `//go:generate` directives automatically escalate to `StatusUnreviewed` (fail closed for human review).
-- **Semantic Runner Allowlist**: `policy.IsAllowedSemanticRunner` strictly enforces exact allowlisted tool binaries, rejects relative/tmp paths, forbids shell metacharacters (`;|&`$><`), and rejects no-op `--version`/`--help` bypasses.
+### R6-3 (R5-3): AST Exfiltration Sinks, Credential Inspection, & Runner Allowlist
+- **Exfiltration Sinks**: Flags DNS exfiltration (`net.LookupHost`, `net.LookupIP`), process execution exfiltration (`exec.Command("curl", ...)`), and package/variable HTTP client POSTs (`c.Post(...)`).
+- **Credential Protection**: Flags reading credential files (`.aws/credentials`, `.ssh`, `id_rsa`, etc.) in non-test code as prohibited exfiltration risks.
+- **Language Security**: Detects Swift `NSTask()` / `NSTask.launchedTask` and TypeScript `new Function(...)` / string-concatenated `require('child_' + 'process')`.
+- **Tautology & Assertion Checks**: Rejects self-comparisons on identical operands (`if a != a`).
+- **Runner Allowlist Hardening**: Rejects no-op/dummy configs (`--no-eslintrc`, `--rule {}`, `-c /dev/null`, `nothing.js`).
 
-### R5-4 (R4-6): Daemon Default-Deny Authorization & Issue Comment Triggers
-- Daemon webhook triggers enforce strict default-deny sender authorization across all events (`author_association` must be `OWNER`, `MEMBER`, or `COLLABORATOR`, or user in `AllowedUsers`).
-- Senders who apply labels or trigger events are verified against authorization gates.
-- Added full support for `issue_comment` (`created`) events with dual authorization (validates both issue author and comment sender for `/artix` commands).
+### R6-4 (R5-5): Per-Task Budget Ledger & Secure File Permissions
+- **Per-Task Entries**: `RecordRoundUsage` atomically records `tasks[taskId]` entries containing `Tokens` and `USD`, allowing exact join verification in `pilot.VerifyLedgerEntryMatch`.
+- **Secure Default Path**: Relocated default ledger from world-writable `/tmp` to secure per-user directory `~/.artix/budget-ledger.json` (`0700` dir, `0600` file).
+- **Permission Verification**: `ValidateLedgerSecurity` strictly refuses any ledger file with group or world write bits (`mode.Perm()&0077 != 0`) or owned by an untrusted UID.
 
-### R5-5 (G9): Pilot Ledger Token & USD Matching
-- `pkg/pilot` implements `VerifyLedgerEntryMatch`, reading actual ledger JSON entries and verifying exact token counts and USD amounts against task execution records.
+### R6-5 (R5-4): Comment Author Authorization
+- Daemon webhook handler strictly verifies the comment author's identity and permission on `issue_comment` events, handling payloads where GitHub's `sender` object lacks `author_association`.
 
 ---
 
@@ -73,5 +74,6 @@ go vet ./...
 go test -race -count=1 ./...
 
 # 4. Verify tag signature
-git tag -v v0.3.0-enterprise
+git tag -v v0.4.0-enterprise
 ```
+
