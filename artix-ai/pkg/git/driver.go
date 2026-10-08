@@ -106,7 +106,7 @@ func (d *Driver) Commit(message string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return d.runGit("rev-parse", "--short", "HEAD")
+	return d.HeadHash()
 }
 
 // CommitAll stages all changes and creates a commit.
@@ -134,6 +134,12 @@ func (d *Driver) HeadHash() (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(out), nil
+}
+
+// ResetHard resets the working tree and index to ref.
+func (d *Driver) ResetHard(ref string) error {
+	_, err := d.runGit("reset", "--hard", ref)
+	return err
 }
 
 func (d *Driver) runGit(args ...string) (string, error) {

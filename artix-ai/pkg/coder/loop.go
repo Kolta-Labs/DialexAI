@@ -553,58 +553,9 @@ func (c *ConvergenceCoordinator) Run(
 					approver = opts.Approver
 				}
 
-				if policy.IsEnterprise() || policy.Active().RequireForgeApproval {
-					if opts != nil && opts.ForgeApproval != nil {
-						_ = activeSession.Rollback()
-						res.Success = false
-						res.Error = "autonomous commit blocked: separation of duties violation: caller-supplied ForgeApproval is strictly forbidden in enterprise mode; approvals must be verified server-side from forge API"
-						return res
-					}
-					if opts == nil || opts.ForgeVerifier == nil {
-						_ = activeSession.Rollback()
-						res.Success = false
-						res.Error = "autonomous commit blocked: separation of duties violation: server-side forge verification is required in enterprise mode"
-						return res
-					}
-
-					var err error
-					headCommitSHA, _ := c.driver.HeadHash()
-					forgeApproval, err = opts.ForgeVerifier(ctx, headCommitSHA)
-					if err != nil {
-						_ = activeSession.Rollback()
-						res.Success = false
-						res.Error = fmt.Sprintf("autonomous commit blocked: %v", err)
-						return res
-					}
-
-					if forgeApproval == nil || !forgeApproval.VerifiedByForge {
-						_ = activeSession.Rollback()
-						res.Success = false
-						res.Error = "autonomous commit blocked: separation of duties violation: caller-supplied or forged approvals are strictly forbidden in enterprise mode; approval must be verified server-side from forge API"
-						return res
-					}
-					if err := policy.ValidateForgeApproval(forgeApproval, "artix-agent", "artix-agent"); err != nil {
-						_ = activeSession.Rollback()
-						res.Success = false
-						res.Error = fmt.Sprintf("autonomous commit blocked: %v", err)
-						return res
-					}
-					approverIdentity = forgeApproval.ApproverUsername
-				} else {
-					if opts != nil && opts.ForgeApproval != nil {
-						forgeApproval = opts.ForgeApproval
-						approverIdentity = forgeApproval.ApproverUsername
-					}
-					// Validate approver unconditionally under Separation of Duties
-					if err := policy.ValidateApprover("artix-agent", approver); err != nil {
-						_ = activeSession.Rollback()
-						res.Success = false
-						res.Error = fmt.Sprintf("autonomous commit blocked: %v", err)
-						return res
-					}
-				}
-
 				if len(testResults) == 0 {
+					_ = activeSession.Rollback()
+					res.Success = false
 					res.Error = "autonomous commit refused: the spec defines no test commands, so nothing verified the change"
 					return res
 				}
@@ -628,7 +579,75 @@ func (c *ConvergenceCoordinator) Run(
 					}
 				}
 
-				// In enterprise mode, verify audit emission succeeds before proceeding to commit
+				// Commit candidate changes to produce post-patch head SHA
+				commitMsg := fmt.Sprintf("feat: %s (Spec: %s)", s.Title, s.ID)
+				newCommitSHA, commitErr := c.driver.CommitAll(commitMsg)
+				if commitErr != nil {
+					_ = activeSession.Rollback()
+					res.Success = false
+					res.Error = fmt.Sprintf("changes approved but commit failed: %v", commitErr)
+					return res
+				}
+				res.CommitHash = newCommitSHA
+
+				if policy.IsEnterprise() || policy.Active().RequireForgeApproval {
+					if opts != nil && opts.ForgeApproval != nil {
+						_ = c.driver.ResetHard("HEAD~1")
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = "autonomous commit blocked: separation of duties violation: caller-supplied ForgeApproval is strictly forbidden in enterprise mode; approvals must be verified server-side from forge API"
+						return res
+					}
+					if opts == nil || opts.ForgeVerifier == nil {
+						_ = c.driver.ResetHard("HEAD~1")
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = "autonomous commit blocked: separation of duties violation: server-side forge verification is required in enterprise mode"
+						return res
+					}
+
+					var err error
+					// Verify approval against the exact resulting commit being merged
+					forgeApproval, err = opts.ForgeVerifier(ctx, newCommitSHA)
+					if err != nil {
+						_ = c.driver.ResetHard("HEAD~1")
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = fmt.Sprintf("autonomous commit blocked: %v", err)
+						return res
+					}
+
+					if forgeApproval == nil || !forgeApproval.VerifiedByForge {
+						_ = c.driver.ResetHard("HEAD~1")
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = "autonomous commit blocked: separation of duties violation: caller-supplied or forged approvals are strictly forbidden in enterprise mode; approval must be verified server-side from forge API"
+						return res
+					}
+					if err := policy.ValidateForgeApproval(forgeApproval, "artix-agent", "artix-agent"); err != nil {
+						_ = c.driver.ResetHard("HEAD~1")
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = fmt.Sprintf("autonomous commit blocked: %v", err)
+						return res
+					}
+					approverIdentity = forgeApproval.ApproverUsername
+				} else {
+					if opts != nil && opts.ForgeApproval != nil {
+						forgeApproval = opts.ForgeApproval
+						approverIdentity = forgeApproval.ApproverUsername
+					}
+					// Validate approver unconditionally under Separation of Duties
+					if err := policy.ValidateApprover("artix-agent", approver); err != nil {
+						_ = c.driver.ResetHard("HEAD~1")
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = fmt.Sprintf("autonomous commit blocked: %v", err)
+						return res
+					}
+				}
+
+				// In enterprise mode, verify audit emission succeeds
 				if policy.IsEnterprise() {
 					preCommitAuditErr := auditLogger.Emit(audit.AuditEvent{
 						EventType: audit.EventCodeConvergence,
@@ -637,23 +656,17 @@ func (c *ConvergenceCoordinator) Run(
 						Details: map[string]any{
 							"storyId":          s.ID,
 							"roundsRun":        res.RoundsRun,
+							"commitHash":       newCommitSHA,
 							"testCommandsHash": testCommandsHash,
 						},
 					})
 					if preCommitAuditErr != nil {
+						_ = c.driver.ResetHard("HEAD~1")
 						_ = activeSession.Rollback()
 						res.Success = false
 						res.Error = fmt.Sprintf("enterprise audit logging failed: %v (commit aborted, changes rolled back)", preCommitAuditErr)
 						return res
 					}
-				}
-
-				commitMsg := fmt.Sprintf("feat: %s (Spec: %s)", s.Title, s.ID)
-				hash, err := c.driver.CommitAll(commitMsg)
-				if err != nil {
-					res.Error = fmt.Sprintf("changes approved but commit failed: %v", err)
-				} else {
-					res.CommitHash = hash
 				}
 			}
 

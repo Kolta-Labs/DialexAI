@@ -102,23 +102,26 @@ func TestR3_2_MockedGitHub_CoordinatorRun_FullE2E(t *testing.T) {
 		TestCommands: []string{"test -f counter.txt"},
 	}
 
-	// 1. Success case: Mocked GitHub returns APPROVED review from "alice-lead" on current head SHA
+	// 1. Success case: Mocked GitHub returns APPROVED review from "alice-lead" matching candidate commit SHA
 	ghServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.HasSuffix(r.URL.Path, "/pulls/101") {
+			// Find the current branch head dynamically
+			curHead, _ := driver.HeadHash()
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"user": map[string]any{"login": "developer-bob", "type": "User"},
-				"head": map[string]any{"sha": headSHA},
+				"head": map[string]any{"sha": curHead},
 			})
 			return
 		}
 		if strings.HasSuffix(r.URL.Path, "/pulls/101/reviews") {
+			curHead, _ := driver.HeadHash()
 			_ = json.NewEncoder(w).Encode([]map[string]any{
 				{
 					"id":        1,
 					"user":      map[string]any{"login": "alice-lead", "type": "User"},
 					"state":     "APPROVED",
-					"commit_id": headSHA,
+					"commit_id": curHead,
 				},
 			})
 			return
@@ -294,10 +297,11 @@ func TestR3_2_MockedGitLab_CoordinatorRun_FullE2E(t *testing.T) {
 	glServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.HasSuffix(r.URL.Path, "/merge_requests/55") {
+			curHead, _ := driver.HeadHash()
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"id":     55,
 				"iid":    55,
-				"sha":    headSHA,
+				"sha":    curHead,
 				"state":  "opened",
 				"author": map[string]any{"username": "dev-alice"},
 			})
