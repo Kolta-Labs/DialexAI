@@ -476,7 +476,7 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 				opts.AnalyzerCommands = append(opts.AnalyzerCommands, cmd)
 			}
 		}
-	} else {
+	} else if !policy.IsEnterprise() {
 		analyzersCfg := filepath.Join(cwd, ".artix", "analyzers.json")
 		if data, err := os.ReadFile(analyzersCfg); err == nil {
 			var cfg struct {
@@ -485,6 +485,12 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 			if err := json.Unmarshal(data, &cfg); err == nil && len(cfg.Commands) > 0 {
 				opts.AnalyzerCommands = cfg.Commands
 			}
+		}
+	} else {
+		// In enterprise mode, use signed policy allowlisted semantic runners
+		pol := policy.Active()
+		if len(pol.Reviewer.AllowedSemanticRunners) > 0 {
+			opts.AnalyzerCommands = pol.Reviewer.AllowedSemanticRunners
 		}
 	}
 

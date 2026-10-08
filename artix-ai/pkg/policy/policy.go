@@ -76,8 +76,40 @@ type BudgetConfig struct {
 type ReviewerPolicyConfig struct {
 	EnforceDisjointModelFamilies bool     `json:"enforceDisjointModelFamilies"`
 	AllowedCriticFamilies        []string `json:"allowedCriticFamilies,omitempty"`
+	AllowedSemanticRunners       []string `json:"allowedSemanticRunners,omitempty"`
 	RestrictedPaths              []string `json:"restrictedPaths,omitempty"`
 }
+
+var defaultAllowedSemanticRunners = []string{
+	"detekt", "konsist", "semgrep", "swiftlint", "eslint", "mypy",
+	"ruff", "flake8", "golangci-lint", "govet", "go vet", "checkstyle",
+	"ktlint", "bandit", "rubocop", "shellcheck",
+}
+
+// IsAllowedSemanticRunner checks whether a command uses an allowlisted static analysis / semantic runner tool.
+func IsAllowedSemanticRunner(cmdStr string) bool {
+	fields := strings.Fields(strings.TrimSpace(cmdStr))
+	if len(fields) == 0 {
+		return false
+	}
+	tool := strings.ToLower(filepath.Base(fields[0]))
+	// Strictly forbidden trivial / bypass commands
+	if tool == "true" || tool == "false" || tool == "exit" || tool == "cat" || tool == "echo" ||
+		tool == ":" || tool == "sh" || tool == "bash" || tool == "zsh" || tool == "printf" || tool == "tee" {
+		return false
+	}
+
+	pol := Active()
+	allowed := append(defaultAllowedSemanticRunners, pol.Reviewer.AllowedSemanticRunners...)
+	for _, a := range allowed {
+		aLower := strings.ToLower(strings.TrimSpace(a))
+		if tool == aLower || strings.HasPrefix(strings.ToLower(cmdStr), aLower) {
+			return true
+		}
+	}
+	return false
+}
+
 
 // Policy specifies security, autonomy, audit, and resource constraints for Artix.
 type Policy struct {

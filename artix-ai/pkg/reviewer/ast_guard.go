@@ -45,11 +45,35 @@ func CheckProtectedPaths(diff string, customProtected ...string) []string {
 	for _, f := range files {
 		clean := filepath.Clean(f)
 		clean = strings.TrimPrefix(clean, "./")
-		for _, p := range protected {
-			if strings.HasPrefix(clean, p) || clean == p || filepath.Base(clean) == p {
-				violations = append(violations, fmt.Sprintf("protected path violation: modification to protected system/governance file %q is strictly blocked", f))
-				break
+		base := filepath.Base(clean)
+
+		isProtected := false
+		// 1. Any path containing .github/, .gitlab/, or .circleci/ anywhere
+		if strings.Contains(clean, ".github/") || strings.HasSuffix(clean, ".github") || strings.Contains(clean, "/.github/") ||
+			strings.Contains(clean, ".gitlab-ci") || strings.Contains(clean, ".circleci/") {
+			isProtected = true
+		}
+		// 2. CODEOWNERS anywhere
+		if base == "CODEOWNERS" || strings.Contains(clean, "CODEOWNERS") {
+			isProtected = true
+		}
+		// 3. Git hooks anywhere
+		if strings.Contains(clean, ".githooks") || strings.Contains(clean, "githooks/") || strings.Contains(clean, ".git/hooks") ||
+			base == "pre-commit" || base == "post-commit" || base == "pre-push" || base == "commit-msg" {
+			isProtected = true
+		}
+		// 4. Default protected prefixes and custom protected
+		if !isProtected {
+			for _, p := range protected {
+				if strings.HasPrefix(clean, p) || clean == p || base == p {
+					isProtected = true
+					break
+				}
 			}
+		}
+
+		if isProtected {
+			violations = append(violations, fmt.Sprintf("protected path violation: modification to protected system/governance file %q is strictly blocked", f))
 		}
 	}
 	return violations
@@ -116,13 +140,13 @@ func CheckTestIntegrity(diff string) []string {
 				}
 			}
 
-			// Detect impossible/weakened assertion (len(...) < 0 or len(...) <= -1)
-			if (strings.Contains(trimmed, "len(") || strings.Contains(trimmed, "size()")) && (strings.Contains(trimmed, "< 0") || strings.Contains(trimmed, "<= -1") || strings.Contains(trimmed, "== -1")) {
+			// Detect impossible/weakened assertion (len(...) < 0 or len(...) <= -1 or bitshifts len(...) > 1<<62)
+			if (strings.Contains(trimmed, "len(") || strings.Contains(trimmed, "size()")) && (strings.Contains(trimmed, "< 0") || strings.Contains(trimmed, "<= -1") || strings.Contains(trimmed, "== -1") || strings.Contains(trimmed, "1<<") || strings.Contains(trimmed, "1 <<") || strings.Contains(trimmed, "1>>") || strings.Contains(trimmed, "1 >>")) {
 				violations = append(violations, fmt.Sprintf("test integrity violation: impossible/weakened assertion detected (%s)", trimmed))
 			}
 
-			// Detect tautology / dead test condition (e.g. 1 != 1, 1 == 1, if false)
-			if strings.Contains(trimmed, "1 != 1") || strings.Contains(trimmed, "1 == 1") || strings.Contains(trimmed, "if false") || strings.Contains(trimmed, "assert.True(t, true)") || strings.Contains(trimmed, "assert.False(t, false)") {
+			// Detect tautology / dead test condition (e.g. 1 != 1, 1 == 1, if false, if !ok)
+			if strings.Contains(trimmed, "1 != 1") || strings.Contains(trimmed, "1 == 1") || strings.Contains(trimmed, "if false") || strings.Contains(trimmed, "assert.True(t, true)") || strings.Contains(trimmed, "assert.False(t, false)") || strings.Contains(trimmed, "if !ok") || strings.Contains(trimmed, "if !valid") || strings.Contains(trimmed, "if !pass") {
 				violations = append(violations, fmt.Sprintf("test integrity violation: tautological assertion / dead test condition detected (%s)", trimmed))
 			}
 
@@ -183,6 +207,14 @@ func CheckSemanticASTTaboos(diff string, tabooList []string, workspaceDir ...str
 	addedCodeLines := extractAddedCodeLines(diff)
 	addedCodeBlob := strings.Join(addedCodeLines, "\n")
 
+	// 2b. Inherent script attack detection: curl ... | sh or wget ... | sh / bash
+	for _, l := range addedCodeLines {
+		lLower := strings.ToLower(l)
+		if (strings.Contains(lLower, "curl") || strings.Contains(lLower, "wget")) && (strings.Contains(lLower, "| sh") || strings.Contains(lLower, "| bash") || strings.Contains(lLower, "|sh") || strings.Contains(lLower, "|bash") || strings.Contains(lLower, "| zsh")) {
+			violations = append(violations, fmt.Sprintf("Security Taboo: forbidden remote script pipe execution (%s)", l))
+		}
+	}
+
 	// 3. Perform Go AST analysis on Go code snippets and whole files if present
 	astViolations := inspectGoASTForTaboos(addedCodeBlob, tabooList, wholeFiles...)
 	violations = append(violations, astViolations...)
@@ -229,6 +261,22 @@ func extractAddedCodeLines(diff string) []string {
 	return lines
 }
 
+func transitivelyHasProp(fnName string, calls map[string][]string, prop map[string]bool, visited map[string]bool) bool {
+	if prop[fnName] {
+		return true
+	}
+	if visited[fnName] {
+		return false
+	}
+	visited[fnName] = true
+	for _, callee := range calls[fnName] {
+		if transitivelyHasProp(callee, calls, prop, visited) {
+			return true
+		}
+	}
+	return false
+}
+
 func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File) []string {
 	var violations []string
 	if code == "" && len(wholeFiles) == 0 {
@@ -240,7 +288,7 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 	checkDefaultServeMux := strings.Contains(taboosJoined, "defaultservemux")
 	checkDefaultTransport := strings.Contains(taboosJoined, "defaulttransport")
 	checkInsecureTLS := strings.Contains(taboosJoined, "insecureskipverify") || strings.Contains(taboosJoined, "tls")
-	checkShellExec := strings.Contains(taboosJoined, "exec.command") || strings.Contains(taboosJoined, "shell") || strings.Contains(taboosJoined, "raw shell")
+	checkShellExec := strings.Contains(taboosJoined, "exec.command") || strings.Contains(taboosJoined, "shell") || strings.Contains(taboosJoined, "raw shell") || true // Inherent taboo
 	checkReflection := strings.Contains(taboosJoined, "reflection") || strings.Contains(taboosJoined, "reflect")
 
 	// Multi-strategy parsing: handles imports, package-level declarations, function bodies, and bare statements
@@ -294,6 +342,52 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 			}
 		}
 
+		// Build local function call graph
+		funcCalls := make(map[string][]string)
+		funcHasNet := make(map[string]bool)
+		funcHasSecret := make(map[string]bool)
+
+		for _, decl := range node.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil {
+				fnName := fn.Name.Name
+				ast.Inspect(fn.Body, func(in ast.Node) bool {
+					if call, ok := in.(*ast.CallExpr); ok {
+						if ident, ok := call.Fun.(*ast.Ident); ok {
+							funcCalls[fnName] = append(funcCalls[fnName], ident.Name)
+						}
+						if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+							sName := sel.Sel.Name
+							if sName == "Post" || sName == "Get" || sName == "Do" || sName == "Dial" || sName == "NewRequest" {
+								funcHasNet[fnName] = true
+							}
+							if sName == "Getenv" {
+								for _, arg := range call.Args {
+									if lit, ok := arg.(*ast.BasicLit); ok {
+										v := strings.ToUpper(lit.Value)
+										if strings.Contains(v, "SECRET") || strings.Contains(v, "KEY") || strings.Contains(v, "TOKEN") || strings.Contains(v, "AWS") || strings.Contains(v, "GITHUB") {
+											funcHasSecret[fnName] = true
+										}
+									}
+								}
+							}
+						}
+					}
+					return true
+				})
+			}
+		}
+
+		// Check transitive secret exfiltration reachable from init() or other functions
+		for fnName := range funcCalls {
+			if fnName == "init" {
+				netReachable := transitivelyHasProp(fnName, funcCalls, funcHasNet, make(map[string]bool))
+				secretReachable := transitivelyHasProp(fnName, funcCalls, funcHasSecret, make(map[string]bool))
+				if netReachable && secretReachable {
+					violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in production init() function")
+				}
+			}
+		}
+
 		ast.Inspect(node, func(n ast.Node) bool {
 			// 1. Selector expressions: DefaultClient, DefaultServeMux, DefaultTransport, or aliased taboo package usage
 			if sel, ok := n.(*ast.SelectorExpr); ok {
@@ -339,11 +433,15 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 
 			// 3. Command execution with shell: exec.Command("sh", ...) or exec.Command("bash", ...)
 			if call, ok := n.(*ast.CallExpr); ok && checkShellExec {
-				if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Command" {
+				if sel, ok := call.Fun.(*ast.SelectorExpr); ok && (sel.Sel.Name == "Command" || sel.Sel.Name == "CommandContext") {
 					if len(call.Args) > 0 {
-						if lit, ok := call.Args[0].(*ast.BasicLit); ok {
+						argIdx := 0
+						if sel.Sel.Name == "CommandContext" && len(call.Args) > 1 {
+							argIdx = 1
+						}
+						if lit, ok := call.Args[argIdx].(*ast.BasicLit); ok {
 							val := strings.Trim(lit.Value, `"`)
-							if val == "sh" || val == "bash" || val == "zsh" {
+							if val == "sh" || val == "bash" || val == "zsh" || val == "/bin/sh" || val == "/bin/bash" || val == "/bin/zsh" {
 								violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden shell interpreter invocation via exec.Command(%q)", val))
 							}
 						}
@@ -367,7 +465,7 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 									for _, arg := range call.Args {
 										if lit, ok := arg.(*ast.BasicLit); ok {
 											v := strings.ToUpper(lit.Value)
-											if strings.Contains(v, "SECRET") || strings.Contains(v, "KEY") || strings.Contains(v, "TOKEN") {
+											if strings.Contains(v, "SECRET") || strings.Contains(v, "KEY") || strings.Contains(v, "TOKEN") || strings.Contains(v, "AWS") || strings.Contains(v, "GITHUB") {
 												hasSecret = true
 											}
 										}
@@ -388,7 +486,7 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 	}
 
 	// Also perform string-level check on code blob for init/egress patterns
-	if strings.Contains(code, "func init()") && (strings.Contains(code, "http.Post") || strings.Contains(code, "http.Get")) && (strings.Contains(code, "AWS_SECRET_ACCESS_KEY") || strings.Contains(code, "SECRET") || strings.Contains(code, "API_KEY")) {
+	if strings.Contains(code, "func init()") && (strings.Contains(code, "http.Post") || strings.Contains(code, "http.Get")) && (strings.Contains(code, "AWS_SECRET_ACCESS_KEY") || strings.Contains(code, "SECRET") || strings.Contains(code, "API_KEY") || strings.Contains(code, "GITHUB_TOKEN")) {
 		violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in production init() function")
 	}
 
@@ -398,6 +496,23 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 func inspectMultiLanguageSemantics(code string, taboos []string) []string {
 	var violations []string
 	diffLower := strings.ToLower(code)
+
+	// Inherent security taboos across all languages: arbitrary command execution, destructive commands, file deletions on system paths
+	if strings.Contains(diffLower, "runtime.getruntime().exec") ||
+		strings.Contains(diffLower, "runtime.exec") ||
+		strings.Contains(diffLower, "processbuilder") ||
+		strings.Contains(diffLower, "rm -rf") ||
+		strings.Contains(diffLower, "child_process.exec") ||
+		strings.Contains(diffLower, "os.system(") ||
+		strings.Contains(diffLower, "os.system \"") ||
+		strings.Contains(diffLower, "subprocess.call") ||
+		strings.Contains(diffLower, "subprocess.popen") ||
+		strings.Contains(diffLower, "subprocess.run") {
+		violations = append(violations, "Security Taboo: forbidden arbitrary shell/command execution detected")
+	}
+	if (strings.Contains(diffLower, "java.io.file") || strings.Contains(diffLower, "files.delete") || strings.Contains(diffLower, "file(")) && (strings.Contains(diffLower, "/etc/") || strings.Contains(diffLower, "delete()") || strings.Contains(diffLower, "paths.get") || strings.Contains(diffLower, "delete(")) {
+		violations = append(violations, "Security Taboo: forbidden destructive system file deletion detected")
+	}
 
 	// Inherent security taboos across all languages: arbitrary command execution, destructive commands, file deletions on system paths
 	if strings.Contains(diffLower, "runtime.getruntime().exec") ||

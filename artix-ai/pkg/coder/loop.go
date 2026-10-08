@@ -374,8 +374,7 @@ func (c *ConvergenceCoordinator) Run(
 			allSuccess := true
 			hasRealTool := false
 			for i, cmd := range opts.AnalyzerCommands {
-				cmdTrimmed := strings.TrimSpace(cmd)
-				if cmdTrimmed != "true" && cmdTrimmed != ":" && cmdTrimmed != "echo" && cmdTrimmed != "" {
+				if policy.IsAllowedSemanticRunner(cmd) {
 					hasRealTool = true
 				}
 				if i < len(execResults) && !execResults[i].Success() {
