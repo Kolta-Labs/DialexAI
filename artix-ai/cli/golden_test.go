@@ -103,7 +103,7 @@ func TestR3_4_ClaudeCodePlugin_RequiresExplicitConfirmationBeforeConfirmTests(t 
 
 // TestR7_PluginDialogContract_CommandsDisplayedBeforeConfirm asserts that the VS Code
 // (extension.ts) and IntelliJ (Actions.kt) IDE plugins query and display the exact planned
-// test command list in the confirmation dialog before --confirm-tests is passed.
+// test command list via 'artix code --print-test-commands' and bind confirmation to --confirm-tests-hash.
 func TestR7_PluginDialogContract_CommandsDisplayedBeforeConfirm(t *testing.T) {
 	// 1. VS Code extension.ts
 	vsCodePath := "../plugins/vscode/src/extension.ts"
@@ -112,8 +112,11 @@ func TestR7_PluginDialogContract_CommandsDisplayedBeforeConfirm(t *testing.T) {
 		t.Fatalf("failed to read %s: %v", vsCodePath, err)
 	}
 	vsContent := string(vsData)
-	if !strings.Contains(vsContent, "testCommands") || !strings.Contains(vsContent, "execute the following test commands") {
-		t.Fatalf("SECURITY DEFECT (R7): %s must query plan test commands and display them in the confirmation dialog before --confirm-tests", vsCodePath)
+	if !strings.Contains(vsContent, "--print-test-commands") {
+		t.Fatalf("SECURITY DEFECT (R13-2): %s must query test commands via 'artix code --print-test-commands'", vsCodePath)
+	}
+	if !strings.Contains(vsContent, "--confirm-tests-hash") {
+		t.Fatalf("SECURITY DEFECT (R13-2): %s must bind confirmation with '--confirm-tests-hash'", vsCodePath)
 	}
 
 	// 2. IntelliJ Actions.kt
@@ -123,8 +126,95 @@ func TestR7_PluginDialogContract_CommandsDisplayedBeforeConfirm(t *testing.T) {
 		t.Fatalf("failed to read %s: %v", ijPath, err)
 	}
 	ijContent := string(ijData)
-	if !strings.Contains(ijContent, "testCommands") || !strings.Contains(ijContent, "execute the following test commands") {
-		t.Fatalf("SECURITY DEFECT (R7): %s must query plan test commands and display them in the confirmation dialog before --confirm-tests", ijPath)
+	if !strings.Contains(ijContent, "--print-test-commands") {
+		t.Fatalf("SECURITY DEFECT (R13-2): %s must query test commands via 'artix code --print-test-commands'", ijPath)
+	}
+	if !strings.Contains(ijContent, "--confirm-tests-hash") {
+		t.Fatalf("SECURITY DEFECT (R13-2): %s must bind confirmation with '--confirm-tests-hash'", ijPath)
+	}
+}
+
+func TestR13_2_PrintTestCommands_And_ConfirmTestsHashBinding(t *testing.T) {
+	tempDir := t.TempDir()
+
+	specDir := filepath.Join(tempDir, "docs", "specs")
+	_ = os.MkdirAll(specDir, 0755)
+	specContent := `# Story Spec: STORY-HASH-01
+## Title
+Hash Test
+
+## Acceptance Criteria
+- Scenario: Pass
+  - Given state
+  - When action
+  - Then ok
+
+## Test Commands
+- go test ./pkg/auth/...
+- go test ./pkg/session/...
+`
+	specPath := filepath.Join(specDir, "STORY-001.md")
+	if err := os.WriteFile(specPath, []byte(specContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. artix code --print-test-commands --json
+	var stdout, stderr bytes.Buffer
+	code := RunCLI(tempDir, nil, []string{"code", "--print-test-commands", "--json", specPath}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0 for code --print-test-commands, got %d (stderr: %s)", code, stderr.String())
+	}
+
+	var printRes map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &printRes); err != nil {
+		t.Fatalf("expected valid JSON from --print-test-commands: %v (stdout: %s)", err, stdout.String())
+	}
+	if printRes["ok"] != true {
+		t.Fatalf("expected ok=true, got: %+v", printRes)
+	}
+	cmds, ok := printRes["testCommands"].([]any)
+	if !ok || len(cmds) != 2 {
+		t.Fatalf("expected 2 test commands, got: %+v", printRes["testCommands"])
+	}
+	hashStr, ok := printRes["testCommandsHash"].(string)
+	if !ok || hashStr == "" {
+		t.Fatalf("expected non-empty testCommandsHash, got: %+v", printRes["testCommandsHash"])
+	}
+
+	// 2. Mismatched hash with --confirm-tests --confirm-tests-hash must fail closed
+	stdout.Reset()
+	stderr.Reset()
+	badCode := RunCLI(tempDir, nil, []string{
+		"code", "--json",
+		"--autonomy", "supervised",
+		"--confirm-tests",
+		"--confirm-tests-hash", "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+		specPath,
+	}, &stdout, &stderr)
+	if badCode == 0 {
+		t.Fatalf("SECURITY VIOLATION (R13-2): code succeeded with mismatched --confirm-tests-hash!")
+	}
+	if !strings.Contains(stdout.String(), "mismatch") && !strings.Contains(stderr.String(), "mismatch") {
+		t.Fatalf("expected hash mismatch error message, got stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+}
+
+func TestR13_2_PlanWithoutStory_NeverProducesSpecOrCommands(t *testing.T) {
+	tempDir := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := RunCLI(tempDir, nil, []string{"plan", "--json"}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatalf("expected plan --json without story to fail with non-zero exit code")
+	}
+	var res map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &res); err != nil {
+		t.Fatalf("expected valid JSON error response from plan --json without story: %v (stdout: %s)", err, stdout.String())
+	}
+	if res["ok"] == true {
+		t.Fatalf("expected ok=false when no story is provided, got %+v", res)
+	}
+	if _, hasCmds := res["testCommands"]; hasCmds {
+		t.Fatalf("SECURITY VIOLATION (R13-2): plan without story must not output testCommands, got %+v", res)
 	}
 }
 
