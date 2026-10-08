@@ -63,29 +63,49 @@ func TestRunCLI_PersonaAndUnknown(t *testing.T) {
 	}
 }
 
-func TestRunCLI_MergeCommandValidation(t *testing.T) {
+func TestR13_5_VerifyApprovalCommand(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
-	// 1. Missing flags -> error
-	code := RunCLI("", nil, []string{"merge"}, &stdout, &stderr)
+	// 1. Missing flags -> error mentioning required flags
+	code := RunCLI("", nil, []string{"verify-approval"}, &stdout, &stderr)
 	if code != 1 {
-		t.Errorf("expected exit code 1 for merge without arguments, got %d", code)
+		t.Errorf("expected exit code 1 for verify-approval without arguments, got %d", code)
 	}
-	if !strings.Contains(stderr.String(), "--pr") || !strings.Contains(stderr.String(), "--sha") {
+	if !strings.Contains(stderr.String(), "--pr") || !strings.Contains(stderr.String(), "--sha") || !strings.Contains(stderr.String(), "--spec") {
 		t.Errorf("expected stderr mentioning required flags, got: %s", stderr.String())
+	}
+
+	// 2. Flags accepted
+	stdout.Reset()
+	stderr.Reset()
+	code = RunCLI("", nil, []string{"verify-approval", "--pr", "1", "--sha", "abcdef123456", "--spec", "S-01", "--verdict-hash", "hash1234"}, &stdout, &stderr)
+	if strings.Contains(stderr.String(), "flag provided but not defined") {
+		t.Fatalf("runVerifyApproval failed to recognize flags: %s", stderr.String())
 	}
 }
 
-func TestRunCLI_MergeCommand_AcceptsVerdictHashFlag(t *testing.T) {
+func TestR13_5_MergeCommand_Deprecated(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
-	// When --verdict-hash is supplied, verify it parses and does not fail with "flag provided but not defined"
-	code := RunCLI("", nil, []string{"merge", "--pr", "1", "--sha", "abcdef123456", "--verdict-hash", "hash1234"}, &stdout, &stderr)
-	// It will fail because forge/network/audit is not configured, but NOT with unknown flag
-	if strings.Contains(stderr.String(), "flag provided but not defined: -verdict-hash") {
-		t.Fatalf("runMerge failed to recognize --verdict-hash flag: %s", stderr.String())
+	// Plain CLI invocation of 'artix merge' must error as deprecated
+	code := RunCLI("", nil, []string{"merge"}, &stdout, &stderr)
+	if code == 0 {
+		t.Errorf("expected non-zero exit code for deprecated 'artix merge'")
 	}
-	_ = code
+	if !strings.Contains(stderr.String(), "deprecated") || !strings.Contains(stderr.String(), "verify-approval") {
+		t.Errorf("expected stderr to state 'artix merge' is deprecated and suggest 'artix verify-approval', got: %s", stderr.String())
+	}
+
+	// JSON invocation of 'artix merge' must return JSON error noting deprecation
+	stdout.Reset()
+	stderr.Reset()
+	code = RunCLI("", nil, []string{"merge", "--json"}, &stdout, &stderr)
+	if code == 0 {
+		t.Errorf("expected non-zero exit code for deprecated 'artix merge --json'")
+	}
+	if !strings.Contains(stdout.String(), "deprecated") && !strings.Contains(stderr.String(), "deprecated") {
+		t.Errorf("expected JSON/stderr output to mention deprecation, got stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
 }
 
 

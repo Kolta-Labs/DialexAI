@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"artix/pkg/audit"
 	"artix/pkg/coder"
 	"artix/pkg/git"
 	"artix/pkg/persona"
@@ -892,6 +893,114 @@ As an enterprise security officer, I want policy trust roots isolated from the e
 
 	if err == nil {
 		t.Fatalf("SECURITY VIOLATION (R2 d): enterprise binary allowed autonomous code generation using self-signed policy with env keys! (Stdout: %s)", stdout.String())
+	}
+}
+
+func TestR13_5_Phase1_CandidateAuditRecord_StatusAwaitingApproval_NotFailed(t *testing.T) {
+	t.Setenv("ARTIX_ALLOW_AUTONOMOUS", "1")
+	tempDir, err := os.MkdirTemp("", "artix-audit-status-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = tempDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v (output: %s)", args, err, string(out))
+		}
+	}
+	runGit("init")
+	runGit("config", "user.name", "Artix Tester")
+	runGit("config", "user.email", "tester@artix.ai")
+	_ = os.WriteFile(filepath.Join(tempDir, "counter.txt"), []byte("0\n"), 0644)
+	runGit("add", "counter.txt")
+	runGit("commit", "-m", "initial commit")
+
+	pushed := false
+	pusher := func(ctx context.Context, commitSHA string) error {
+		pushed = true
+		return nil
+	}
+
+	driver := git.NewDriver(tempDir)
+	repoCtx, err := repo.DetectContext(tempDir)
+	if err != nil {
+		t.Fatalf("failed to detect repo context: %v", err)
+	}
+	reg := persona.NewRegistry("")
+	coderObj, _ := coder.NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coordinator := coder.NewCoordinator(coderObj, rev, driver, box)
+
+	storySpec := &spec.StorySpec{
+		ID:           "STORY-AUDIT-01",
+		Title:        "Audit Status Test",
+		TestCommands: []string{`test -f counter.txt`},
+	}
+
+	res := coordinator.Run(context.Background(), storySpec, repoCtx, nil, nil, &coder.LoopOptions{
+		MaxRounds:             1,
+		Autonomy:              coder.AutonomyAutonomous,
+		TwoPhaseAutonomous:    true,
+		ForgePusher:           pusher,
+		TestCommandsConfirmed: true,
+		MockPatchGen: func(round int, feedback string) string {
+			return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+100\n"
+		},
+	})
+
+	if !pushed || !res.AwaitingApproval {
+		t.Fatalf("expected candidate push to succeed, got pushed=%v awaiting=%v err=%s", pushed, res.AwaitingApproval, res.Error)
+	}
+
+	// CLI also emits the outer audit event
+	auditStatus := "SUCCESS"
+	if res.AwaitingApproval {
+		auditStatus = "AWAITING_APPROVAL"
+	} else if !res.Success {
+		auditStatus = "FAILED"
+	}
+	_ = audit.Default(tempDir).Emit(audit.AuditEvent{
+		EventType: audit.EventCodeConvergence,
+		Status:    auditStatus,
+		Details: map[string]any{
+			"specId":     storySpec.ID,
+			"roundsRun":  res.RoundsRun,
+			"commitHash": res.CommitHash,
+		},
+	})
+
+	// Read .artix/audit.jsonl
+	auditPath := filepath.Join(tempDir, ".artix", "audit.jsonl")
+	data, err := os.ReadFile(auditPath)
+	if err != nil {
+		t.Fatalf("failed to read audit.jsonl: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	hasAwaitingApproval := false
+	for _, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		var evt map[string]any
+		if err := json.Unmarshal([]byte(l), &evt); err == nil {
+			if evt["status"] == "FAILED" {
+				t.Fatalf("R13-5 VIOLATION: Phase 1 candidate push logged FAILED audit status in event: %s", l)
+			}
+			if evt["status"] == "AWAITING_APPROVAL" {
+				hasAwaitingApproval = true
+			}
+		}
+	}
+	if !hasAwaitingApproval {
+		t.Fatalf("expected audit log to record status AWAITING_APPROVAL, got:\n%s", string(data))
 	}
 }
 
