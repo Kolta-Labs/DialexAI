@@ -189,6 +189,123 @@ func (s *WebhookServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	maxBodyLen := s.cfg.MaxBodyLength
+	if maxBodyLen <= 0 {
+		maxBodyLen = 65536
+	}
+
+	if eventType == "issue_comment" {
+		var commentEvent struct {
+			Action string `json:"action"`
+			Issue  struct {
+				Title             string `json:"title"`
+				Body              string `json:"body"`
+				AuthorAssociation string `json:"author_association"`
+				User              struct {
+					Login string `json:"login"`
+				} `json:"user"`
+			} `json:"issue"`
+			Comment struct {
+				Body              string `json:"body"`
+				AuthorAssociation string `json:"author_association"`
+				User              struct {
+					Login string `json:"login"`
+				} `json:"user"`
+			} `json:"comment"`
+			Sender struct {
+				Login             string `json:"login"`
+				AuthorAssociation string `json:"author_association"`
+			} `json:"sender"`
+			Repository struct {
+				CloneURL string `json:"clone_url"`
+				Name     string `json:"name"`
+				Owner    struct {
+					Login string `json:"login"`
+				} `json:"owner"`
+				DefaultBranch string `json:"default_branch"`
+			} `json:"repository"`
+		}
+
+		if err := json.Unmarshal(body, &commentEvent); err != nil {
+			http.Error(w, "invalid json payload", http.StatusBadRequest)
+			return
+		}
+
+		if commentEvent.Action != "created" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"msg":"ignored comment action"}`))
+			return
+		}
+
+		if !strings.Contains(commentEvent.Comment.Body, "/artix") {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"msg":"ignored comment: missing /artix command"}`))
+			return
+		}
+
+		if len(commentEvent.Comment.Body) > maxBodyLen || len(commentEvent.Issue.Title) > 1024 {
+			http.Error(w, fmt.Sprintf("rejected: comment body length %d exceeds maximum cap of %d bytes", len(commentEvent.Comment.Body), maxBodyLen), http.StatusRequestEntityTooLarge)
+			return
+		}
+
+		// Authorization checks: issue author, comment author, and trigger sender must all be authorized
+		if !s.isUserAuthorized(commentEvent.Issue.User.Login, commentEvent.Issue.AuthorAssociation) {
+			http.Error(w, "unauthorized issue author: parent issue author is not authorized", http.StatusForbidden)
+			return
+		}
+		if !s.isUserAuthorized(commentEvent.Comment.User.Login, commentEvent.Comment.AuthorAssociation) {
+			http.Error(w, "unauthorized comment author: /artix command author is not authorized", http.StatusForbidden)
+			return
+		}
+		senderAssoc := commentEvent.Sender.AuthorAssociation
+		if senderAssoc == "" {
+			senderAssoc = commentEvent.Comment.AuthorAssociation
+		}
+		if !s.isUserAuthorized(commentEvent.Sender.Login, senderAssoc) {
+			http.Error(w, "unauthorized sender: trigger sender is not authorized", http.StatusForbidden)
+			return
+		}
+
+		untrustedContent := commentEvent.Comment.Body + "\n" + commentEvent.Issue.Body
+		if detections := steering.ScanPromptInjection(untrustedContent); len(detections) > 0 {
+			http.Error(w, fmt.Sprintf("rejected: untrusted comment text contains prompt injection or policy/steering instructions: %s", strings.Join(detections, "; ")), http.StatusBadRequest)
+			return
+		}
+
+		if !s.canAcceptJob() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error":  "concurrency cap or queue limit exceeded",
+				"status": "rate_limited",
+			})
+			return
+		}
+
+		jobID := fmt.Sprintf("gh-comment-%d", time.Now().UnixNano())
+		target := RemoteRepoTarget{
+			CloneURL: commentEvent.Repository.CloneURL,
+			Owner:    commentEvent.Repository.Owner.Login,
+			Repo:     commentEvent.Repository.Name,
+			Branch:   commentEvent.Repository.DefaultBranch,
+		}
+		task := &RemoteWorkerTask{
+			Target: target,
+			Auth:   ForgeAuth{Type: ForgeGitHub},
+			Prompt: fmt.Sprintf("%s\n\n%s\n\nCommand: %s", commentEvent.Issue.Title, commentEvent.Issue.Body, commentEvent.Comment.Body),
+			Domain: s.cfg.DefaultDomain,
+		}
+		s.startJob(jobID, "github", target.Owner, task)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status": "queued",
+			"jobId":  jobID,
+		})
+		return
+	}
+
 	// Parse issues event
 	var event struct {
 		Action string `json:"action"`
@@ -204,7 +321,8 @@ func (s *WebhookServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Reque
 			} `json:"labels"`
 		} `json:"issue"`
 		Sender struct {
-			Login string `json:"login"`
+			Login             string `json:"login"`
+			AuthorAssociation string `json:"author_association"`
 		} `json:"sender"`
 		Repository struct {
 			CloneURL string `json:"clone_url"`
@@ -227,11 +345,6 @@ func (s *WebhookServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Cap issue body and title length
-	maxBodyLen := s.cfg.MaxBodyLength
-	if maxBodyLen <= 0 {
-		maxBodyLen = 65536
-	}
 	if len(event.Issue.Body) > maxBodyLen || len(event.Issue.Title) > 1024 {
 		http.Error(w, fmt.Sprintf("rejected: issue body length %d exceeds maximum cap of %d bytes", len(event.Issue.Body), maxBodyLen), http.StatusRequestEntityTooLarge)
 		return
@@ -247,11 +360,18 @@ func (s *WebhookServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Reque
 	}
 
 	senderLogin := event.Sender.Login
-	if senderLogin != "" && len(s.cfg.AllowedUsers) > 0 {
-		if !s.isUserAuthorized(senderLogin, "") {
-			http.Error(w, "unauthorized sender: event trigger sender is not in allowedUsers", http.StatusForbidden)
-			return
+	if senderLogin == "" {
+		senderLogin = issueAuthor
+	}
+	senderAssoc := event.Sender.AuthorAssociation
+	if senderAssoc == "" {
+		if senderLogin == issueAuthor || event.Issue.User.Login == "" {
+			senderAssoc = event.Issue.AuthorAssociation
 		}
+	}
+	if !s.isUserAuthorized(senderLogin, senderAssoc) {
+		http.Error(w, "unauthorized sender: event trigger sender is not authorized", http.StatusForbidden)
+		return
 	}
 
 	// Treat issue text as untrusted: run sanitizer and reject any policy/steering injection
@@ -708,7 +828,8 @@ func (s *WebhookServer) isUserAuthorized(username, authorAssociation string) boo
 		assoc := strings.ToUpper(strings.TrimSpace(authorAssociation))
 		return assoc == "OWNER" || assoc == "MEMBER" || assoc == "COLLABORATOR"
 	}
-	return !policy.IsEnterprise()
+	// Default-deny: empty or unverified association is strictly rejected
+	return false
 }
 
 func verifyGitHubSignature(secret, signatureHeader string, body []byte) bool {

@@ -149,8 +149,9 @@ func TestWebhookServer_GitHub_PingAndIssue(t *testing.T) {
 	issuePayload := map[string]interface{}{
 		"action": "opened",
 		"issue": map[string]string{
-			"title": "/artix: Implement caching",
-			"body":  "Add Redis caching to hot query paths",
+			"title":              "/artix: Implement caching",
+			"body":               "Add Redis caching to hot query paths",
+			"author_association": "MEMBER",
 		},
 		"repository": map[string]interface{}{
 			"clone_url": "https://github.com/org/repo.git",
@@ -334,7 +335,8 @@ func TestWebhookServer_ConcurrencyAndQueueCap(t *testing.T) {
 			"action": "opened",
 			"issue": {
 				"title": "/artix: Fix memory leak",
-				"body": "Profile traces show unbounded slice growth"
+				"body": "Profile traces show unbounded slice growth",
+				"author_association": "MEMBER"
 			},
 			"repository": {
 				"clone_url": "https://github.com/myorg/myrepo.git",
@@ -381,7 +383,11 @@ func TestWebhookServer_DeliveryDeduplication(t *testing.T) {
 
 	payload := []byte(`{
 		"action": "opened",
-		"issue": {"title": "/artix: Fix bug", "body": "description"},
+		"issue": {
+			"title": "/artix: Fix bug",
+			"body": "description",
+			"author_association": "MEMBER"
+		},
 		"repository": {
 			"clone_url": "https://github.com/myorg/myrepo.git",
 			"name": "myrepo",
@@ -425,7 +431,11 @@ func TestWebhookServer_StatePersistenceAndRecovery(t *testing.T) {
 
 	payload := []byte(`{
 		"action": "opened",
-		"issue": {"title": "/artix: Fix memory leak", "body": "description"},
+		"issue": {
+			"title": "/artix: Fix memory leak",
+			"body": "description",
+			"author_association": "MEMBER"
+		},
 		"repository": {
 			"clone_url": "https://github.com/myorg/myrepo.git",
 			"name": "myrepo",
