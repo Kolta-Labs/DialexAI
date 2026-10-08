@@ -237,34 +237,21 @@ func (s *WebhookServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// User authorization check: sender must be in AllowedUsers (if configured)
-	// or have an authorized author_association (OWNER, MEMBER, COLLABORATOR)
-	senderLogin := event.Sender.Login
-	if senderLogin == "" {
-		senderLogin = event.Issue.User.Login
+	// Author & Sender authorization check:
+	// 1. Issue author MUST be authorized (the author created the prompt/instructions).
+	// 2. Sender MUST also be authorized (the sender triggered/labeled the event).
+	issueAuthor := event.Issue.User.Login
+	if !s.isUserAuthorized(issueAuthor, event.Issue.AuthorAssociation) {
+		http.Error(w, "unauthorized issue author: prompt author is not an authorized member/owner or in allowedUsers", http.StatusForbidden)
+		return
 	}
 
-	if len(s.cfg.AllowedUsers) > 0 {
-		allowed := false
-		for _, u := range s.cfg.AllowedUsers {
-			if strings.EqualFold(u, senderLogin) {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			http.Error(w, "unauthorized sender: sender not in allowedUsers", http.StatusForbidden)
+	senderLogin := event.Sender.Login
+	if senderLogin != "" && len(s.cfg.AllowedUsers) > 0 {
+		if !s.isUserAuthorized(senderLogin, "") {
+			http.Error(w, "unauthorized sender: event trigger sender is not in allowedUsers", http.StatusForbidden)
 			return
 		}
-	} else if event.Issue.AuthorAssociation != "" {
-		assoc := strings.ToUpper(strings.TrimSpace(event.Issue.AuthorAssociation))
-		if assoc != "OWNER" && assoc != "MEMBER" && assoc != "COLLABORATOR" {
-			http.Error(w, "unauthorized sender: author_association is not owner, member, or collaborator", http.StatusForbidden)
-			return
-		}
-	} else if policy.IsEnterprise() {
-		http.Error(w, "unauthorized sender: unverifiable sender in enterprise mode", http.StatusForbidden)
-		return
 	}
 
 	// Treat issue text as untrusted: run sanitizer and reject any policy/steering injection
@@ -708,6 +695,22 @@ func (s *WebhookServer) GetJob(id string) (*JobStatus, bool) {
 	return j, ok
 }
 
+func (s *WebhookServer) isUserAuthorized(username, authorAssociation string) bool {
+	if len(s.cfg.AllowedUsers) > 0 {
+		for _, u := range s.cfg.AllowedUsers {
+			if strings.EqualFold(u, username) {
+				return true
+			}
+		}
+		return false
+	}
+	if authorAssociation != "" {
+		assoc := strings.ToUpper(strings.TrimSpace(authorAssociation))
+		return assoc == "OWNER" || assoc == "MEMBER" || assoc == "COLLABORATOR"
+	}
+	return !policy.IsEnterprise()
+}
+
 func verifyGitHubSignature(secret, signatureHeader string, body []byte) bool {
 	if !strings.HasPrefix(signatureHeader, "sha256=") {
 		return false
@@ -720,3 +723,4 @@ func verifyGitHubSignature(secret, signatureHeader string, body []byte) bool {
 
 	return hmac.Equal([]byte(expectedMAC), []byte(actualMAC))
 }
+
