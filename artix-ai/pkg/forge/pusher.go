@@ -33,73 +33,81 @@ func IsProtectedBranch(branch string) bool {
 }
 
 // IsDefinitiveRejection returns true only if the error represents an explicit human/policy rejection
-// (e.g., changes requested, dismissed review, stale commit mismatch, author self-approval),
-// and false for non-definitive states (no reviews yet, 5xx server errors, network timeouts).
+// from an authorized reviewer (e.g., changes requested, dismissed review),
+// and false for non-definitive states (bot reviews, unauthorized reviews, no reviews yet, 5xx server errors, network timeouts).
 func IsDefinitiveRejection(err error) bool {
 	if err == nil {
 		return false
 	}
 	if errors.Is(err, ErrChangesRequested) ||
-		errors.Is(err, ErrReviewDismissed) ||
-		errors.Is(err, ErrStaleCommitMismatch) ||
-		errors.Is(err, ErrAuthorSelfApproval) ||
-		errors.Is(err, ErrUnauthorizedApprover) ||
-		errors.Is(err, ErrBotApprover) ||
-		errors.Is(err, ErrForgedApproval) {
+		errors.Is(err, ErrReviewDismissed) {
 		return true
 	}
 	return false
 }
 
+// Phase1Binding holds verified Phase 1 candidate metadata.
+type Phase1Binding struct {
+	StorySpecID  string
+	CandidateSHA string
+	VerdictHash  string
+	PRBranch     string
+}
+
 // verifyPhase1AuditBinding asserts that the candidate SHA and spec ID are bound to a Phase 1 audit record.
-func verifyPhase1AuditBinding(logPath, storyID, candidateSHA string, expectedVerdictHash ...string) error {
+func verifyPhase1AuditBinding(logPath, storyID, candidateSHA string, expectedVerdictHash ...string) (*Phase1Binding, error) {
 	if strings.TrimSpace(logPath) == "" {
-		return fmt.Errorf("phase 1 audit log path is required (fail closed)")
+		return nil, fmt.Errorf("phase 1 audit log path is required (fail closed)")
+	}
+	if strings.TrimSpace(storyID) == "" {
+		return nil, fmt.Errorf("phase 1 binding requires non-empty spec ID (fail closed)")
+	}
+	if strings.TrimSpace(candidateSHA) == "" {
+		return nil, fmt.Errorf("phase 1 binding requires non-empty candidate SHA (fail closed)")
 	}
 
 	expVerdict := ""
 	if len(expectedVerdictHash) > 0 {
 		expVerdict = strings.TrimSpace(expectedVerdictHash[0])
 	}
-	if expVerdict == "" {
-		return fmt.Errorf("phase 2 verification requires expected reviewer verdict hash (fail closed)")
-	}
 
 	// Cryptographic whole-log verification
-	pubKeyHex := strings.TrimSpace(os.Getenv("ARTIX_AUDIT_PUBLIC_KEY"))
+	pubKeyHex := ""
+	isEnterprise := policy.IsEnterprise() || policy.Active().EnterpriseMode || policy.Active().RequireSignedPolicy || os.Getenv("ARTIX_ENTERPRISE") != ""
+	if !policy.IsSignedPolicyEnforced() {
+		pubKeyHex = strings.TrimSpace(os.Getenv("ARTIX_AUDIT_PUBLIC_KEY"))
+	}
 	if pubKeyHex == "" {
 		pubKeyHex = strings.TrimSpace(policy.Active().AuditPublicKey)
 	}
 
-	isEnterprise := policy.IsEnterprise() || policy.Active().EnterpriseMode || policy.Active().RequireSignedPolicy || os.Getenv("ARTIX_ENTERPRISE") != ""
-
 	if pubKeyHex != "" {
 		pubKeyBytes, decodeErr := hex.DecodeString(pubKeyHex)
 		if decodeErr != nil || len(pubKeyBytes) == 0 {
-			return fmt.Errorf("invalid ARTIX_AUDIT_PUBLIC_KEY: %w", decodeErr)
+			return nil, fmt.Errorf("invalid ARTIX_AUDIT_PUBLIC_KEY: %w", decodeErr)
 		}
 		if _, vErr := audit.VerifyLogWithPubKey(logPath, pubKeyBytes); vErr != nil {
-			return fmt.Errorf("phase 1 audit log cryptographic integrity verification failed: %w", vErr)
+			return nil, fmt.Errorf("phase 1 audit log cryptographic integrity verification failed: %w", vErr)
 		}
 	} else if isEnterprise {
-		return fmt.Errorf("enterprise mode requires an asymmetric audit public key for verification; unkeyed logs are strictly forbidden (fail closed)")
+		return nil, fmt.Errorf("enterprise mode requires an asymmetric audit public key for verification; unkeyed logs are strictly forbidden (fail closed)")
 	} else {
 		if _, vErr := audit.VerifyLog(logPath); vErr != nil {
-			return fmt.Errorf("phase 1 audit log cryptographic integrity verification failed: %w", vErr)
+			return nil, fmt.Errorf("phase 1 audit log cryptographic integrity verification failed: %w", vErr)
 		}
 	}
 
 	f, err := os.Open(logPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("phase 1 audit log missing: no records found at %s", logPath)
+			return nil, fmt.Errorf("phase 1 audit log missing: no records found at %s", logPath)
 		}
-		return fmt.Errorf("cannot read audit log: %w", err)
+		return nil, fmt.Errorf("cannot read audit log: %w", err)
 	}
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-	foundBinding := false
+	var binding *Phase1Binding
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -114,6 +122,7 @@ func verifyPhase1AuditBinding(logPath, storyID, candidateSHA string, expectedVer
 		evStoryID := ev.StorySpecID
 		evCandidateSHA := ""
 		evVerdict := ""
+		evBranch := ""
 		if ev.Details != nil {
 			if s, ok := ev.Details["storyId"].(string); ok && s != "" {
 				evStoryID = s
@@ -128,26 +137,34 @@ func verifyPhase1AuditBinding(logPath, storyID, candidateSHA string, expectedVer
 			} else if v, ok := ev.Details["verdictHash"].(string); ok && v != "" {
 				evVerdict = v
 			}
+			if b, ok := ev.Details["prBranch"].(string); ok && b != "" {
+				evBranch = b
+			}
 		}
 
 		if ev.EventType == "CANDIDATE_PUSHED" &&
 			(ev.Status == "AWAITING_APPROVAL" || ev.Status == "SUCCESS") &&
-			(storyID == "" || evStoryID == storyID) && evCandidateSHA == candidateSHA {
+			evStoryID == storyID && evCandidateSHA == candidateSHA {
 			if evVerdict == "" {
-				return fmt.Errorf("phase 1 audit record missing reviewer verdict hash (fail closed)")
+				return nil, fmt.Errorf("phase 1 audit record missing reviewer verdict hash (fail closed)")
 			}
-			if evVerdict != expVerdict {
-				return fmt.Errorf("reviewer verdict hash mismatch in Phase 1 audit record: expected %s, got %s", expVerdict, evVerdict)
+			if expVerdict != "" && evVerdict != expVerdict {
+				return nil, fmt.Errorf("reviewer verdict hash mismatch in Phase 1 audit record: expected %s, got %s", expVerdict, evVerdict)
 			}
-			foundBinding = true
+			binding = &Phase1Binding{
+				StorySpecID:  evStoryID,
+				CandidateSHA: evCandidateSHA,
+				VerdictHash:  evVerdict,
+				PRBranch:     evBranch,
+			}
 			break
 		}
 	}
 
-	if !foundBinding {
-		return fmt.Errorf("candidate SHA %s is not bound to a valid verified Phase 1 CANDIDATE_PUSHED audit record for spec %s", candidateSHA, storyID)
+	if binding == nil {
+		return nil, fmt.Errorf("candidate SHA %s is not bound to a valid verified Phase 1 CANDIDATE_PUSHED audit record for spec %s", candidateSHA, storyID)
 	}
-	return nil
+	return binding, nil
 }
 
 // NewForgePusher constructs a ForgePusher function with branch protection enforcement.
@@ -186,6 +203,9 @@ func VerifyAndMergeCandidate(ctx context.Context, driver *git.Driver, verifier f
 	if verifier == nil {
 		return nil, fmt.Errorf("verifier is required for Phase 2 forge verification")
 	}
+	if strings.TrimSpace(storyID) == "" {
+		return nil, fmt.Errorf("phase 2 verification error: --spec is required and cannot be empty (fail closed)")
+	}
 
 	workDir := ""
 	if driver != nil {
@@ -206,64 +226,76 @@ func VerifyAndMergeCandidate(ctx context.Context, driver *git.Driver, verifier f
 	isEnterprise := policy.IsEnterprise() || policy.Active().EnterpriseMode || policy.Active().RequireSignedPolicy || os.Getenv("ARTIX_ENTERPRISE") != ""
 
 	// When audit logger is provided or audit log exists or enterprise mode is active, Phase 1 binding MUST be verified
+	var binding *Phase1Binding
 	if logPath != "" {
 		if _, statErr := os.Stat(logPath); statErr == nil || isEnterprise || auditLogger != nil {
-			if err := verifyPhase1AuditBinding(logPath, storyID, candidateSHA, expVerdict); err != nil {
-				return nil, fmt.Errorf("phase 2 verification error: %w", err)
+			var bErr error
+			binding, bErr = verifyPhase1AuditBinding(logPath, storyID, candidateSHA, expVerdict)
+			if bErr != nil {
+				return nil, fmt.Errorf("phase 2 verification error: %w", bErr)
 			}
 		}
 	} else if isEnterprise || auditLogger != nil {
 		return nil, fmt.Errorf("phase 2 verification error: Phase 1 audit binding verification required (fail closed)")
 	}
 
+	actualPRBranch := prBranch
+	if binding != nil && binding.PRBranch != "" {
+		actualPRBranch = binding.PRBranch
+	}
+
 	approval, err := verifier(ctx, candidateSHA)
 	if err != nil {
-		// Clean up remote candidate branch ONLY on definitive negative reviews
-		if IsDefinitiveRejection(err) && driver != nil && remote != "" && prBranch != "" {
-			_ = CleanupCandidateBranch(ctx, driver, remote, prBranch)
+		// Clean up remote candidate branch ONLY on definitive negative reviews from authorized humans
+		if IsDefinitiveRejection(err) && driver != nil && remote != "" && actualPRBranch != "" {
+			_ = CleanupCandidateBranch(ctx, driver, remote, actualPRBranch)
 		}
 		return nil, fmt.Errorf("phase 2 forge approval verification failed: %w", err)
 	}
 
 	if approval == nil || !approval.VerifiedByForge {
 		sepErr := fmt.Errorf("separation of duties violation: %w", ErrForgedApproval)
-		if IsDefinitiveRejection(sepErr) && driver != nil && remote != "" && prBranch != "" {
-			_ = CleanupCandidateBranch(ctx, driver, remote, prBranch)
+		if IsDefinitiveRejection(sepErr) && driver != nil && remote != "" && actualPRBranch != "" {
+			_ = CleanupCandidateBranch(ctx, driver, remote, actualPRBranch)
 		}
 		return nil, sepErr
 	}
 
 	if err := policy.ValidateForgeApproval(approval, "artix-agent", "artix-agent"); err != nil {
-		if IsDefinitiveRejection(err) && driver != nil && remote != "" && prBranch != "" {
-			_ = CleanupCandidateBranch(ctx, driver, remote, prBranch)
+		if IsDefinitiveRejection(err) && driver != nil && remote != "" && actualPRBranch != "" {
+			_ = CleanupCandidateBranch(ctx, driver, remote, actualPRBranch)
 		}
 		return nil, fmt.Errorf("forge approval validation failed: %w", err)
 	}
 
+	var emitErr error
 	if auditLogger != nil {
-		_ = auditLogger.Emit(audit.AuditEvent{
+		emitErr = auditLogger.Emit(audit.AuditEvent{
 			EventType: audit.EventCodeConvergence,
 			Status:    "APPROVAL_VERIFIED",
 			Approver:  approval.ApproverUsername,
 			Details: map[string]any{
 				"storyId":    storyID,
 				"commitHash": candidateSHA,
-				"prBranch":   prBranch,
+				"prBranch":   actualPRBranch,
 				"state":      "APPROVAL_VERIFIED",
 			},
 		})
 	} else if workDir != "" {
-		_ = audit.Default(workDir).Emit(audit.AuditEvent{
+		emitErr = audit.Default(workDir).Emit(audit.AuditEvent{
 			EventType: audit.EventCodeConvergence,
 			Status:    "APPROVAL_VERIFIED",
 			Approver:  approval.ApproverUsername,
 			Details: map[string]any{
 				"storyId":    storyID,
 				"commitHash": candidateSHA,
-				"prBranch":   prBranch,
+				"prBranch":   actualPRBranch,
 				"state":      "APPROVAL_VERIFIED",
 			},
 		})
+	}
+	if emitErr != nil {
+		return nil, fmt.Errorf("phase 2 APPROVAL_VERIFIED audit emission failed: %w", emitErr)
 	}
 
 	return approval, nil

@@ -205,11 +205,32 @@ func (c *GitHubClient) VerifyPRApproval(ctx context.Context, target *RemoteRepoT
 	}
 	sort.Strings(logins)
 
-	// Any CHANGES_REQUESTED from anyone blocks autonomous merge
+	// Any CHANGES_REQUESTED
 	for _, login := range logins {
 		rev := latestByUser[login]
 		if strings.EqualFold(rev.State, "CHANGES_REQUESTED") {
-			return nil, fmt.Errorf("%w: review changes requested by %q", ErrChangesRequested, rev.User.Login)
+			isBot := strings.EqualFold(rev.User.Type, "Bot") ||
+				strings.Contains(strings.ToLower(rev.User.Login), "[bot]") ||
+				strings.HasSuffix(strings.ToLower(rev.User.Login), "-bot") ||
+				strings.EqualFold(rev.User.Login, "artix-agent") ||
+				strings.EqualFold(rev.User.Login, "artix-bot")
+			if isBot {
+				return nil, fmt.Errorf("%w: bot %q changes requested (unauthorized rejection)", ErrBotApprover, rev.User.Login)
+			}
+			pol := policy.Active()
+			if len(pol.AllowedApprovers) > 0 {
+				allowed := false
+				for _, a := range pol.AllowedApprovers {
+					if strings.EqualFold(a, rev.User.Login) {
+						allowed = true
+						break
+					}
+				}
+				if !allowed {
+					return nil, fmt.Errorf("%w: unauthorized reviewer %q changes requested", ErrUnauthorizedApprover, rev.User.Login)
+				}
+			}
+			return nil, fmt.Errorf("%w: review changes requested by authorized reviewer %q", ErrChangesRequested, rev.User.Login)
 		}
 	}
 

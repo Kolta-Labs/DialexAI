@@ -49,6 +49,7 @@ type LoopOptions struct {
 	ForgeVerifier                      func(ctx context.Context, commitSHA string) (*policy.PRApproval, error)
 	ForgePusher                        func(ctx context.Context, commitSHA string) error
 	TwoPhaseAutonomous                 bool                `json:"twoPhaseAutonomous,omitempty"`
+	PRBranch                           string              `json:"prBranch,omitempty"`
 	MaxConsecutiveIdenticalRejections int                 `json:"maxConsecutiveIdenticalRejections,omitempty"`
 	TestCommandsConfirmed              bool                `json:"testCommandsConfirmed,omitempty"`
 	ConfirmTestCommands                func(commands []string) bool
@@ -296,7 +297,7 @@ func (c *ConvergenceCoordinator) Run(
 				costReport.ExhaustionReason = reason
 				res.CostReport = costReport
 				res.Error = fmt.Sprintf("budget exhausted in round %d: %s", round, reason)
-				_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+				emitErr := audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
 					EventType: audit.EventType("budget.exhausted"),
 					Status:    "FAILED",
 					Details: map[string]any{
@@ -308,6 +309,9 @@ func (c *ConvergenceCoordinator) Run(
 						"testCommandsHash": testCommandsHash,
 					},
 				})
+				if emitErr != nil && res.Error == "" {
+					res.Error = fmt.Sprintf("budget exhausted and audit emission failed: %v", emitErr)
+				}
 				return res
 			}
 		}
@@ -490,7 +494,7 @@ func (c *ConvergenceCoordinator) Run(
 				if activeSession != nil {
 					_ = activeSession.Rollback()
 				}
-				_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+				emitErr := audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
 					EventType: audit.EventType("budget.exhausted"),
 					Status:    "FAILED",
 					Details: map[string]any{
@@ -502,6 +506,9 @@ func (c *ConvergenceCoordinator) Run(
 						"testCommandsHash": testCommandsHash,
 					},
 				})
+				if emitErr != nil && res.Error == "" {
+					res.Error = fmt.Sprintf("budget exhausted and audit emission failed: %v", emitErr)
+				}
 				return res
 			}
 		} else {
@@ -619,31 +626,37 @@ func (c *ConvergenceCoordinator) Run(
 
 					// If ForgePusher is configured, push the candidate commit to the PR branch on the remote
 					if opts != nil && opts.ForgePusher != nil {
+						branch := opts.PRBranch
+						if branch == "" {
+							branch = os.Getenv("ARTIX_PR_BRANCH")
+						}
+						details := map[string]any{
+							"storyId":             s.ID,
+							"title":               s.Title,
+							"candidateSHA":        newCommitSHA,
+							"commitHash":          newCommitSHA,
+							"roundsRun":           round,
+							"reviewerVerdictHash": verdictHash,
+						}
+						if branch != "" {
+							details["prBranch"] = branch
+						}
+
 						// Emit Phase 1 CANDIDATE_PUSHED audit record BEFORE pushing, failing closed on emit error
-						if auditLogger != nil {
-							emitErr := auditLogger.Emit(audit.AuditEvent{
-								EventType:   "CANDIDATE_PUSHED",
-								Status:      "AWAITING_APPROVAL",
-								StorySpecID: s.ID,
-								Details: map[string]any{
-									"storyId":             s.ID,
-									"title":               s.Title,
-									"candidateSHA":        newCommitSHA,
-									"commitHash":          newCommitSHA,
-									"roundsRun":           round,
-									"reviewerVerdictHash": verdictHash,
-								},
-							})
-							if emitErr != nil {
-								safeRollbackCandidate()
-								res.Success = false
-								res.Error = fmt.Sprintf("phase 1 candidate audit emission failed: %v (commit aborted, changes rolled back)", emitErr)
-								return res
-							}
-						} else if policy.IsEnterprise() || policy.Active().RequireForgeApproval || os.Getenv("ARTIX_ENTERPRISE") != "" {
+						l := auditLogger
+						if l == nil {
+							l = audit.Default(repoCtx.RootDir)
+						}
+						emitErr := l.Emit(audit.AuditEvent{
+							EventType:   "CANDIDATE_PUSHED",
+							Status:      "AWAITING_APPROVAL",
+							StorySpecID: s.ID,
+							Details:     details,
+						})
+						if emitErr != nil {
 							safeRollbackCandidate()
 							res.Success = false
-							res.Error = "phase 1 candidate push blocked: audit logger is required in enterprise mode"
+							res.Error = fmt.Sprintf("phase 1 candidate audit emission failed: %v (commit aborted, changes rolled back)", emitErr)
 							return res
 						}
 
@@ -777,7 +790,7 @@ func (c *ConvergenceCoordinator) Run(
 		res.Error = fmt.Sprintf("failed to converge after %d rounds", maxRounds)
 	}
 
-	_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+	emitErr := audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
 		EventType: audit.EventCodeConvergence,
 		Status:    "FAILED",
 		Details: map[string]any{
@@ -790,6 +803,9 @@ func (c *ConvergenceCoordinator) Run(
 			"error":            res.Error,
 		},
 	})
+	if emitErr != nil && res.Error == "" {
+		res.Error = fmt.Sprintf("audit emission failed: %v", emitErr)
+	}
 
 	return res
 }

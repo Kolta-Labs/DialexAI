@@ -700,8 +700,8 @@ func runMerge(cwd string, args []string, human io.Writer, sendJSON func(any), is
 		return 1
 	}
 
-	if *shaFlag == "" || *prFlag <= 0 {
-		errStr := "Error: --pr <number> and --sha <commit-sha> are required for merge verification"
+	if *shaFlag == "" || *prFlag <= 0 || strings.TrimSpace(*specIDFlag) == "" {
+		errStr := "Error: --pr <number>, --sha <commit-sha>, and --spec <spec-id> are required for merge verification"
 		if isJSON {
 			sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
 		}

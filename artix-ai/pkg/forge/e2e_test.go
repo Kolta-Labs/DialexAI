@@ -993,7 +993,7 @@ func TestR8_2_VerifyPhase1AuditBinding_CryptographicIntegrity(t *testing.T) {
 	logPath := logger.LogPath()
 
 	// 1. Empty audit log path must FAIL CLOSED
-	err := verifyPhase1AuditBinding("", "SPEC-1", headSHA, "")
+	_, err := verifyPhase1AuditBinding("", "SPEC-1", headSHA, "")
 	if err == nil {
 		t.Fatalf("SECURITY VIOLATION (R8-2): verifyPhase1AuditBinding with empty log path succeeded (must fail closed)")
 	}
@@ -1016,13 +1016,13 @@ func TestR8_2_VerifyPhase1AuditBinding_CryptographicIntegrity(t *testing.T) {
 	}
 
 	// Valid binding succeeds
-	err = verifyPhase1AuditBinding(logPath, "SPEC-R8-2", headSHA, verdictHash)
+	_, err = verifyPhase1AuditBinding(logPath, "SPEC-R8-2", headSHA, verdictHash)
 	if err != nil {
 		t.Fatalf("expected valid audit binding to succeed, got: %v", err)
 	}
 
 	// 3. Reviewer verdict hash mismatch must FAIL
-	err = verifyPhase1AuditBinding(logPath, "SPEC-R8-2", headSHA, "wrong-verdict-hash-0000")
+	_, err = verifyPhase1AuditBinding(logPath, "SPEC-R8-2", headSHA, "wrong-verdict-hash-0000")
 	if err == nil {
 		t.Fatalf("SECURITY VIOLATION (R8-2): verifyPhase1AuditBinding succeeded with mismatched reviewer verdict hash")
 	}
@@ -1040,7 +1040,7 @@ func TestR8_2_VerifyPhase1AuditBinding_CryptographicIntegrity(t *testing.T) {
 			"candidateSHA": headSHA,
 		},
 	})
-	if err := verifyPhase1AuditBinding(failedLogger.LogPath(), "SPEC-FAILED", headSHA, "some-verdict-hash"); err == nil {
+	if _, err := verifyPhase1AuditBinding(failedLogger.LogPath(), "SPEC-FAILED", headSHA, "some-verdict-hash"); err == nil {
 		t.Fatalf("SECURITY VIOLATION (R8-2): verifyPhase1AuditBinding accepted a FAILED candidate push event")
 	}
 
@@ -1050,7 +1050,7 @@ func TestR8_2_VerifyPhase1AuditBinding_CryptographicIntegrity(t *testing.T) {
 	_, _ = f.WriteString(forgedLine)
 	_ = f.Close()
 
-	if err := verifyPhase1AuditBinding(logPath, "SPEC-R8-2", headSHA, verdictHash); err == nil {
+	if _, err := verifyPhase1AuditBinding(logPath, "SPEC-R8-2", headSHA, verdictHash); err == nil {
 		t.Fatalf("SECURITY VIOLATION (R8-2): verifyPhase1AuditBinding accepted log with appended forged record")
 	}
 }
@@ -1147,7 +1147,7 @@ func TestR9_2_CryptographicAuditBinding_HostileEvaluatorCorpus(t *testing.T) {
 			},
 		})
 
-		err := verifyPhase1AuditBinding(unsignedLogger.LogPath(), "SPEC-UNSIGNED", headSHA, "hash1234567890abcdef")
+		_, err := verifyPhase1AuditBinding(unsignedLogger.LogPath(), "SPEC-UNSIGNED", headSHA, "hash1234567890abcdef")
 		if err == nil {
 			t.Fatalf("SECURITY VIOLATION (R9-2 a): verifyPhase1AuditBinding accepted unsigned log in enterprise mode!")
 		}
@@ -1172,7 +1172,7 @@ func TestR9_2_CryptographicAuditBinding_HostileEvaluatorCorpus(t *testing.T) {
 			},
 		})
 
-		err := verifyPhase1AuditBinding(logger.LogPath(), "SPEC-MALFORMED", headSHA, "hash1234567890abcdef")
+		_, err := verifyPhase1AuditBinding(logger.LogPath(), "SPEC-MALFORMED", headSHA, "hash1234567890abcdef")
 		if err == nil {
 			t.Fatalf("SECURITY VIOLATION (R9-2 b): verifyPhase1AuditBinding silently accepted malformed public key!")
 		}
@@ -1200,12 +1200,12 @@ func TestR9_2_CryptographicAuditBinding_HostileEvaluatorCorpus(t *testing.T) {
 		})
 
 		// Calling with empty expected verdict
-		if err := verifyPhase1AuditBinding(logger.LogPath(), "SPEC-NO-VERDICT", headSHA, ""); err == nil {
+		if _, err := verifyPhase1AuditBinding(logger.LogPath(), "SPEC-NO-VERDICT", headSHA, ""); err == nil {
 			t.Fatalf("SECURITY VIOLATION (R9-2 c): verifyPhase1AuditBinding succeeded when expected verdict hash was empty!")
 		}
 
 		// Calling with expected verdict against record missing verdict
-		if err := verifyPhase1AuditBinding(logger.LogPath(), "SPEC-NO-VERDICT", headSHA, "some-verdict-hash"); err == nil {
+		if _, err := verifyPhase1AuditBinding(logger.LogPath(), "SPEC-NO-VERDICT", headSHA, "some-verdict-hash"); err == nil {
 			t.Fatalf("SECURITY VIOLATION (R9-2 c): verifyPhase1AuditBinding succeeded when recorded verdict hash was empty!")
 		}
 	})
@@ -1230,7 +1230,7 @@ func TestR9_2_CryptographicAuditBinding_HostileEvaluatorCorpus(t *testing.T) {
 		})
 
 
-		if err := verifyPhase1AuditBinding(logger.LogPath(), "SPEC-ORD-SUCCESS", headSHA, "some-hash-1234"); err == nil {
+		if _, err := verifyPhase1AuditBinding(logger.LogPath(), "SPEC-ORD-SUCCESS", headSHA, "some-hash-1234"); err == nil {
 			t.Fatalf("SECURITY VIOLATION (R9-2 d): verifyPhase1AuditBinding accepted ordinary EventCodeConvergence event instead of CANDIDATE_PUSHED!")
 		}
 	})

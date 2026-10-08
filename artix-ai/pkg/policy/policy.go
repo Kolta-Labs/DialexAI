@@ -207,9 +207,12 @@ func ResetCache() {
 // It enforces that the policy file must be root-owned (UID 0) or cryptographically signed.
 func LoadPolicy(path string) (*Policy, error) {
 	if path == "" {
-		if envPath := os.Getenv("ARTIX_POLICY_PATH"); envPath != "" {
-			path = envPath
-		} else {
+		if !isSignedPolicyEnforced() {
+			if envPath := os.Getenv("ARTIX_POLICY_PATH"); envPath != "" {
+				path = envPath
+			}
+		}
+		if path == "" {
 			path = DefaultPolicyPath
 		}
 	}
@@ -275,18 +278,20 @@ func verifyPolicySignature(policyPath string) (bool, error) {
 			}
 		}
 
-		// Also check ARTIX_POLICY_TRUSTED_PUBKEY env var if present
-		if envPubHex := os.Getenv("ARTIX_POLICY_TRUSTED_PUBKEY"); envPubHex != "" {
-			if rawPub, err := hex.DecodeString(strings.TrimSpace(envPubHex)); err == nil && len(rawPub) == ed25519.PublicKeySize {
-				if ed25519.Verify(ed25519.PublicKey(rawPub), content, sigBytes) {
-					return true, nil
+		// Also check ARTIX_POLICY_TRUSTED_PUBKEY env var ONLY if enterprise ldflag is NOT enforced
+		if !isSignedPolicyEnforced() {
+			if envPubHex := os.Getenv("ARTIX_POLICY_TRUSTED_PUBKEY"); envPubHex != "" {
+				if rawPub, err := hex.DecodeString(strings.TrimSpace(envPubHex)); err == nil && len(rawPub) == ed25519.PublicKeySize {
+					if ed25519.Verify(ed25519.PublicKey(rawPub), content, sigBytes) {
+						return true, nil
+					}
 				}
 			}
 		}
 	}
 
-	// 2. Symmetric HMAC Verification (Fallback)
-	if len(trustedKeys) == 0 {
+	// 2. Symmetric HMAC Verification (Fallback) - Only for non-enterprise binaries
+	if !isSignedPolicyEnforced() && len(trustedKeys) == 0 {
 		// Check ARTIX_POLICY_SIGNING_KEY in environment for verification if available
 		if k := os.Getenv("ARTIX_POLICY_SIGNING_KEY"); k != "" {
 			mac := hmac.New(sha256.New, []byte(k))
@@ -302,12 +307,14 @@ func verifyPolicySignature(policyPath string) (bool, error) {
 		return false, errors.New("no trusted signing keys registered to verify policy signature")
 	}
 
-	for _, secret := range trustedKeys {
-		mac := hmac.New(sha256.New, []byte(secret))
-		mac.Write(content)
-		expected := hex.EncodeToString(mac.Sum(nil))
-		if hmac.Equal([]byte(expected), []byte(trimmedSig)) {
-			return true, nil
+	if !isSignedPolicyEnforced() {
+		for _, secret := range trustedKeys {
+			mac := hmac.New(sha256.New, []byte(secret))
+			mac.Write(content)
+			expected := hex.EncodeToString(mac.Sum(nil))
+			if hmac.Equal([]byte(expected), []byte(trimmedSig)) {
+				return true, nil
+			}
 		}
 	}
 
@@ -343,6 +350,11 @@ var RequireSignedPolicyLdflag = "false"
 // RequireSignedPolicyFlag can be set at compile time via -ldflags "-X artix/pkg/policy.RequireSignedPolicyFlag=true"
 // or programmatically via EnforceSignedPolicy.
 var RequireSignedPolicyFlag = "false"
+
+// IsSignedPolicyEnforced returns whether enterprise signed policy enforcement is active via compile-time flag.
+func IsSignedPolicyEnforced() bool {
+	return isSignedPolicyEnforced()
+}
 
 func isSignedPolicyEnforced() bool {
 	flagBool := strings.EqualFold(RequireSignedPolicyFlag, "true") || RequireSignedPolicyFlag == "1"
@@ -395,8 +407,10 @@ func Active() *Policy {
 	}
 
 	policyPath := DefaultPolicyPath
-	if envPath := os.Getenv("ARTIX_POLICY_PATH"); envPath != "" {
-		policyPath = envPath
+	if !isSignedPolicyEnforced() {
+		if envPath := os.Getenv("ARTIX_POLICY_PATH"); envPath != "" {
+			policyPath = envPath
+		}
 	}
 	p, err := LoadPolicy(policyPath)
 	if err == nil && p != nil && p.IsVerified {
