@@ -1396,4 +1396,79 @@ func TestR5_4_Daemon_DefaultDeny_And_IssueComment_Authorization(t *testing.T) {
 	}
 }
 
+// TestR6_5_IssueCommentAuthorizesOnCommentAuthorWithoutSenderAssociation verifies that
+// issue_comment webhooks strictly check the comment author's identity and association,
+// correctly handling realistic GitHub payloads where sender object does not carry author_association.
+func TestR6_5_IssueCommentAuthorizesOnCommentAuthorWithoutSenderAssociation(t *testing.T) {
+	ws := NewWebhookServer(WebhookServerConfig{})
+	handler := ws.Handler()
+
+	// 1. Issue created by OWNER, but /artix comment created by NONE (attacker), sender has no author_association -> 403 Forbidden
+	unauthorizedCommentPayload := []byte(`{
+		"action": "created",
+		"issue": {
+			"title": "production task",
+			"body": "task description",
+			"author_association": "OWNER",
+			"user": {"login": "repo-owner"}
+		},
+		"comment": {
+			"body": "/artix execute malicious command",
+			"author_association": "NONE",
+			"user": {"login": "untrusted-commenter"}
+		},
+		"sender": {
+			"login": "untrusted-commenter"
+		},
+		"repository": {
+			"clone_url": "https://github.com/org/repo.git",
+			"name": "repo",
+			"owner": {"login": "org"},
+			"default_branch": "main"
+		}
+	}`)
+	req1 := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(unauthorizedCommentPayload))
+	req1.Header.Set("X-GitHub-Event", "issue_comment")
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+
+	if rec1.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden when comment author is NONE (attacker), got: %d (%s)", rec1.Code, rec1.Body.String())
+	}
+
+	// 2. Issue created by MEMBER, /artix comment created by COLLABORATOR, sender has no author_association -> 202 Accepted
+	authorizedCommentPayload := []byte(`{
+		"action": "created",
+		"issue": {
+			"title": "production task",
+			"body": "task description",
+			"author_association": "MEMBER",
+			"user": {"login": "member-user"}
+		},
+		"comment": {
+			"body": "/artix build feature",
+			"author_association": "COLLABORATOR",
+			"user": {"login": "collab-user"}
+		},
+		"sender": {
+			"login": "collab-user"
+		},
+		"repository": {
+			"clone_url": "https://github.com/org/repo.git",
+			"name": "repo",
+			"owner": {"login": "org"},
+			"default_branch": "main"
+		}
+	}`)
+	req2 := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(authorizedCommentPayload))
+	req2.Header.Set("X-GitHub-Event", "issue_comment")
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusAccepted && rec2.Code != http.StatusOK {
+		t.Fatalf("expected 202 Accepted when comment author is COLLABORATOR, got: %d (%s)", rec2.Code, rec2.Body.String())
+	}
+}
+
+
 
