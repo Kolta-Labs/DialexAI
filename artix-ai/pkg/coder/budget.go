@@ -47,11 +47,6 @@ type TokenBudget struct {
 	LedgerPath      string             `json:"ledgerPath,omitempty"`
 }
 
-// ValidateLedgerSecurity verifies that the ledger file has secure permissions (mode 0600) and is user-owned.
-func (b *TokenBudget) ValidateLedgerSecurity() error {
-	return nil
-}
-
 // LoadBudgetFromEnv loads budget limits from policy and ARTIX_BUDGET_* environment variables.
 func LoadBudgetFromEnv() *TokenBudget {
 	b := &TokenBudget{}
@@ -228,11 +223,18 @@ func (b *TokenBudget) CheckExhaustion() (bool, string) {
 	return false, ""
 }
 
+// TaskLedgerEntry records total token consumption and USD cost for a specific task.
+type TaskLedgerEntry struct {
+	Tokens int64   `json:"tokens"`
+	USD    float64 `json:"usd"`
+}
+
 type sharedLedgerData struct {
-	TeamTokens map[string]int     `json:"teamTokens"`
-	TeamCost   map[string]float64 `json:"teamCost"`
-	DayTokens  map[string]int     `json:"dayTokens"`
-	DayCost    map[string]float64 `json:"dayCost"`
+	TeamTokens map[string]int              `json:"teamTokens"`
+	TeamCost   map[string]float64          `json:"teamCost"`
+	DayTokens  map[string]int              `json:"dayTokens"`
+	DayCost    map[string]float64          `json:"dayCost"`
+	Tasks      map[string]TaskLedgerEntry  `json:"tasks"`
 }
 
 func (b *TokenBudget) getEffectiveLedgerPath() string {
@@ -242,12 +244,42 @@ func (b *TokenBudget) getEffectiveLedgerPath() string {
 	if p := os.Getenv("ARTIX_BUDGET_LEDGER"); p != "" {
 		return p
 	}
-	return filepath.Join(os.TempDir(), "artix-budget-ledger.json")
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		dir := filepath.Join(home, ".artix")
+		_ = os.MkdirAll(dir, 0700)
+		return filepath.Join(dir, "budget-ledger.json")
+	}
+	return filepath.Join(os.TempDir(), fmt.Sprintf("artix-budget-ledger-%d.json", os.Getuid()))
+}
+
+// ValidateLedgerSecurity verifies that the ledger file has secure permissions (mode 0600) and is user-owned.
+func (b *TokenBudget) ValidateLedgerSecurity() error {
+	path := b.getEffectiveLedgerPath()
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	mode := info.Mode()
+	if mode.Perm()&0077 != 0 {
+		return fmt.Errorf("insecure ledger file permissions %04o on %s: group/other access forbidden; must be mode 0600 and user-owned", mode.Perm(), path)
+	}
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+		if int(stat.Uid) != os.Getuid() {
+			return fmt.Errorf("ledger file %s owned by uid %d, expected current user uid %d (refusing untrusted ledger)", path, stat.Uid, os.Getuid())
+		}
+	}
+	return nil
 }
 
 // SyncWithSharedLedger refreshes UsedTeamTokens, UsedDayTokens, UsedTeamCost, UsedDayCost
 // from the atomic shared cross-process ledger file using kernel file locking.
 func (b *TokenBudget) SyncWithSharedLedger() {
+	if err := b.ValidateLedgerSecurity(); err != nil {
+		return
+	}
 	path := b.getEffectiveLedgerPath()
 	withFileLock(path, func() {
 		data, err := os.ReadFile(path)
@@ -292,6 +324,10 @@ type ProviderUsage struct {
 // reconciling with provider-reported usage when available, and atomically updates the shared ledger
 // under an OS kernel file lock.
 func (b *TokenBudget) RecordRoundUsage(roundTokens int, roundCostUSD float64, providerUsage ...*ProviderUsage) {
+	if err := b.ValidateLedgerSecurity(); err != nil {
+		return
+	}
+
 	// Reconcile against provider-reported usage if present
 	if len(providerUsage) > 0 && providerUsage[0] != nil {
 		pu := providerUsage[0]
@@ -332,6 +368,9 @@ func (b *TokenBudget) RecordRoundUsage(roundTokens int, roundCostUSD float64, pr
 		if state.DayCost == nil {
 			state.DayCost = make(map[string]float64)
 		}
+		if state.Tasks == nil {
+			state.Tasks = make(map[string]TaskLedgerEntry)
+		}
 
 		today := time.Now().Format("2006-01-02")
 		teamID := b.TeamID
@@ -344,13 +383,25 @@ func (b *TokenBudget) RecordRoundUsage(roundTokens int, roundCostUSD float64, pr
 		state.DayTokens[today] += roundTokens
 		state.DayCost[today] += roundCostUSD
 
+		if b.TaskID != "" {
+			curTask := state.Tasks[b.TaskID]
+			curTask.Tokens += int64(roundTokens)
+			curTask.USD += roundCostUSD
+			state.Tasks[b.TaskID] = curTask
+		}
+
 		b.UsedTeamTokens = state.TeamTokens[teamID]
 		b.UsedTeamCost = state.TeamCost[teamID]
 		b.UsedDayTokens = state.DayTokens[today]
 		b.UsedDayCost = state.DayCost[today]
 
 		if marshaled, err := json.MarshalIndent(state, "", "  "); err == nil {
+			dir := filepath.Dir(path)
+			if dir != "" {
+				_ = os.MkdirAll(dir, 0700)
+			}
 			_ = os.WriteFile(path, marshaled, 0600)
+			_ = os.Chmod(path, 0600)
 		}
 	})
 }
