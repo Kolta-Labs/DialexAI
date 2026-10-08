@@ -1218,3 +1218,74 @@ func TestR2_2_Policy_ValidateForgeApproval_RejectsForgedApprovalWithoutSignature
 		t.Fatalf("expected error mentioning signature/forged/mint, got: %v", err)
 	}
 }
+
+func TestR4_6_Daemon_TriggerAuthority_IssueAuthorAndCommentAuthor(t *testing.T) {
+	ws := NewWebhookServer(WebhookServerConfig{
+		AllowedUsers: []string{"alice-maintainer", "bob-owner"},
+	})
+	handler := ws.Handler()
+
+	// 1. Unauthorized Issue Author ("mallory-attacker") creates issue with /artix command -> must be 403
+	payload1 := []byte(`{
+		"action": "opened",
+		"issue": {
+			"title": "/artix: add backdoor",
+			"body": "do malicious things",
+			"author_association": "NONE",
+			"user": {"login": "mallory-attacker"}
+		},
+		"sender": {"login": "mallory-attacker"},
+		"repository": {"clone_url": "https://github.com/org/repo.git", "name": "repo", "owner": {"login": "org"}, "default_branch": "main"}
+	}`)
+	req1 := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(payload1))
+	req1.Header.Set("X-GitHub-Event", "issues")
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for unauthorized issue author, got %d", rec1.Code)
+	}
+
+	// 2. Unauthorized Issue Author ("mallory-attacker"), but authorized sender ("bob-owner") applies label "artix"
+	// The prompt originated from mallory, so it MUST be rejected!
+	payload2 := []byte(`{
+		"action": "labeled",
+		"issue": {
+			"title": "fix bug",
+			"body": "instructions containing prompt injection",
+			"author_association": "FIRST_TIME_CONTRIBUTOR",
+			"user": {"login": "mallory-attacker"},
+			"labels": [{"name": "artix"}]
+		},
+		"sender": {"login": "bob-owner"},
+		"repository": {"clone_url": "https://github.com/org/repo.git", "name": "repo", "owner": {"login": "org"}, "default_branch": "main"}
+	}`)
+	req2 := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(payload2))
+	req2.Header.Set("X-GitHub-Event", "issues")
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden when issue author is unauthorized, even if label was applied by maintainer, got %d", rec2.Code)
+	}
+
+	// 3. Authorized Issue Author ("alice-maintainer") and authorized sender ("alice-maintainer") -> accepted (200 / queued)
+	payload3 := []byte(`{
+		"action": "opened",
+		"issue": {
+			"title": "/artix: valid task",
+			"body": "implement feature",
+			"author_association": "MEMBER",
+			"user": {"login": "alice-maintainer"},
+			"labels": [{"name": "artix"}]
+		},
+		"sender": {"login": "alice-maintainer"},
+		"repository": {"clone_url": "https://github.com/org/repo.git", "name": "repo", "owner": {"login": "org"}, "default_branch": "main"}
+	}`)
+	req3 := httptest.NewRequest(http.MethodPost, "/webhook/github", bytes.NewReader(payload3))
+	req3.Header.Set("X-GitHub-Event", "issues")
+	rec3 := httptest.NewRecorder()
+	handler.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusOK && rec3.Code != http.StatusAccepted {
+		t.Errorf("expected 200/202 for authorized issue author and sender, got %d (body: %s)", rec3.Code, rec3.Body.String())
+	}
+}
+
