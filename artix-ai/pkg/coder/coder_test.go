@@ -1759,6 +1759,48 @@ func TestR8_TestCommandIndirection_ComprehensiveBuildAndScriptClosure(t *testing
 			patchFile:   "tox.ini",
 			patchDiff:   "diff --git a/tox.ini b/tox.ini\n--- a/tox.ini\n+++ b/tox.ini\n@@ -1,2 +1,3 @@\n+[tox]\n",
 		},
+		{
+			name:        "go_test_with_tools_go",
+			testCommand: "go test ./...",
+			patchFile:   "tools.go",
+			patchDiff:   "diff --git a/tools.go b/tools.go\n--- a/tools.go\n+++ b/tools.go\n@@ -1,2 +1,3 @@\n+// +build tools\n",
+		},
+		{
+			name:        "go_test_with_go_sum",
+			testCommand: "go test ./...",
+			patchFile:   "go.sum",
+			patchDiff:   "diff --git a/go.sum b/go.sum\n--- a/go.sum\n+++ b/go.sum\n@@ -1,2 +1,3 @@\n+example.com/pkg v1.0.0 h1:abc=\n",
+		},
+		{
+			name:        "go_test_with_vendor_file",
+			testCommand: "go test ./...",
+			patchFile:   "vendor/modules.txt",
+			patchDiff:   "diff --git a/vendor/modules.txt b/vendor/modules.txt\n--- a/vendor/modules.txt\n+++ b/vendor/modules.txt\n@@ -1,2 +1,3 @@\n+# github.com/foo/bar v1.0.0\n",
+		},
+		{
+			name:        "go_test_with_testmain",
+			testCommand: "go test ./...",
+			patchFile:   "pkg/service/testmain.go",
+			patchDiff:   "diff --git a/pkg/service/testmain.go b/pkg/service/testmain.go\n--- a/pkg/service/testmain.go\n+++ b/pkg/service/testmain.go\n@@ -1,2 +1,3 @@\n+func TestMain(m *testing.M) { os.Exit(0) }\n",
+		},
+		{
+			name:        "go_test_with_dockerfile",
+			testCommand: "go test ./...",
+			patchFile:   "Dockerfile",
+			patchDiff:   "diff --git a/Dockerfile b/Dockerfile\n--- a/Dockerfile\n+++ b/Dockerfile\n@@ -1,2 +1,3 @@\n+FROM alpine\n",
+		},
+		{
+			name:        "go_test_with_github_workflow",
+			testCommand: "go test ./...",
+			patchFile:   ".github/workflows/ci.yml",
+			patchDiff:   "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -1,2 +1,3 @@\n+name: CI\n",
+		},
+		{
+			name:        "go_test_with_custom_config",
+			testCommand: "go test ./...",
+			patchFile:   "config/settings.yaml",
+			patchDiff:   "diff --git a/config/settings.yaml b/config/settings.yaml\n--- a/config/settings.yaml\n+++ b/config/settings.yaml\n@@ -1,2 +1,3 @@\n+mode: debug\n",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1804,6 +1846,61 @@ func TestR8_TestCommandIndirection_ComprehensiveBuildAndScriptClosure(t *testing
 				t.Fatalf("SECURITY VIOLATION: case %s with command %q and modified file %q succeeded instead of blocking indirection!", tc.name, tc.testCommand, tc.patchFile)
 			}
 		})
+	}
+}
+
+func TestR13_4_Indirection_Allowlist_And_SpecialGoFiles(t *testing.T) {
+	cmd := "go test ./..."
+
+	// 1. Allowlisted files must return false (allowed)
+	allowlisted := []string{
+		"README.md",
+		"docs/specs/STORY-001.md",
+		"notes.txt",
+		"assets/logo.png",
+		"docs/architecture.rst",
+	}
+	for _, f := range allowlisted {
+		if IsScriptOrBuildIndirection(cmd, []string{f}) {
+			t.Errorf("expected allowlisted file %q to NOT be marked as indirection", f)
+		}
+	}
+
+	// 2. Regular source files must return false (allowed)
+	standardSources := []string{
+		"pkg/service/user.go",
+		"pkg/service/user_test.go",
+		"cmd/server/main.go",
+	}
+	for _, f := range standardSources {
+		if IsScriptOrBuildIndirection(cmd, []string{f}) {
+			t.Errorf("expected standard Go source file %q to NOT be marked as indirection", f)
+		}
+	}
+
+	// 3. Special Go files and non-test/non-source files must return true (blocked indirection)
+	blockedFiles := []string{
+		"tools.go",
+		"go.sum",
+		"go.mod",
+		"go.work",
+		"vendor/github.com/foo/bar/lib.go",
+		"vendor/modules.txt",
+		"testmain_hook.go",
+		"Makefile",
+		"Dockerfile",
+		"scripts/build.sh",
+		"gradle/wrapper/gradle-wrapper.properties",
+		"package.json",
+		"pom.xml",
+		".github/workflows/ci.yml",
+		"config/app.yaml",
+		"tox.ini",
+	}
+	for _, f := range blockedFiles {
+		if !IsScriptOrBuildIndirection(cmd, []string{f}) {
+			t.Errorf("expected file %q to be marked as build/script indirection (blocked)", f)
+		}
 	}
 }
 
