@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"artix/pkg/policy"
 )
 
 // Isolation names how a command was confined. Reported in ExecResult so the UI and docs never
@@ -68,7 +70,7 @@ func BuildBwrapArgs(writable []string, net bool, cmdStr string) []string {
 func confine(cwd, cmdStr string) (*exec.Cmd, string) {
 	plain := func() (*exec.Cmd, string) { return exec.Command("sh", "-c", cmdStr), IsolationProcessGroup }
 
-	isEnterprise := os.Getenv("ARTIX_ENTERPRISE") == "1" || os.Getenv("KRITIX_ENTERPRISE") == "1"
+	isEnterprise := policy.IsEnterprise()
 	sandboxOff := os.Getenv("ARTIX_SANDBOX") == "off" || os.Getenv("KRITIX_SANDBOX") == "off"
 
 	if sandboxOff && !isEnterprise {

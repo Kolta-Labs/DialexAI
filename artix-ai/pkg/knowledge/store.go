@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"artix/pkg/policy"
 )
 
 // Store manages persistence of Knowledge Items with schema versioning and enterprise isolation.
@@ -21,7 +23,7 @@ type Store struct {
 
 // NewStore creates a knowledge store for a repository.
 func NewStore(projectDir string) *Store {
-	isEnterprise := os.Getenv("ARTIX_ENTERPRISE") == "1" || os.Getenv("KRITIX_ENTERPRISE") == "1"
+	isEnterprise := policy.IsEnterprise()
 
 	globalDir := ""
 	if !isEnterprise {

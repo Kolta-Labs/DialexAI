@@ -73,7 +73,7 @@ func verifyPhase1AuditBinding(logPath, storyID, candidateSHA string, expectedVer
 
 	// Cryptographic whole-log verification
 	pubKeyHex := ""
-	isEnterprise := policy.IsEnterprise() || policy.Active().EnterpriseMode || policy.Active().RequireSignedPolicy || os.Getenv("ARTIX_ENTERPRISE") != ""
+	isEnterprise := policy.IsEnterprise()
 	if !policy.IsSignedPolicyEnforced() {
 		pubKeyHex = strings.TrimSpace(os.Getenv("ARTIX_AUDIT_PUBLIC_KEY"))
 	}
@@ -223,7 +223,7 @@ func VerifyAndMergeCandidate(ctx context.Context, driver *git.Driver, verifier f
 		expVerdict = strings.TrimSpace(expectedVerdictHash[0])
 	}
 
-	isEnterprise := policy.IsEnterprise() || policy.Active().EnterpriseMode || policy.Active().RequireSignedPolicy || os.Getenv("ARTIX_ENTERPRISE") != ""
+	isEnterprise := policy.IsEnterprise()
 
 	// When audit logger is provided or audit log exists or enterprise mode is active, Phase 1 binding MUST be verified
 	var binding *Phase1Binding
