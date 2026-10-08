@@ -626,6 +626,20 @@ func (c *ConvergenceCoordinator) Run(
 						}
 						// In two-phase autonomous mode or when verification is handled asynchronously by a later step
 						if opts.TwoPhaseAutonomous || opts.ForgeVerifier == nil {
+							if auditLogger != nil {
+								_ = auditLogger.Emit(audit.AuditEvent{
+									EventType:   "CANDIDATE_PUSHED",
+									Status:      "AWAITING_APPROVAL",
+									StorySpecID: s.ID,
+									Details: map[string]any{
+										"storyId":      s.ID,
+										"title":        s.Title,
+										"candidateSHA": newCommitSHA,
+										"commitHash":   newCommitSHA,
+										"roundsRun":    round,
+									},
+								})
+							}
 							res.Success = true
 							res.AwaitingApproval = true
 							res.CommitHash = newCommitSHA

@@ -65,9 +65,20 @@ class CodeAction : AnAction() {
         )
         if (confirmed != Messages.OK) return
         runArtix(p, "code", "--autonomy", "supervised", "--confirm-tests") { j, err ->
-            if (j?.get("success")?.asBoolean == true)
-                notify(p, NotificationType.INFORMATION, "Converged in ${j.get("roundsRun")} round(s). Review the diff; nothing was committed.")
-            else notify(p, NotificationType.ERROR, "Code failed: ${j?.str("error") ?: err.takeLast(400)}")
+            val status = j?.str("status")
+            val isAwaiting = status == "awaiting_approval" || j?.get("awaitingApproval")?.asBoolean == true
+            if (isAwaiting) {
+                notify(p, NotificationType.INFORMATION, "Candidate commit ${j?.str("commitHash") ?: ""} pushed to PR branch. Awaiting human approval on forge.")
+            } else if (j?.get("success")?.asBoolean == true) {
+                val commitHash = j?.str("commitHash")
+                if (!commitHash.isNullOrBlank()) {
+                    notify(p, NotificationType.INFORMATION, "Converged in ${j.get("roundsRun")} round(s). Committed: $commitHash")
+                } else {
+                    notify(p, NotificationType.INFORMATION, "Converged in ${j.get("roundsRun")} round(s). Review the diff; nothing was committed.")
+                }
+            } else {
+                notify(p, NotificationType.ERROR, "Code failed: ${j?.str("error") ?: err.takeLast(400)}")
+            }
         }
     }
 }

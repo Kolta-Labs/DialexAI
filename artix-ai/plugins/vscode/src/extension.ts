@@ -47,8 +47,17 @@ export function activate(ctx: vscode.ExtensionContext) {
     );
     if (confirm !== "Confirm & Run") return;
     const r = await run(["code", "--autonomy", "supervised", "--confirm-tests"]); show("Code", r);
-    r.json?.success ? vscode.window.showInformationMessage(`Converged in ${r.json.roundsRun} round(s). Review the diff; nothing was committed.`)
-                    : vscode.window.showErrorMessage(`Artix code: ${r.json?.error ?? "failed"}`);
+    if (r.json?.status === "awaiting_approval" || r.json?.awaitingApproval) {
+      vscode.window.showInformationMessage(`Candidate commit ${r.json.commitHash ?? ""} pushed to PR branch. Awaiting human approval on forge.`);
+    } else if (r.json?.success) {
+      if (r.json.commitHash) {
+        vscode.window.showInformationMessage(`Converged in ${r.json.roundsRun} round(s). Committed: ${r.json.commitHash}`);
+      } else {
+        vscode.window.showInformationMessage(`Converged in ${r.json.roundsRun} round(s). Review the diff; nothing was committed.`);
+      }
+    } else {
+      vscode.window.showErrorMessage(`Artix code: ${r.json?.error ?? "failed"}`);
+    }
   });
 
   reg("artix.review", async () => {

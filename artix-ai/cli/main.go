@@ -640,7 +640,9 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 
 	if isJSON {
 		statusStr := "success"
-		if !res.Success {
+		if res.AwaitingApproval {
+			statusStr = "awaiting_approval"
+		} else if !res.Success {
 			if strings.Contains(strings.ToLower(res.Error), "unreviewed") {
 				statusStr = "unreviewed"
 			} else {
@@ -648,18 +650,22 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 			}
 		}
 		sendJSON(map[string]any{
-			"ok":           res.Success,
-			"success":      res.Success,
-			"status":       statusStr,
-			"roundsRun":    res.RoundsRun,
-			"commitHash":   res.CommitHash,
-			"error":        res.Error,
-			"finalVerdict": res.FinalVerdict,
-			"costReport":   res.CostReport,
+			"ok":               res.Success,
+			"success":          res.Success,
+			"status":           statusStr,
+			"awaitingApproval": res.AwaitingApproval,
+			"roundsRun":        res.RoundsRun,
+			"commitHash":       res.CommitHash,
+			"error":            res.Error,
+			"finalVerdict":     res.FinalVerdict,
+			"costReport":       res.CostReport,
 		})
 	}
 
-	if res.Success {
+	if res.AwaitingApproval {
+		fmt.Fprintf(human, "\nPHASE 1 COMPLETE: Candidate commit %s pushed to PR branch.\nAwaiting human approval on forge before merge.\n", res.CommitHash)
+		return 0
+	} else if res.Success {
 		fmt.Fprintf(human, "\nSUCCESS: Convergence achieved in round %d!\n", res.RoundsRun)
 		if res.CommitHash != "" {
 			fmt.Fprintf(human, "Committed: %s\n", res.CommitHash)
@@ -728,13 +734,13 @@ func runMerge(cwd string, args []string, human io.Writer, sendJSON func(any), is
 	if isJSON {
 		sendJSON(map[string]any{
 			"ok":         true,
-			"status":     "merged",
+			"status":     "approval_verified",
 			"approver":   approval.ApproverUsername,
 			"commitHash": *shaFlag,
 			"prNumber":   *prFlag,
 		})
 	}
-	fmt.Fprintf(human, "Phase 2 Merge Verification Succeeded: Approved by %s (Commit: %s, PR: #%d)\n", approval.ApproverUsername, *shaFlag, *prFlag)
+	fmt.Fprintf(human, "Phase 2 Approval Verified: Approved by %s (Commit: %s, PR: #%d)\n", approval.ApproverUsername, *shaFlag, *prFlag)
 	return 0
 }
 
