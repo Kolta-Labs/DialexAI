@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -341,6 +342,8 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 	reviewModel := fs.String("review-model", "", "Model for --review-provider")
 	noModelReview := fs.Bool("no-model-review", false, "Skip the model review of acceptance criteria")
 	maxDiffKb := fs.Int("max-diff-kb", 500, "Maximum diff size in KB before critic hard rejects")
+	printTestCommands := fs.Bool("print-test-commands", false, "Print planned test commands and hash from spec and exit")
+	confirmTestsHashFlag := fs.String("confirm-tests-hash", "", "Sha256 hash of confirmed test commands (e.g. sha256:...)")
 	confirmTestsFlag := fs.Bool("confirm-tests", false, "Explicitly confirm proposed test commands without interactive prompt")
 	yesFlag := fs.Bool("yes", false, "Alias for --confirm-tests")
 	fs.BoolVar(yesFlag, "y", false, "Short alias for --confirm-tests")
@@ -425,6 +428,39 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 		}
 		fmt.Fprintf(stderr, "Error parsing spec: %v\n", err)
 		return 1
+	}
+
+	rawHash := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(storySpec.TestCommands, "\n"))))
+	hashWithPrefix := "sha256:" + rawHash
+
+	if *printTestCommands {
+		if isJSON {
+			sendJSON(map[string]any{
+				"ok":               true,
+				"status":           "test_commands",
+				"testCommands":     storySpec.TestCommands,
+				"testCommandsHash": hashWithPrefix,
+			})
+		} else {
+			fmt.Fprintf(human, "Test Commands (%d):\n", len(storySpec.TestCommands))
+			for i, cmd := range storySpec.TestCommands {
+				fmt.Fprintf(human, "  [%d] %s\n", i+1, cmd)
+			}
+			fmt.Fprintf(human, "Test Commands Hash: %s\n", hashWithPrefix)
+		}
+		return 0
+	}
+
+	if *confirmTestsHashFlag != "" {
+		providedHash := strings.TrimPrefix(strings.TrimSpace(*confirmTestsHashFlag), "sha256:")
+		if providedHash != rawHash {
+			errStr := fmt.Sprintf("Error: test command confirmation hash mismatch: expected %s, got %s", hashWithPrefix, *confirmTestsHashFlag)
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
 	}
 
 	domainCoder, err := coder.NewDomainCoder(*domainFlag, reg)
@@ -523,7 +559,7 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 	// G4: Test-command trust outside enterprise:
 	// In supervised/interactive mode outside enterprise, require explicit user confirmation.
 	if !policy.IsEnterprise() && (opts.Autonomy == coder.AutonomySupervised || opts.Autonomy == coder.AutonomyInteractive) {
-		if *confirmTestsFlag || *yesFlag {
+		if *confirmTestsFlag || *yesFlag || *confirmTestsHashFlag != "" {
 			opts.TestCommandsConfirmed = true
 		} else if isTerminal(stdin) {
 			fmt.Fprintf(stderr, "Proposed test commands (%d):\n", len(storySpec.TestCommands))

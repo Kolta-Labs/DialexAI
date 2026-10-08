@@ -55,10 +55,16 @@ class PlanAction : AnAction() {
 class CodeAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val p = e.project ?: return
-        runArtix(p, "plan", "--json") { planJson, _ ->
-            val testCmds = planJson?.getAsJsonArray("testCommands")?.map { it.asString } ?: emptyList()
-            val cmdListStr = if (testCmds.isNotEmpty()) testCmds.joinToString("\n") { "  • $it" } else "  (default test runner)"
-            val msg = "Artix supervised mode will execute the following test commands:\n$cmdListStr\n\nDo you want to proceed?"
+        runArtix(p, "code", "--print-test-commands") { printJson, err ->
+            val ok = printJson?.get("ok")?.asBoolean == true
+            val testCmds = printJson?.getAsJsonArray("testCommands")?.map { it.asString } ?: emptyList()
+            val testCommandsHash = printJson?.str("testCommandsHash")
+            if (!ok || testCmds.isEmpty() || testCommandsHash.isNullOrBlank()) {
+                notify(p, NotificationType.ERROR, "Artix code: no test commands available to confirm (${printJson?.str("error") ?: err.takeLast(400)}). Run 'artix plan' first.")
+                return@runArtix
+            }
+            val cmdListStr = testCmds.joinToString("\n") { "  • $it" }
+            val msg = "Artix supervised mode will execute the following test commands:\n$cmdListStr\n\nHash: $testCommandsHash\n\nDo you want to proceed?"
             val confirmed = Messages.showOkCancelDialog(
                 p,
                 msg,
@@ -68,7 +74,7 @@ class CodeAction : AnAction() {
                 Messages.getQuestionIcon()
             )
             if (confirmed != Messages.OK) return@runArtix
-            runArtix(p, "code", "--autonomy", "supervised", "--confirm-tests") { j, err ->
+            runArtix(p, "code", "--autonomy", "supervised", "--confirm-tests", "--confirm-tests-hash", testCommandsHash) { j, err2 ->
                 val status = j?.str("status")
                 val isAwaiting = status == "awaiting_approval" || j?.get("awaitingApproval")?.asBoolean == true
                 if (isAwaiting) {
@@ -81,7 +87,7 @@ class CodeAction : AnAction() {
                         notify(p, NotificationType.INFORMATION, "Converged in ${j.get("roundsRun")} round(s). Review the diff; nothing was committed.")
                     }
                 } else {
-                    notify(p, NotificationType.ERROR, "Code failed: ${j?.str("error") ?: err.takeLast(400)}")
+                    notify(p, NotificationType.ERROR, "Code failed: ${j?.str("error") ?: err2.takeLast(400)}")
                 }
             }
         }

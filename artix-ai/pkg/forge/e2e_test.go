@@ -1466,7 +1466,7 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 	shaMu.Unlock()
 
 	// Phase 2 Success: artix merge with matching --verdict-hash
-	cmdMergeOk := exec.Command(binPath, "merge", "--json",
+	cmdMergeOk := exec.Command(binPath, "verify-approval", "--json",
 		"--pr", "77",
 		"--sha", jsonResPhase1.CommitHash,
 		"--spec", "SPEC-BIN-01",
@@ -1503,8 +1503,8 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 		t.Fatalf("expected merge status approval_verified, got: %+v (stdout: %s, stderr: %s)", jsonResMergeOk, stdoutMergeOk.String(), stderrMergeOk.String())
 	}
 
-	// Phase 2 Rejection: artix merge with mismatched --verdict-hash
-	cmdMergeBad := exec.Command(binPath, "merge", "--json",
+	// Phase 2 Rejection: artix verify-approval with mismatched --verdict-hash
+	cmdMergeBad := exec.Command(binPath, "verify-approval", "--json",
 		"--pr", "77",
 		"--sha", jsonResPhase1.CommitHash,
 		"--spec", "SPEC-BIN-01",
@@ -1603,7 +1603,7 @@ func TestR2_Phase2_AuditEmitFailure_MustExitNonZero(t *testing.T) {
 	_ = os.Chmod(logPath, 0400)
 	defer os.Chmod(logPath, 0600)
 
-	cmdMerge := exec.Command(binPath, "merge", "--json",
+	cmdMerge := exec.Command(binPath, "verify-approval", "--json",
 		"--pr", "10",
 		"--sha", headSHA,
 		"--spec", storyID,
@@ -1619,7 +1619,7 @@ func TestR2_Phase2_AuditEmitFailure_MustExitNonZero(t *testing.T) {
 	cmdErr := cmdMerge.Run()
 
 	if cmdErr == nil {
-		t.Fatalf("SECURITY VIOLATION (R2 a): artix merge succeeded when APPROVAL_VERIFIED audit Emit failed! Stdout: %s", stdout.String())
+		t.Fatalf("SECURITY VIOLATION (R2 a): artix verify-approval succeeded when APPROVAL_VERIFIED audit Emit failed! Stdout: %s", stdout.String())
 	}
 	var res map[string]any
 	_ = json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &res)
@@ -1691,8 +1691,8 @@ func TestR2_Phase2_OmitVerdictHash_ReadsFromPhase1Record(t *testing.T) {
 	}))
 	defer ghServer.Close()
 
-	// Run artix merge WITHOUT --verdict-hash
-	cmdMerge := exec.Command(binPath, "merge", "--json",
+	// Run artix verify-approval WITHOUT --verdict-hash
+	cmdMerge := exec.Command(binPath, "verify-approval", "--json",
 		"--pr", "11",
 		"--sha", headSHA,
 		"--spec", storyID,
@@ -1706,7 +1706,7 @@ func TestR2_Phase2_OmitVerdictHash_ReadsFromPhase1Record(t *testing.T) {
 	cmdMerge.Stdout = &stdout
 	cmdMerge.Stderr = &stderr
 	if err := cmdMerge.Run(); err != nil {
-		t.Fatalf("expected artix merge without --verdict-hash to succeed by reading from Phase 1 record, got error: %v (stdout: %s, stderr: %s)", err, stdout.String(), stderr.String())
+		t.Fatalf("expected artix verify-approval without --verdict-hash to succeed by reading from Phase 1 record, got error: %v (stdout: %s, stderr: %s)", err, stdout.String(), stderr.String())
 	}
 }
 
@@ -1727,7 +1727,7 @@ func TestR2_Phase2_SpecRequiredAndNonEmpty(t *testing.T) {
 	workDir, _ := setupTestRepoForForge(t)
 	defer os.RemoveAll(workDir)
 
-	cmdMerge := exec.Command(binPath, "merge", "--json",
+	cmdMerge := exec.Command(binPath, "verify-approval", "--json",
 		"--pr", "12",
 		"--sha", "abc12345",
 		"--spec", "", // empty spec
@@ -1738,7 +1738,7 @@ func TestR2_Phase2_SpecRequiredAndNonEmpty(t *testing.T) {
 	cmdMerge.Stderr = &stderr
 	err = cmdMerge.Run()
 	if err == nil {
-		t.Fatalf("SECURITY VIOLATION (R2 c): artix merge succeeded with empty --spec! (must require non-empty --spec)")
+		t.Fatalf("SECURITY VIOLATION (R2 c): artix verify-approval succeeded with empty --spec! (must require non-empty --spec)")
 	}
 }
 
