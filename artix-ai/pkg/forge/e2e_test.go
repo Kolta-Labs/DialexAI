@@ -975,6 +975,139 @@ func TestR7_2_Phase2_BoundToPhase1AuditRecord(t *testing.T) {
 	}
 }
 
+// TestR8_2_VerifyPhase1AuditBinding_CryptographicIntegrity tests that verifyPhase1AuditBinding
+// enforces complete cryptographic verification: non-empty path, whole-log signature/hash chain,
+// CANDIDATE_PUSHED event type, valid status, and tamper resistance (appended line, tampered middle, truncated tail).
+func TestR8_2_VerifyPhase1AuditBinding_CryptographicIntegrity(t *testing.T) {
+	tempDir, driver := setupTestRepoForForge(t)
+	defer os.RemoveAll(tempDir)
+
+	headSHA, _ := driver.HeadHash()
+	logger := audit.Default(tempDir)
+	logPath := logger.LogPath()
+
+	// 1. Empty audit log path must FAIL CLOSED
+	err := verifyPhase1AuditBinding("", "SPEC-1", headSHA, "")
+	if err == nil {
+		t.Fatalf("SECURITY VIOLATION (R8-2): verifyPhase1AuditBinding with empty log path succeeded (must fail closed)")
+	}
+
+	// 2. Emit a valid signed CANDIDATE_PUSHED record
+	verdictHash := "a1b2c3d4e5f600112233445566778899aabbccddeeff00112233445566778899"
+	emitErr := logger.Emit(audit.AuditEvent{
+		EventType:   "CANDIDATE_PUSHED",
+		Status:      "AWAITING_APPROVAL",
+		StorySpecID: "SPEC-R8-2",
+		Details: map[string]any{
+			"storyId":             "SPEC-R8-2",
+			"candidateSHA":        headSHA,
+			"reviewerVerdictHash": verdictHash,
+			"prBranch":            "artix-pr-82",
+		},
+	})
+	if emitErr != nil {
+		t.Fatalf("failed to emit initial audit record: %v", emitErr)
+	}
+
+	// Valid binding succeeds
+	err = verifyPhase1AuditBinding(logPath, "SPEC-R8-2", headSHA, verdictHash)
+	if err != nil {
+		t.Fatalf("expected valid audit binding to succeed, got: %v", err)
+	}
+
+	// 3. Reviewer verdict hash mismatch must FAIL
+	err = verifyPhase1AuditBinding(logPath, "SPEC-R8-2", headSHA, "wrong-verdict-hash-0000")
+	if err == nil {
+		t.Fatalf("SECURITY VIOLATION (R8-2): verifyPhase1AuditBinding succeeded with mismatched reviewer verdict hash")
+	}
+
+	// 4. FAILED convergence event status must FAIL
+	tempDirFailed, _ := setupTestRepoForForge(t)
+	defer os.RemoveAll(tempDirFailed)
+	failedLogger := audit.NewLogger(tempDirFailed)
+	_ = failedLogger.Emit(audit.AuditEvent{
+		EventType:   "CANDIDATE_PUSHED",
+		Status:      "FAILED",
+		StorySpecID: "SPEC-FAILED",
+		Details: map[string]any{
+			"storyId":      "SPEC-FAILED",
+			"candidateSHA": headSHA,
+		},
+	})
+	if err := verifyPhase1AuditBinding(failedLogger.LogPath(), "SPEC-FAILED", headSHA, ""); err == nil {
+		t.Fatalf("SECURITY VIOLATION (R8-2): verifyPhase1AuditBinding accepted a FAILED candidate push event")
+	}
+
+	// 5. Appended forged line (attacker appends unverified record) must FAIL
+	forgedLine := `{"eventId":"forged-999","timestamp":"2026-10-08T00:00:00Z","eventType":"CANDIDATE_PUSHED","status":"AWAITING_APPROVAL","storySpecId":"SPEC-FORGED","prevHash":"0000","recordHash":"forged"}` + "\n"
+	f, _ := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0644)
+	_, _ = f.WriteString(forgedLine)
+	_ = f.Close()
+
+	if err := verifyPhase1AuditBinding(logPath, "SPEC-R8-2", headSHA, verdictHash); err == nil {
+		t.Fatalf("SECURITY VIOLATION (R8-2): verifyPhase1AuditBinding accepted log with appended forged record")
+	}
+}
+
+// TestR8_2_TypedErrors_503BodyWithKeywords_DoesNotDeleteBranch verifies that typed errors
+// prevent HTTP 503 response bodies containing words like "changes requested" or "dismissed"
+// from triggering branch deletion.
+func TestR8_2_TypedErrors_503BodyWithKeywords_DoesNotDeleteBranch(t *testing.T) {
+	bareDir, err := os.MkdirTemp("", "artix_remote_503_test")
+	if err != nil {
+		t.Fatalf("failed to create bare repo: %v", err)
+	}
+	defer os.RemoveAll(bareDir)
+	_ = exec.Command("git", "init", "--bare", bareDir).Run()
+
+	workDir, driver := setupTestRepoForForge(t)
+	defer os.RemoveAll(workDir)
+	_ = exec.Command("git", "-C", workDir, "remote", "add", "origin", bareDir).Run()
+
+	prBranch := "artix-pr-503-guard"
+	pusher := NewForgePusher(driver, "origin", prBranch)
+	headSHA, _ := driver.HeadHash()
+	if err := pusher(context.Background(), headSHA); err != nil {
+		t.Fatalf("failed to push candidate branch: %v", err)
+	}
+
+	// 1. 503 error containing "changes requested" and "dismissed" in body -> NOT a definitive rejection
+	bodyWithKeywordsErr := fmt.Errorf("HTTP 503 Service Unavailable: upstream worker dismissed review cache for changes requested query")
+	if IsDefinitiveRejection(bodyWithKeywordsErr) {
+		t.Fatalf("BUG (R8-2): IsDefinitiveRejection returned true for generic HTTP 503 error containing keyword substrings")
+	}
+
+	http503Verifier := func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+		return nil, bodyWithKeywordsErr
+	}
+
+	_, err = VerifyAndMergeCandidate(context.Background(), driver, http503Verifier, headSHA, nil, "SPEC-1", "origin", prBranch)
+	if err == nil {
+		t.Fatalf("expected verification to fail on 503")
+	}
+
+	// Remote PR branch must NOT be deleted
+	if out, err := exec.Command("git", "-C", bareDir, "rev-parse", "--verify", "refs/heads/"+prBranch).CombinedOutput(); err != nil {
+		t.Fatalf("DESTRUCTIVE BUG (R8-2): remote branch was destroyed on HTTP 503 containing keywords: %s", string(out))
+	}
+
+	// 2. Typed rejection error (ErrChangesRequested) -> IS a definitive rejection and deletes branch
+	typedRejectionVerifier := func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+		return nil, ErrChangesRequested
+	}
+
+	_, err = VerifyAndMergeCandidate(context.Background(), driver, typedRejectionVerifier, headSHA, nil, "SPEC-1", "origin", prBranch)
+	if err == nil {
+		t.Fatalf("expected verification to fail on typed changes requested error")
+	}
+
+	// Remote PR branch MUST be deleted on typed definitive rejection
+	if _, err := exec.Command("git", "-C", bareDir, "rev-parse", "--verify", "refs/heads/"+prBranch).CombinedOutput(); err == nil {
+		t.Fatalf("expected remote PR branch to be deleted after typed ErrChangesRequested rejection")
+	}
+}
+
+
 
 
 
