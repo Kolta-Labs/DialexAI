@@ -60,7 +60,10 @@ Artix Enterprise `v0.9.0-enterprise` implements full remediation for all hostile
 ### Verifying the Tag
 To independently verify the cryptographic signature on this tag without relying on local `~/.ssh/allowed_signers` or in-repo `.allowed_signers`:
 ```bash
-git -c gpg.ssh.allowedSignersFile=<(echo "releases@artix.ai ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ4FO6aRcfHA07XqA9SGUUfpiqYfLsaRz+KUwigN2K5x") tag -v v0.9.0-enterprise
+TEMP_SIGNERS=$(mktemp)
+echo "releases@artix.ai ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ4FO6aRcfHA07XqA9SGUUfpiqYfLsaRz+KUwigN2K5x" > "$TEMP_SIGNERS"
+git -c gpg.ssh.allowedSignersFile="$TEMP_SIGNERS" tag -v v0.9.0-enterprise
+rm -f "$TEMP_SIGNERS"
 ```
 
 ### Tag Immutability Registry
@@ -93,5 +96,8 @@ go test -race -count=1 ./...
 ./scripts/benign-corpus.sh
 
 # 5. Verify tag signature independently
-git -c gpg.ssh.allowedSignersFile=<(echo "releases@artix.ai ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ4FO6aRcfHA07XqA9SGUUfpiqYfLsaRz+KUwigN2K5x") tag -v v0.9.0-enterprise
+TEMP_SIGNERS=$(mktemp)
+echo "releases@artix.ai ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ4FO6aRcfHA07XqA9SGUUfpiqYfLsaRz+KUwigN2K5x" > "$TEMP_SIGNERS"
+git -c gpg.ssh.allowedSignersFile="$TEMP_SIGNERS" tag -v v0.9.0-enterprise
+rm -f "$TEMP_SIGNERS"
 ```
