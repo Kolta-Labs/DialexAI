@@ -255,7 +255,7 @@ func TestRemoteWorker_Execute_LocalSimulated(t *testing.T) {
 
 	// Set up basic Go project so test execution passes
 	_ = os.WriteFile(filepath.Join(remoteDir, "go.mod"), []byte("module simrepo\n\ngo 1.22\n"), 0644)
-	_ = os.WriteFile(filepath.Join(remoteDir, "sim_test.go"), []byte("package simrepo\nimport \"testing\"\nfunc TestDummy(t *testing.T){}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(remoteDir, "sim_test.go"), []byte("package simrepo\nimport \"testing\"\nfunc TestDummy(t *testing.T) { if 1+1 != 2 { t.Fatal(\"math broke\") } }\n"), 0644)
 	_ = os.WriteFile(filepath.Join(remoteDir, "README.md"), []byte("# Simulated Repo\n"), 0644)
 	runCmd(remoteDir, "git", "add", ".")
 	runCmd(remoteDir, "git", "commit", "-m", "initial commit")

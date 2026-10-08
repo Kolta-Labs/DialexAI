@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"artix/internal/forgesec"
@@ -1377,13 +1378,19 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 	defer llmServer.Close()
 
 	// Mock Forge server
-	var currentCandidateSHA string
+	var (
+		shaMu               sync.Mutex
+		currentCandidateSHA string
+	)
 	ghServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		shaMu.Lock()
+		curSHA := currentCandidateSHA
+		shaMu.Unlock()
 		if strings.HasSuffix(r.URL.Path, "/pulls/77") {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"user": map[string]any{"login": "developer-bob", "type": "User"},
-				"head": map[string]any{"sha": currentCandidateSHA},
+				"head": map[string]any{"sha": curSHA},
 			})
 			return
 		}
@@ -1393,7 +1400,7 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 					"id":        1,
 					"user":      map[string]any{"login": "security-lead-alice", "type": "User"},
 					"state":     "APPROVED",
-					"commit_id": currentCandidateSHA,
+					"commit_id": curSHA,
 				},
 			})
 			return
@@ -1454,7 +1461,9 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 		t.Fatalf("expected Phase 1 to produce candidate commit hash")
 	}
 
+	shaMu.Lock()
 	currentCandidateSHA = jsonResPhase1.CommitHash
+	shaMu.Unlock()
 
 	// Phase 2 Success: artix merge with matching --verdict-hash
 	cmdMergeOk := exec.Command(binPath, "merge", "--json",

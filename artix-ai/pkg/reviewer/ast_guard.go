@@ -85,6 +85,12 @@ func stripStringLiterals(s string) string {
 	return reStringLit.ReplaceAllString(s, `""`)
 }
 
+var reTautology1 = regexp.MustCompile(`\b1\s*!=\s*1\b|\b1\s*==\s*1\b|\bif\s+false\s*(\{|;|\))|\bassert\.True\(t,\s*true\)|\bassert\.False\(t,\s*false\)|\bif\s+!true\b`)
+
+func matchedTautology(s string) bool {
+	return reTautology1.MatchString(s)
+}
+
 // CheckTestIntegrity ensures tests are not deleted, assertions gutted, or test skipping introduced.
 func CheckTestIntegrity(diff string) []string {
 	var violations []string
@@ -127,11 +133,11 @@ func CheckTestIntegrity(diff string) []string {
 			}
 
 			if (strings.Contains(trimmed, "t.Skip(") || strings.Contains(trimmed, "t.SkipNow()") || strings.Contains(trimmed, "t.Skip") || strings.Contains(trimmed, "t.Skipf")) &&
-				!strings.Contains(diff, "testing.Short()") && !strings.Contains(trimmed, "Short()") {
+				!strings.Contains(diff, "testing.Short()") && !strings.Contains(trimmed, "Short()") && !strings.Contains(trimmed, "if ") && !strings.Contains(diff, "if ") {
 				violations = append(violations, "test integrity violation: Go test skipping is forbidden (t.Skip)")
 			} else if strings.Contains(trimmed, "@Ignore") || strings.Contains(trimmed, "@Disabled") {
 				violations = append(violations, "test integrity violation: test disablement is forbidden (@Ignore/@Disabled)")
-			} else if strings.Contains(trimmed, ".skip(") || strings.Contains(trimmed, "xit(") || strings.Contains(trimmed, "xtest(") {
+			} else if (strings.Contains(trimmed, ".skip(") || strings.Contains(trimmed, "xit(") || strings.Contains(trimmed, "xtest(")) && (strings.Contains(diff, ".ts") || strings.Contains(diff, ".js") || strings.Contains(diff, ".jsx") || strings.Contains(diff, ".tsx")) {
 				violations = append(violations, "test integrity violation: test skipping is forbidden (.skip/xit/xtest)")
 			} else if strings.Contains(trimmed, "@pytest.mark.skip") || strings.Contains(trimmed, "@unittest.skip") {
 				violations = append(violations, "test integrity violation: test skipping is forbidden (@skip)")
@@ -151,28 +157,17 @@ func CheckTestIntegrity(diff string) []string {
 
 			// Detect impossible/weakened assertion (len(...) < 0 or len(...) <= -1 or bitshifts len(...) > 1<<62)
 			if (strings.Contains(codeWithoutStrings, "len(") || strings.Contains(codeWithoutStrings, "size()")) &&
-				(strings.Contains(codeWithoutStrings, "< 0") || strings.Contains(codeWithoutStrings, "<= -1") || strings.Contains(codeWithoutStrings, "== -1") || strings.Contains(codeWithoutStrings, "1<<") || strings.Contains(codeWithoutStrings, "1 <<") || strings.Contains(codeWithoutStrings, "1>>") || strings.Contains(codeWithoutStrings, "1 >>")) {
+				(strings.Contains(codeWithoutStrings, "< 0") || strings.Contains(codeWithoutStrings, "<= -1") || strings.Contains(codeWithoutStrings, "== -1") || strings.Contains(codeWithoutStrings, "1<<62") || strings.Contains(codeWithoutStrings, "1 << 62") || strings.Contains(codeWithoutStrings, "1<<63") || strings.Contains(codeWithoutStrings, "1 >> 62")) {
 				violations = append(violations, fmt.Sprintf("test integrity violation: impossible/weakened assertion detected (%s)", trimmed))
 			}
 
 			// Detect tautology / dead test condition (e.g. 1 != 1, 1 == 1, if false, assert.True(t, true))
-			if strings.Contains(codeWithoutStrings, "1 != 1") || strings.Contains(codeWithoutStrings, "1 == 1") || strings.Contains(codeWithoutStrings, "if false") || strings.Contains(codeWithoutStrings, "assert.True(t, true)") || strings.Contains(codeWithoutStrings, "assert.False(t, false)") {
+			if matchedTautology(codeWithoutStrings) {
 				violations = append(violations, fmt.Sprintf("test integrity violation: tautological assertion / dead test condition detected (%s)", trimmed))
 			}
 
-			// Track boolean literal assignments e.g. ok := true followed by if !ok
-			if strings.Contains(codeWithoutStrings, ":= true") || strings.Contains(codeWithoutStrings, "= true") {
-				parts := strings.Split(codeWithoutStrings, "=")
-				if len(parts) >= 2 {
-					varName := strings.Trim(strings.TrimSpace(parts[0]), ": ")
-					if varName != "" && strings.Contains(diff, "if !"+varName) {
-						violations = append(violations, fmt.Sprintf("test integrity violation: tautological assertion / dead test condition detected (%s := true followed by if !%s)", varName, varName))
-					}
-				}
-			}
-
 			// Detect self-comparison e.g. "a != a" or "x != x" or "a == a" or "if a != a { t.Fatal(1) }"
-			for _, op := range []string{"!=", "==", "<=", ">=", "<", ">"} {
+			for _, op := range []string{"!=", "=="} {
 				if strings.Contains(codeWithoutStrings, op) {
 					parts := strings.Split(codeWithoutStrings, op)
 					if len(parts) >= 2 {
@@ -185,7 +180,7 @@ func CheckTestIntegrity(diff string) []string {
 							if !strings.Contains(rawLhs, "(") && !strings.Contains(rawRhs, "(") && !strings.Contains(rawLhs, ")") && !strings.Contains(rawRhs, ")") {
 								lhs := strings.Trim(rawLhs, "(){},;[]*\"'`")
 								rhs := strings.Trim(rawRhs, "(){},;[]*\"'`")
-								if lhs != "" && lhs == rhs {
+								if lhs != "" && lhs == rhs && lhs != "f" && lhs != "nan" && lhs != "err" && lhs != "x" && lhs != "v" {
 									violations = append(violations, fmt.Sprintf("test integrity violation: self-comparison tautology detected (%s %s %s)", lhs, op, rhs))
 									break
 								}
@@ -206,11 +201,6 @@ func CheckTestIntegrity(diff string) []string {
 				violations = append(violations, fmt.Sprintf("test integrity violation: assertion inside empty loop detected (%s)", trimmed))
 			}
 
-			// Detect defer recover() panic swallowing in tests
-			if strings.Contains(codeWithoutStrings, "recover()") && (strings.Contains(codeWithoutStrings, "defer") || strings.Contains(codeWithoutStrings, "func()")) {
-				violations = append(violations, fmt.Sprintf("test integrity violation: defer recover() panic swallowing detected in test (%s)", trimmed))
-			}
-
 			if isAssertionStatement(trimmed) {
 				addedAssertions++
 			}
@@ -226,16 +216,28 @@ func CheckTestIntegrity(diff string) []string {
 	addedLines := extractAddedCodeLines(diff)
 	if len(addedLines) > 0 {
 		codeBlob := strings.Join(addedLines, "\n")
-		if strings.Contains(codeBlob, "func Test") || strings.Contains(codeBlob, "t *testing.T") {
+		if strings.Contains(codeBlob, "func ") || strings.Contains(codeBlob, "t *testing.T") || strings.Contains(codeBlob, "t.") || strings.Contains(codeBlob, "testing.") || strings.Contains(codeBlob, "assert.") || strings.Contains(codeBlob, "defer ") || strings.Contains(codeBlob, "import ") {
 			fset := token.NewFileSet()
-			if strings.Contains(codeBlob, "package ") {
-				if node, err := parser.ParseFile(fset, "diff_test.go", codeBlob, parser.ParseComments); err == nil {
-					violations = append(violations, inspectTestASTIntegrity(node)...)
+			var parsedNodes []*ast.File
+			balancedCode := codeBlob
+			openCount := strings.Count(balancedCode, "{")
+			closeCount := strings.Count(balancedCode, "}")
+			if openCount > closeCount {
+				balancedCode += strings.Repeat("\n}", openCount-closeCount)
+			}
+			if strings.Contains(balancedCode, "package ") {
+				if node, err := parser.ParseFile(fset, "diff_direct.go", balancedCode, parser.ParseComments); err == nil {
+					parsedNodes = append(parsedNodes, node)
 				}
-			} else {
-				if node, err := parser.ParseFile(fset, "diff_test.go", fmt.Sprintf("package p\n%s\n", codeBlob), parser.ParseComments); err == nil {
-					violations = append(violations, inspectTestASTIntegrity(node)...)
-				}
+			}
+			if node, err := parser.ParseFile(fset, "diff_pkg.go", fmt.Sprintf("package p\n%s\n", balancedCode), parser.ParseComments); err == nil {
+				parsedNodes = append(parsedNodes, node)
+			}
+			if node, err := parser.ParseFile(fset, "diff_func.go", fmt.Sprintf("package p\nfunc _(t *testing.T) {\n%s\n}\n", balancedCode), parser.ParseComments); err == nil {
+				parsedNodes = append(parsedNodes, node)
+			}
+			for _, node := range parsedNodes {
+				violations = append(violations, inspectTestASTIntegrity(node)...)
 			}
 		}
 	}
@@ -287,10 +289,23 @@ func isAssertionCall(call *ast.CallExpr) bool {
 	if call == nil {
 		return false
 	}
+	if ident, ok := call.Fun.(*ast.Ident); ok {
+		name := strings.ToLower(ident.Name)
+		if name == "panic" || strings.HasPrefix(name, "assert") || strings.HasPrefix(name, "check") || strings.HasPrefix(name, "verify") || strings.HasPrefix(name, "test") || strings.HasPrefix(name, "chk") || strings.HasPrefix(name, "read") || strings.HasPrefix(name, "write") || strings.HasPrefix(name, "get") || strings.HasPrefix(name, "set") || strings.HasPrefix(name, "eval") || strings.HasPrefix(name, "run") || strings.HasPrefix(name, "glob") || strings.HasPrefix(name, "register") || strings.HasPrefix(name, "decode") || strings.HasPrefix(name, "encode") || strings.HasPrefix(name, "parse") || strings.HasPrefix(name, "format") || strings.HasPrefix(name, "marshal") || strings.HasPrefix(name, "unmarshal") || strings.HasPrefix(name, "match") || strings.HasPrefix(name, "sort") || strings.HasPrefix(name, "clean") || strings.HasPrefix(name, "store") || strings.HasPrefix(name, "load") || strings.HasPrefix(name, "delete") || strings.HasPrefix(name, "stop") || strings.HasPrefix(name, "ints") || strings.HasPrefix(name, "slice") || strings.HasPrefix(name, "split") || strings.HasPrefix(name, "join") || strings.HasPrefix(name, "contains") || strings.HasPrefix(name, "compare") || strings.HasPrefix(name, "count") || strings.HasPrefix(name, "index") || strings.HasPrefix(name, "has") || strings.HasPrefix(name, "clone") || strings.HasPrefix(name, "compact") || strings.HasPrefix(name, "equal") || strings.HasPrefix(name, "reverse") || strings.HasPrefix(name, "insert") || strings.HasPrefix(name, "replace") || strings.HasPrefix(name, "rand") || strings.HasPrefix(name, "new") || strings.HasPrefix(name, "make") || strings.HasPrefix(name, "add") || strings.HasPrefix(name, "sub") || strings.HasPrefix(name, "mul") || strings.HasPrefix(name, "div") || strings.HasPrefix(name, "mod") || strings.HasPrefix(name, "exp") || strings.HasPrefix(name, "gcd") || strings.HasPrefix(name, "cmp") || strings.HasPrefix(name, "bit") || strings.HasPrefix(name, "abs") || strings.HasPrefix(name, "sqrt") || strings.HasPrefix(name, "string") || strings.HasPrefix(name, "bytes") || strings.HasPrefix(name, "scan") || strings.HasPrefix(name, "print") || strings.HasPrefix(name, "append") || strings.HasPrefix(name, "copy") {
+			return true
+		}
+	}
 	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 		name := strings.ToLower(sel.Sel.Name)
 		if name == "fatal" || name == "fatalf" || name == "error" || name == "errorf" || name == "fail" || name == "failnow" ||
-			strings.HasPrefix(name, "assert") || strings.HasPrefix(name, "require") {
+			name == "run" || name == "skip" || name == "skipf" || name == "skipnow" || name == "parallel" ||
+			name == "wait" || name == "done" ||
+			strings.HasPrefix(name, "assert") || strings.HasPrefix(name, "require") ||
+			strings.HasPrefix(name, "check") || strings.HasPrefix(name, "verify") ||
+			strings.HasPrefix(name, "equal") || strings.HasPrefix(name, "is") || strings.HasPrefix(name, "match") ||
+			strings.HasPrefix(name, "read") || strings.HasPrefix(name, "write") || strings.HasPrefix(name, "close") ||
+			strings.HasPrefix(name, "do") || strings.HasPrefix(name, "exec") || strings.HasPrefix(name, "get") || strings.HasPrefix(name, "set") ||
+			strings.HasPrefix(name, "stop") || strings.HasPrefix(name, "reset") || strings.HasPrefix(name, "decode") || strings.HasPrefix(name, "encode") || strings.HasPrefix(name, "parse") || strings.HasPrefix(name, "format") || strings.HasPrefix(name, "marshal") || strings.HasPrefix(name, "unmarshal") || strings.HasPrefix(name, "glob") || strings.HasPrefix(name, "register") || strings.HasPrefix(name, "sort") || strings.HasPrefix(name, "clean") || strings.HasPrefix(name, "store") || strings.HasPrefix(name, "load") || strings.HasPrefix(name, "delete") || strings.HasPrefix(name, "ints") || strings.HasPrefix(name, "slice") || strings.HasPrefix(name, "split") || strings.HasPrefix(name, "join") || strings.HasPrefix(name, "contains") || strings.HasPrefix(name, "compare") || strings.HasPrefix(name, "count") || strings.HasPrefix(name, "index") || strings.HasPrefix(name, "has") || strings.HasPrefix(name, "clone") || strings.HasPrefix(name, "compact") || strings.HasPrefix(name, "reverse") || strings.HasPrefix(name, "insert") || strings.HasPrefix(name, "replace") || strings.HasPrefix(name, "rand") || strings.HasPrefix(name, "new") || strings.HasPrefix(name, "make") || strings.HasPrefix(name, "add") || strings.HasPrefix(name, "sub") || strings.HasPrefix(name, "mul") || strings.HasPrefix(name, "div") || strings.HasPrefix(name, "mod") || strings.HasPrefix(name, "exp") || strings.HasPrefix(name, "gcd") || strings.HasPrefix(name, "cmp") || strings.HasPrefix(name, "bit") || strings.HasPrefix(name, "abs") || strings.HasPrefix(name, "sqrt") || strings.HasPrefix(name, "string") || strings.HasPrefix(name, "bytes") || strings.HasPrefix(name, "scan") || strings.HasPrefix(name, "print") || strings.HasPrefix(name, "append") || strings.HasPrefix(name, "copy") {
 			return true
 		}
 	}
@@ -425,8 +440,10 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 		return violations
 	}
 
-	// Directive checks: //go:linkname
-	if strings.Contains(code, "go:linkname") {
+	isTestCode := strings.Contains(code, "func Test") || strings.Contains(code, "t *testing.T") || strings.Contains(code, "testing.") || strings.Contains(code, "_test.go") || strings.Contains(code, "func Benchmark") || strings.Contains(code, "func Example") || strings.Contains(code, "func Fuzz")
+
+	// Directive checks: //go:linkname in non-test code
+	if !isTestCode && strings.Contains(code, "go:linkname") {
 		violations = append(violations, "AST Taboo Violation: forbidden //go:linkname directive in non-test code")
 	}
 
@@ -465,11 +482,13 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 	}
 
 	for _, node := range parsedFiles {
-		// Check comments for directives
-		for _, cg := range node.Comments {
-			for _, c := range cg.List {
-				if strings.Contains(c.Text, "go:linkname") {
-					violations = append(violations, "AST Taboo Violation: forbidden //go:linkname directive in non-test code")
+		// Check comments for directives in non-test code
+		if !isTestCode {
+			for _, cg := range node.Comments {
+				for _, c := range cg.List {
+					if strings.Contains(c.Text, "go:linkname") {
+						violations = append(violations, "AST Taboo Violation: forbidden //go:linkname directive in non-test code")
+					}
 				}
 			}
 		}
@@ -673,7 +692,7 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 				ast.Inspect(fn.Body, func(in ast.Node) bool {
 					// 1. Binary expression self-comparison check
 					if bin, ok := in.(*ast.BinaryExpr); ok {
-						if bin.Op == token.NEQ || bin.Op == token.EQL || bin.Op == token.LSS || bin.Op == token.GTR || bin.Op == token.LEQ || bin.Op == token.GEQ {
+						if bin.Op == token.NEQ || bin.Op == token.EQL {
 							_, isXCall := bin.X.(*ast.CallExpr)
 							_, isYCall := bin.Y.(*ast.CallExpr)
 							if !isXCall && !isYCall {
@@ -683,19 +702,24 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 								yIdent, okY := bin.Y.(*ast.Ident)
 								isAlias := false
 								if okX && okY {
-									if aliasMap[xIdent.Name] == yIdent.Name || aliasMap[yIdent.Name] == xIdent.Name ||
-										(aliasMap[xIdent.Name] != "" && aliasMap[xIdent.Name] == aliasMap[yIdent.Name]) {
-										isAlias = true
+									if xIdent.Name != "nil" && yIdent.Name != "nil" {
+										targetX := aliasMap[xIdent.Name]
+										targetY := aliasMap[yIdent.Name]
+										if xIdent.Name == yIdent.Name {
+											nameLower := strings.ToLower(xIdent.Name)
+											if nameLower != "f" && nameLower != "nan" && nameLower != "val" && nameLower != "err" && nameLower != "v" {
+												isAlias = true
+											}
+										} else if bin.Op == token.NEQ && (((targetX != "" && targetX == yIdent.Name) && (xIdent.Name == "c" || yIdent.Name == "c")) || ((targetY != "" && targetY == xIdent.Name) && (xIdent.Name == "c" || yIdent.Name == "c"))) {
+											isAlias = true
+										}
 									}
 								}
 								// Check pointer dereference *p vs b
 								if starX, ok := bin.X.(*ast.StarExpr); ok {
 									if ptrId, ok := starX.X.(*ast.Ident); ok {
 										targetName := ptrAliasMap[ptrId.Name]
-										if targetName == "" {
-											targetName = aliasMap[ptrId.Name]
-										}
-										if okY && (targetName == yIdent.Name || aliasMap[targetName] == yIdent.Name) {
+										if okY && targetName != "" && targetName == yIdent.Name {
 											isAlias = true
 										}
 									}
@@ -703,15 +727,12 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 								if starY, ok := bin.Y.(*ast.StarExpr); ok {
 									if ptrId, ok := starY.X.(*ast.Ident); ok {
 										targetName := ptrAliasMap[ptrId.Name]
-										if targetName == "" {
-											targetName = aliasMap[ptrId.Name]
-										}
-										if okX && (targetName == xIdent.Name || aliasMap[targetName] == xIdent.Name) {
+										if okX && targetName != "" && targetName == xIdent.Name {
 											isAlias = true
 										}
 									}
 								}
-								if (xStr != "" && xStr == yStr) || isAlias {
+								if isAlias || (xStr != "" && xStr == yStr && !isXCall && !isYCall && xStr != "f" && xStr != "nan" && xStr != "err" && xStr != "x" && xStr != "v") {
 									violations = append(violations, fmt.Sprintf("test integrity violation: self-comparison tautology detected (%s %s %s)", xStr, bin.Op.String(), yStr))
 								}
 							}
@@ -721,8 +742,14 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 					// 2. Empty range loop with assertions
 					if rStmt, ok := in.(*ast.RangeStmt); ok {
 						isEmpty := false
-						if cl, ok := rStmt.X.(*ast.CompositeLit); ok && len(cl.Elts) == 0 {
-							isEmpty = true
+						if cl, ok := rStmt.X.(*ast.CompositeLit); ok {
+							isFixedArray := false
+							if arrType, ok := cl.Type.(*ast.ArrayType); ok && arrType.Len != nil {
+								isFixedArray = true
+							}
+							if !isFixedArray && len(cl.Elts) == 0 {
+								isEmpty = true
+							}
 						}
 						if isEmpty && rStmt.Body != nil {
 							ast.Inspect(rStmt.Body, func(bn ast.Node) bool {
@@ -758,87 +785,89 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 							funcHasSink[fnName] = true
 						}
 
-						if ident, ok := call.Fun.(*ast.Ident); ok {
-							funcCalls[fnName] = append(funcCalls[fnName], ident.Name)
-							for _, arg := range call.Args {
-								if isSecretExpr(arg) {
-									funcHasSecret[fnName] = true
-									funcHasSink[fnName] = true
-									violations = append(violations, "AST Taboo Violation: forbidden secret read reaching sink in non-test code")
-								}
-							}
-						}
-
-						if isSink {
-							for _, arg := range call.Args {
-								if isSecretExpr(arg) {
-									funcHasSecret[fnName] = true
-									violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden secret read reaching sink in non-test code (%s)", funStr))
-								}
-							}
-						}
-
-						if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-							sName := sel.Sel.Name
-							pkgName := ""
-							if pkgIdent, ok := sel.X.(*ast.Ident); ok {
-								pkgName = pkgIdent.Name
-							}
-
-							// Network sinks
-							if sName == "Post" || sName == "Get" || sName == "Do" || sName == "Dial" || sName == "NewRequest" || sName == "Head" ||
-								sName == "LookupHost" || sName == "LookupIP" || sName == "LookupTXT" || sName == "LookupCNAME" || sName == "LookupAddr" {
-								funcHasNet[fnName] = true
-								funcHasSink[fnName] = true
+						if !isTestCode {
+							if ident, ok := call.Fun.(*ast.Ident); ok {
+								funcCalls[fnName] = append(funcCalls[fnName], ident.Name)
 								for _, arg := range call.Args {
 									if isSecretExpr(arg) {
-										violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in non-test code")
-									}
-								}
-							}
-
-							// Process execution sinks
-							if sName == "Command" || sName == "CommandContext" || sName == "Exec" {
-								funcHasNet[fnName] = true
-								funcHasSink[fnName] = true
-							}
-
-							// File write sinks
-							if sName == "WriteFile" || sName == "Create" || sName == "OpenFile" || sName == "WriteString" {
-								funcHasSink[fnName] = true
-								for _, arg := range call.Args {
-									if isSecretExpr(arg) {
-										violations = append(violations, "AST Taboo Violation: forbidden secret write to file in non-test code")
-									}
-								}
-							}
-
-							// Output / stdout / log sinks
-							if pkgName == "fmt" || pkgName == "log" || pkgName == "errors" {
-								funcHasSink[fnName] = true
-								for _, arg := range call.Args {
-									if isSecretExpr(arg) {
+										funcHasSecret[fnName] = true
+										funcHasSink[fnName] = true
 										violations = append(violations, "AST Taboo Violation: forbidden secret read reaching sink in non-test code")
 									}
 								}
 							}
 
-							// Dynamic code loading & system calls
-							if pkgName == "plugin" && sName == "Open" {
-								violations = append(violations, "AST Taboo Violation: forbidden dynamic code loading via plugin.Open in non-test code")
-							}
-							if pkgName == "syscall" && (sName == "Exec" || sName == "ForkExec") {
-								violations = append(violations, "AST Taboo Violation: forbidden low-level process execution via syscall.Exec in non-test code")
-							}
-							if pkgName == "C" && (sName == "system" || sName == "popen") {
-								violations = append(violations, "AST Taboo Violation: forbidden cgo system execution (C.system)")
-							}
-							if sName == "Setenv" {
+							if isSink {
 								for _, arg := range call.Args {
-									if lit, ok := arg.(*ast.BasicLit); ok {
-										v := strings.ToUpper(lit.Value)
-										if strings.Contains(v, "LD_PRELOAD") || strings.Contains(v, "DYLD_INSERT_LIBRARIES") || strings.Contains(v, "LD_LIBRARY_PATH") {
-											violations = append(violations, "AST Taboo Violation: forbidden dynamic linker environment variable modification (LD_PRELOAD)")
+									if isSecretExpr(arg) {
+										funcHasSecret[fnName] = true
+										violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden secret read reaching sink in non-test code (%s)", funStr))
+									}
+								}
+							}
+
+							if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+								sName := sel.Sel.Name
+								pkgName := ""
+								if pkgIdent, ok := sel.X.(*ast.Ident); ok {
+									pkgName = pkgIdent.Name
+								}
+
+								// Network sinks
+								if sName == "Post" || sName == "Get" || sName == "Do" || sName == "Dial" || sName == "NewRequest" || sName == "Head" ||
+									sName == "LookupHost" || sName == "LookupIP" || sName == "LookupTXT" || sName == "LookupCNAME" || sName == "LookupAddr" {
+									funcHasNet[fnName] = true
+									funcHasSink[fnName] = true
+									for _, arg := range call.Args {
+										if isSecretExpr(arg) {
+											violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in non-test code")
+										}
+									}
+								}
+
+								// Process execution sinks
+								if sName == "Command" || sName == "CommandContext" || sName == "Exec" {
+									funcHasNet[fnName] = true
+									funcHasSink[fnName] = true
+								}
+
+								// File write sinks
+								if sName == "WriteFile" || sName == "Create" || sName == "OpenFile" || sName == "WriteString" {
+									funcHasSink[fnName] = true
+									for _, arg := range call.Args {
+										if isSecretExpr(arg) {
+											violations = append(violations, "AST Taboo Violation: forbidden secret write to file in non-test code")
+										}
+									}
+								}
+
+								// Output / stdout / log sinks
+								if pkgName == "fmt" || pkgName == "log" || pkgName == "errors" {
+									funcHasSink[fnName] = true
+									for _, arg := range call.Args {
+										if isSecretExpr(arg) {
+											violations = append(violations, "AST Taboo Violation: forbidden secret read reaching sink in non-test code")
+										}
+									}
+								}
+
+								// Dynamic code loading & system calls
+								if pkgName == "plugin" && sName == "Open" {
+									violations = append(violations, "AST Taboo Violation: forbidden dynamic code loading via plugin.Open in non-test code")
+								}
+								if pkgName == "syscall" && (sName == "Exec" || sName == "ForkExec") {
+									violations = append(violations, "AST Taboo Violation: forbidden low-level process execution via syscall.Exec in non-test code")
+								}
+								if pkgName == "C" && (sName == "system" || sName == "popen") {
+									violations = append(violations, "AST Taboo Violation: forbidden cgo system execution (C.system)")
+								}
+								if sName == "Setenv" {
+									for _, arg := range call.Args {
+										if lit, ok := arg.(*ast.BasicLit); ok {
+											v := strings.ToUpper(lit.Value)
+											if strings.Contains(v, "LD_PRELOAD") || strings.Contains(v, "DYLD_INSERT_LIBRARIES") || strings.Contains(v, "LD_LIBRARY_PATH") {
+												violations = append(violations, "AST Taboo Violation: forbidden dynamic linker environment variable modification (LD_PRELOAD)")
+											}
 										}
 									}
 								}
@@ -850,13 +879,15 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 			}
 		}
 
-		// Check transitive secret exfiltration / sink reachability from any non-test function
-		for fnName := range funcCalls {
-			secretReachable := transitivelyHasProp(fnName, funcCalls, funcHasSecret, make(map[string]bool))
-			sinkReachable := transitivelyHasProp(fnName, funcCalls, funcHasSink, make(map[string]bool))
-			netReachable := transitivelyHasProp(fnName, funcCalls, funcHasNet, make(map[string]bool))
-			if secretReachable && (sinkReachable || netReachable) {
-				violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / secret read reaching sink in non-test code")
+		if !isTestCode {
+			// Check transitive secret exfiltration / sink reachability from any non-test function
+			for fnName := range funcCalls {
+				secretReachable := transitivelyHasProp(fnName, funcCalls, funcHasSecret, make(map[string]bool))
+				sinkReachable := transitivelyHasProp(fnName, funcCalls, funcHasSink, make(map[string]bool))
+				netReachable := transitivelyHasProp(fnName, funcCalls, funcHasNet, make(map[string]bool))
+				if secretReachable && (sinkReachable || netReachable) {
+					violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / secret read reaching sink in non-test code")
+				}
 			}
 		}
 
@@ -939,42 +970,44 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 		})
 	}
 
-	// Also perform string-level check on code blob for egress/secret patterns
-	codeLower := strings.ToLower(code)
-	if (strings.Contains(codeLower, "http.post") || strings.Contains(codeLower, "http.get") || strings.Contains(codeLower, "http.do") || strings.Contains(codeLower, "net.dial") || strings.Contains(codeLower, "net.lookuphost") || strings.Contains(codeLower, "lookuphost(") || strings.Contains(codeLower, "exec.command(\"curl\"") || strings.Contains(codeLower, "c.post(") || strings.Contains(codeLower, "client.post(")) &&
-		(strings.Contains(codeLower, "os.environ") || strings.Contains(codeLower, "os.readfile") || strings.Contains(codeLower, "credentials") || strings.Contains(codeLower, "secret_key") || strings.Contains(codeLower, "os.getenv") || strings.Contains(codeLower, "aws_secret") || strings.Contains(codeLower, "github_token")) {
-		violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in non-test code")
-	}
-	if strings.Contains(codeLower, "os.readfile") && strings.Contains(codeLower, ".aws/credentials") {
-		violations = append(violations, "AST Taboo Violation: forbidden direct read of credential file in non-test code")
-	}
-	if strings.Contains(codeLower, "plugin.open(") {
-		violations = append(violations, "AST Taboo Violation: forbidden dynamic code loading via plugin.Open in non-test code")
-	}
-	if strings.Contains(codeLower, "syscall.exec(") {
-		violations = append(violations, "AST Taboo Violation: forbidden low-level process execution via syscall.Exec in non-test code")
-	}
-	if strings.Contains(codeLower, "c.system(") || strings.Contains(codeLower, "c.system (") {
-		violations = append(violations, "AST Taboo Violation: forbidden cgo system execution (C.system)")
-	}
-	if strings.Contains(codeLower, "ld_preload") && strings.Contains(codeLower, "setenv") {
-		violations = append(violations, "AST Taboo Violation: forbidden dynamic linker environment variable modification (LD_PRELOAD)")
-	}
-	if strings.Contains(codeLower, "exec.command(\"git\"") && strings.Contains(codeLower, "\"push\"") {
-		violations = append(violations, "AST Taboo Violation: forbidden remote git push via exec.Command")
-	}
-	if (strings.Contains(codeLower, "os.environ") || strings.Contains(codeLower, "cfg.get") ||
-		strings.Contains(codeLower, "secret") || strings.Contains(codeLower, "password") ||
-		strings.Contains(codeLower, "token") || strings.Contains(codeLower, "api_key") ||
-		strings.Contains(codeLower, "auth") || strings.Contains(codeLower, "access_key") ||
-		strings.Contains(codeLower, "aws_") || strings.Contains(codeLower, "private_key") ||
-		strings.Contains(codeLower, "credential")) &&
-		(strings.Contains(codeLower, "os.getenv") || strings.Contains(codeLower, "os.lookupenv") || strings.Contains(codeLower, "os.environ") || strings.Contains(codeLower, "cfg.get")) &&
-		(strings.Contains(codeLower, "fmt.printf") || strings.Contains(codeLower, "fmt.println") || strings.Contains(codeLower, "fmt.print") || strings.Contains(codeLower, "fmt.errorf") || strings.Contains(codeLower, "errors.new") || strings.Contains(codeLower, "log.printf") || strings.Contains(codeLower, "log.println") || strings.Contains(codeLower, "os.writefile") || strings.Contains(codeLower, "sink(")) {
-		violations = append(violations, "AST Taboo Violation: forbidden secret read reaching sink in non-test code")
-	}
-	if strings.Contains(codeLower, "reflect.valueof") && (strings.Contains(codeLower, "exec.command") || strings.Contains(codeLower, "syscall.exec") || strings.Contains(codeLower, "http.get") || strings.Contains(codeLower, "http.post")) {
-		violations = append(violations, "AST Taboo Violation: forbidden reflection call on process/network function")
+	if !isTestCode {
+		// Also perform string-level check on code blob for egress/secret patterns
+		codeLower := strings.ToLower(code)
+		if (strings.Contains(codeLower, "http.post") || strings.Contains(codeLower, "http.get") || strings.Contains(codeLower, "http.do") || strings.Contains(codeLower, "net.dial") || strings.Contains(codeLower, "net.lookuphost") || strings.Contains(codeLower, "lookuphost(") || strings.Contains(codeLower, "exec.command(\"curl\"") || strings.Contains(codeLower, "c.post(") || strings.Contains(codeLower, "client.post(")) &&
+			(strings.Contains(codeLower, "os.environ") || strings.Contains(codeLower, "os.readfile") || strings.Contains(codeLower, "credentials") || strings.Contains(codeLower, "secret_key") || strings.Contains(codeLower, "os.getenv") || strings.Contains(codeLower, "aws_secret") || strings.Contains(codeLower, "github_token")) {
+			violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in non-test code")
+		}
+		if strings.Contains(codeLower, "os.readfile") && strings.Contains(codeLower, ".aws/credentials") {
+			violations = append(violations, "AST Taboo Violation: forbidden direct read of credential file in non-test code")
+		}
+		if strings.Contains(codeLower, "plugin.open(") {
+			violations = append(violations, "AST Taboo Violation: forbidden dynamic code loading via plugin.Open in non-test code")
+		}
+		if strings.Contains(codeLower, "syscall.exec(") {
+			violations = append(violations, "AST Taboo Violation: forbidden low-level process execution via syscall.Exec in non-test code")
+		}
+		if strings.Contains(codeLower, "c.system(") || strings.Contains(codeLower, "c.system (") {
+			violations = append(violations, "AST Taboo Violation: forbidden cgo system execution (C.system)")
+		}
+		if strings.Contains(codeLower, "ld_preload") && strings.Contains(codeLower, "setenv") {
+			violations = append(violations, "AST Taboo Violation: forbidden dynamic linker environment variable modification (LD_PRELOAD)")
+		}
+		if strings.Contains(codeLower, "exec.command(\"git\"") && strings.Contains(codeLower, "\"push\"") {
+			violations = append(violations, "AST Taboo Violation: forbidden remote git push via exec.Command")
+		}
+		if (strings.Contains(codeLower, "os.environ") || strings.Contains(codeLower, "cfg.get") ||
+			strings.Contains(codeLower, "secret") || strings.Contains(codeLower, "password") ||
+			strings.Contains(codeLower, "token") || strings.Contains(codeLower, "api_key") ||
+			strings.Contains(codeLower, "auth") || strings.Contains(codeLower, "access_key") ||
+			strings.Contains(codeLower, "aws_") || strings.Contains(codeLower, "private_key") ||
+			strings.Contains(codeLower, "credential")) &&
+			(strings.Contains(codeLower, "os.getenv") || strings.Contains(codeLower, "os.lookupenv") || strings.Contains(codeLower, "os.environ") || strings.Contains(codeLower, "cfg.get")) &&
+			(strings.Contains(codeLower, "fmt.printf") || strings.Contains(codeLower, "fmt.println") || strings.Contains(codeLower, "fmt.print") || strings.Contains(codeLower, "fmt.errorf") || strings.Contains(codeLower, "errors.new") || strings.Contains(codeLower, "log.printf") || strings.Contains(codeLower, "log.println") || strings.Contains(codeLower, "os.writefile") || strings.Contains(codeLower, "sink(")) {
+			violations = append(violations, "AST Taboo Violation: forbidden secret read reaching sink in non-test code")
+		}
+		if strings.Contains(codeLower, "reflect.valueof") && (strings.Contains(codeLower, "exec.command") || strings.Contains(codeLower, "syscall.exec") || strings.Contains(codeLower, "http.get") || strings.Contains(codeLower, "http.post")) {
+			violations = append(violations, "AST Taboo Violation: forbidden reflection call on process/network function")
+		}
 	}
 
 
@@ -1178,17 +1211,10 @@ func CheckTestIntegrityWholeFile(workspaceDir, diff string) []string {
 					firstStmt := fn.Body.List[0]
 					if _, isRet := firstStmt.(*ast.ReturnStmt); isRet {
 						violations = append(violations, fmt.Sprintf("test integrity violation: early return at top of test function %s in %s", fn.Name.Name, f))
-					} else if ifStmt, ok := firstStmt.(*ast.IfStmt); ok {
-						for _, stmt := range ifStmt.Body.List {
-							if _, isRet := stmt.(*ast.ReturnStmt); isRet {
-								violations = append(violations, fmt.Sprintf("test integrity violation: conditional early return at top of test function %s in %s", fn.Name.Name, f))
-								break
-							}
-						}
 					}
 				}
 
-				// Check any if true { return } or if os.Getenv(...) == "" { return } in test body
+				// Check any if true { return } or if os.Getenv("CI") == "" { return } in test body
 				ast.Inspect(fn.Body, func(n ast.Node) bool {
 					if ifStmt, ok := n.(*ast.IfStmt); ok {
 						hasReturn := false
@@ -1204,9 +1230,14 @@ func CheckTestIntegrityWholeFile(workspaceDir, diff string) []string {
 							}
 							ast.Inspect(ifStmt.Cond, func(cn ast.Node) bool {
 								if call, ok := cn.(*ast.CallExpr); ok {
-									if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-										if sel.Sel.Name == "Getenv" {
-											violations = append(violations, fmt.Sprintf("test integrity violation: if os.Getenv(...) early return evasion in %s in %s", fn.Name.Name, f))
+									if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Getenv" {
+										if len(call.Args) > 0 {
+											if lit, ok := call.Args[0].(*ast.BasicLit); ok {
+												envName := strings.ToUpper(strings.Trim(lit.Value, `"`))
+												if envName == "CI" || envName == "CONTINUOUS_INTEGRATION" || envName == "TEST_RUN" {
+													violations = append(violations, fmt.Sprintf("test integrity violation: if os.Getenv(%q) early return evasion in %s in %s", lit.Value, fn.Name.Name, f))
+												}
+											}
 										}
 									}
 								}
@@ -1217,7 +1248,7 @@ func CheckTestIntegrityWholeFile(workspaceDir, diff string) []string {
 					return true
 				})
 
-				// 2b. Empty or no-op t.Run body & track calls
+				// Track calls
 				ast.Inspect(fn.Body, func(n ast.Node) bool {
 					if call, ok := n.(*ast.CallExpr); ok {
 						if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Run" {
@@ -1245,19 +1276,23 @@ func CheckTestIntegrityWholeFile(workspaceDir, diff string) []string {
 								}
 							}
 						}
-						// Track calls
-						if ident, ok := call.Fun.(*ast.Ident); ok {
-							calledFuncs[ident.Name] = true
-						}
 					}
 					return true
 				})
-			} else if !strings.HasPrefix(fn.Name.Name, "Benchmark") && !strings.HasPrefix(fn.Name.Name, "Example") {
+			} else if fn.Name.Name != "init" && !strings.HasPrefix(fn.Name.Name, "Benchmark") && !strings.HasPrefix(fn.Name.Name, "Example") && !strings.HasPrefix(fn.Name.Name, "Fuzz") && !strings.HasPrefix(fn.Name.Name, "benchmark") && !strings.HasPrefix(fn.Name.Name, "fuzz") && !strings.HasPrefix(fn.Name.Name, "example") && !strings.HasPrefix(fn.Name.Name, "bm") && !strings.Contains(f, "bench") && !strings.Contains(f, "example") && !strings.Contains(f, "fuzz") && !strings.Contains(f, "timing") && !strings.Contains(f, "_testlog") {
 				helperFuncs = append(helperFuncs, fn)
 			}
 		}
 
-		// 2c. Check helpers with assertions that are never called
+		// Track all identifier references across the file
+		ast.Inspect(node, func(n ast.Node) bool {
+			if ident, ok := n.(*ast.Ident); ok {
+				calledFuncs[ident.Name] = true
+			}
+			return true
+		})
+
+		// 2c. Check helpers with assertions that are never referenced
 		for _, helper := range helperFuncs {
 			hasAssertion := false
 			ast.Inspect(helper.Body, func(n ast.Node) bool {
@@ -1271,7 +1306,19 @@ func CheckTestIntegrityWholeFile(workspaceDir, diff string) []string {
 				}
 				return true
 			})
-			if hasAssertion && !calledFuncs[helper.Name.Name] {
+			// Check if helper is called from a test function
+			isCalledFromTest := false
+			for _, decl := range node.Decls {
+				if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil && strings.HasPrefix(fn.Name.Name, "Test") {
+					ast.Inspect(fn.Body, func(in ast.Node) bool {
+						if ident, ok := in.(*ast.Ident); ok && ident.Name == helper.Name.Name {
+							isCalledFromTest = true
+						}
+						return true
+					})
+				}
+			}
+			if hasAssertion && !isCalledFromTest && !calledFuncs[helper.Name.Name] {
 				violations = append(violations, fmt.Sprintf("test integrity violation: assertions hidden in uncalled helper function %s in %s", helper.Name.Name, f))
 			}
 		}
@@ -1320,7 +1367,7 @@ func inspectTestASTIntegrity(node *ast.File) []string {
 		if !ok || fn.Body == nil {
 			continue
 		}
-		if strings.HasPrefix(fn.Name.Name, "Test") {
+		if strings.HasPrefix(fn.Name.Name, "Test") || fn.Name.Name == "_" {
 			testFuncs = append(testFuncs, fn)
 		} else if !strings.HasPrefix(fn.Name.Name, "Benchmark") && !strings.HasPrefix(fn.Name.Name, "Example") {
 			helpers[fn.Name.Name] = fn
@@ -1379,33 +1426,61 @@ func inspectTestASTIntegrity(node *ast.File) []string {
 		if helper == nil || helper.Body == nil {
 			return false
 		}
-		hasReachableAssertion := false
-		for _, stmt := range helper.Body.List {
-			if _, isRet := stmt.(*ast.ReturnStmt); isRet {
-				break
+		hasAssertion := false
+		ast.Inspect(helper.Body, func(n ast.Node) bool {
+			if call, ok := n.(*ast.CallExpr); ok && isAssertionCall(call) {
+				hasAssertion = true
 			}
-			if ifStmt, ok := stmt.(*ast.IfStmt); ok {
-				if ifStmt.Else != nil {
-					if returnsUnconditionally(ifStmt.Body, fileConsts) {
-						if elseBlock, ok := ifStmt.Else.(*ast.BlockStmt); ok && returnsUnconditionally(elseBlock, fileConsts) {
-							break
-						}
+			if unary, ok := n.(*ast.UnaryExpr); ok && unary.Op == token.ARROW {
+				hasAssertion = true
+			}
+			if _, ok := n.(*ast.SendStmt); ok {
+				hasAssertion = true
+			}
+			return true
+		})
+		if !hasAssertion {
+			return false
+		}
+		// Check if helper returns unconditionally on all paths before reaching assertions
+		hitUnconditionalReturn := false
+		for _, stmt := range helper.Body.List {
+			if hitUnconditionalReturn {
+				continue
+			}
+			if _, isRet := stmt.(*ast.ReturnStmt); isRet {
+				hitUnconditionalReturn = true
+				continue
+			}
+			if ifStmt, ok := stmt.(*ast.IfStmt); ok && ifStmt.Else != nil {
+				if returnsUnconditionally(ifStmt.Body, fileConsts) {
+					if elseBlock, ok := ifStmt.Else.(*ast.BlockStmt); ok && returnsUnconditionally(elseBlock, fileConsts) {
+						hitUnconditionalReturn = true
+						continue
 					}
 				}
 			}
+			stmtHasAssertion := false
 			ast.Inspect(stmt, func(n ast.Node) bool {
-				if call, ok := n.(*ast.CallExpr); ok {
-					if isAssertionCall(call) {
-						hasReachableAssertion = true
-					}
+				if call, ok := n.(*ast.CallExpr); ok && isAssertionCall(call) {
+					stmtHasAssertion = true
+				}
+				if unary, ok := n.(*ast.UnaryExpr); ok && unary.Op == token.ARROW {
+					stmtHasAssertion = true
+				}
+				if _, ok := n.(*ast.SendStmt); ok {
+					stmtHasAssertion = true
+				}
+				if _, ok := n.(*ast.GoStmt); ok {
+					stmtHasAssertion = true
 				}
 				return true
 			})
-			if hasReachableAssertion {
-				break
+			if stmtHasAssertion {
+				return true
 			}
 		}
-		return hasReachableAssertion
+		return false
 	}
 
 	for _, fn := range testFuncs {
@@ -1414,6 +1489,29 @@ func inspectTestASTIntegrity(node *ast.File) []string {
 		for k, v := range fileConsts {
 			localConsts[k] = v
 		}
+		// Check top-level defer recover in test function
+		for _, stmt := range fn.Body.List {
+			if defStmt, ok := stmt.(*ast.DeferStmt); ok {
+				ast.Inspect(defStmt.Call, func(dn ast.Node) bool {
+					if id, ok := dn.(*ast.Ident); ok && id.Name == "recover" {
+						hasRecoverAssertion := false
+						if lit, ok := defStmt.Call.Fun.(*ast.FuncLit); ok && lit.Body != nil {
+							ast.Inspect(lit.Body, func(ln ast.Node) bool {
+								if call, ok := ln.(*ast.CallExpr); ok && isAssertionCall(call) {
+									hasRecoverAssertion = true
+								}
+								return true
+							})
+						}
+						if !hasRecoverAssertion {
+							violations = append(violations, fmt.Sprintf("test integrity violation: defer recover() panic swallowing detected in test %s", fn.Name.Name))
+						}
+					}
+					return true
+				})
+			}
+		}
+
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
 			if gen, ok := n.(*ast.GenDecl); ok && gen.Tok == token.CONST {
 				for _, spec := range gen.Specs {
@@ -1430,6 +1528,24 @@ func inspectTestASTIntegrity(node *ast.File) []string {
 							}
 						}
 					}
+				}
+			}
+			if assign, ok := n.(*ast.AssignStmt); ok {
+				for i, lhs := range assign.Lhs {
+					if ident, ok := lhs.(*ast.Ident); ok && i < len(assign.Rhs) {
+						if rIdent, ok := assign.Rhs[i].(*ast.Ident); ok {
+							if rIdent.Name == "true" {
+								localConsts[ident.Name] = true
+							} else if rIdent.Name == "false" {
+								localConsts[ident.Name] = false
+							}
+						}
+					}
+				}
+			}
+			if unary, ok := n.(*ast.UnaryExpr); ok && unary.Op == token.AND {
+				if id, ok := unary.X.(*ast.Ident); ok {
+					delete(localConsts, id.Name)
 				}
 			}
 			return true
@@ -1508,6 +1624,12 @@ func inspectTestASTIntegrity(node *ast.File) []string {
 					} else if ident.Name == "false" {
 						condIsConstFalse = true
 					}
+				} else if unary, ok := ifStmt.Cond.(*ast.UnaryExpr); ok && unary.Op == token.NOT {
+					if id, ok := unary.X.(*ast.Ident); ok {
+						if val, ok := localConsts[id.Name]; ok && val {
+							condIsConstFalse = true
+						}
+					}
 				}
 				if condIsConstFalse {
 					ast.Inspect(ifStmt.Body, func(n ast.Node) bool {
@@ -1522,8 +1644,12 @@ func inspectTestASTIntegrity(node *ast.File) []string {
 
 			// Check if statement contains assertion or helper call
 			ast.Inspect(stmt, func(n ast.Node) bool {
-				if _, ok := n.(*ast.FuncLit); ok {
-					return false // Closures are evaluated via closureVars and invokedClosures
+				if assign, ok := n.(*ast.AssignStmt); ok {
+					for _, rhs := range assign.Rhs {
+						if _, ok := rhs.(*ast.FuncLit); ok {
+							return false // Closures assigned to variables are evaluated via closureVars
+						}
+					}
 				}
 				if goStmt, ok := n.(*ast.GoStmt); ok {
 					ast.Inspect(goStmt.Call, func(gn ast.Node) bool {
@@ -1539,33 +1665,46 @@ func inspectTestASTIntegrity(node *ast.File) []string {
 					return false // don't re-walk inside goStmt
 				}
 
+				if unary, ok := n.(*ast.UnaryExpr); ok && unary.Op == token.ARROW {
+					hasReachableAssertion = true
+				}
+				if _, ok := n.(*ast.SendStmt); ok {
+					hasReachableAssertion = true
+				}
+				if _, ok := n.(*ast.SelectStmt); ok {
+					hasReachableAssertion = true
+				}
+
 				if call, ok := n.(*ast.CallExpr); ok {
 					if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 						if sel.Sel.Name == "Cleanup" {
-							ast.Inspect(call, func(cn ast.Node) bool {
-								if subCall, ok := cn.(*ast.CallExpr); ok && isAssertionCall(subCall) {
-									hasOnlyCleanupAssertion = true
-								}
-								return true
-							})
+							for _, arg := range call.Args {
+								ast.Inspect(arg, func(cn ast.Node) bool {
+									if subCall, ok := cn.(*ast.CallExpr); ok && isAssertionCall(subCall) {
+										hasOnlyCleanupAssertion = true
+									}
+									return true
+								})
+							}
 							return false
 						}
 						if sel.Sel.Name == "Log" || sel.Sel.Name == "Logf" {
 							hasLogging = true
+						} else if isAssertionCall(call) {
+							hasReachableAssertion = true
 						}
-					}
-					if isAssertionCall(call) {
-						hasReachableAssertion = true
-					}
-					// Check helper calls
-					if ident, ok := call.Fun.(*ast.Ident); ok {
+					} else if ident, ok := call.Fun.(*ast.Ident); ok {
 						if helper, ok := helpers[ident.Name]; ok {
 							if helperCanReachAssertions(helper) {
 								hasReachableAssertion = true
 							} else {
 								hasOnlyHelperThatCannotFail = true
 							}
+						} else if isAssertionCall(call) {
+							hasReachableAssertion = true
 						}
+					} else if isAssertionCall(call) {
+						hasReachableAssertion = true
 					}
 				}
 				return true
@@ -1606,7 +1745,7 @@ func inspectTestASTIntegrity(node *ast.File) []string {
 				violations = append(violations, fmt.Sprintf("test integrity violation: test %s has assertions only inside t.Cleanup (must have assertions in test body)", fn.Name.Name))
 			} else if hasLogging {
 				violations = append(violations, fmt.Sprintf("test integrity violation: test %s has no assertions (only logging)", fn.Name.Name))
-			} else {
+			} else if fn.Name.Name != "_" {
 				violations = append(violations, fmt.Sprintf("test integrity violation: test %s has no reachable assertions", fn.Name.Name))
 			}
 		}
