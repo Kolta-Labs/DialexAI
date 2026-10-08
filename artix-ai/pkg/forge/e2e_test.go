@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"artix/pkg/audit"
 	"artix/pkg/coder"
 	"artix/pkg/git"
 	"artix/pkg/persona"
@@ -818,6 +819,162 @@ func TestR6_2_TwoPhaseAutonomousPRFlow_RealBareRepo(t *testing.T) {
 		t.Fatalf("expected valid approval for lead-security-alice, got: %+v", approval)
 	}
 }
+
+// TestR7_2_BranchProtection_NoFalsePositives_ProtectsDevelopStaging verifies that
+// develop, dev, staging, release/*, main, master are protected, while feature branches
+// like verify-login, validation-fix, vendor-update are NOT false-positived.
+func TestR7_2_BranchProtection_NoFalsePositives_ProtectsDevelopStaging(t *testing.T) {
+	protectedBranches := []string{
+		"main",
+		"master",
+		"develop",
+		"dev",
+		"staging",
+		"prod",
+		"production",
+		"trunk",
+		"release/1.0",
+		"releases/2026.1",
+		"hotfix/security-patch",
+	}
+
+	for _, b := range protectedBranches {
+		if !IsProtectedBranch(b) {
+			t.Fatalf("SECURITY VIOLATION: branch %q was expected to be PROTECTED, but IsProtectedBranch returned false", b)
+		}
+	}
+
+	unprotectedFeatureBranches := []string{
+		"verify-login",
+		"validation-fix",
+		"vendor-update",
+		"feature/auth",
+		"artix-pr-42",
+		"fix/bug-123",
+	}
+
+	for _, b := range unprotectedFeatureBranches {
+		if IsProtectedBranch(b) {
+			t.Fatalf("FALSE POSITIVE: feature branch %q was incorrectly marked as PROTECTED by IsProtectedBranch", b)
+		}
+	}
+}
+
+// TestR7_2_NonDestructiveCleanup_NoReviewsYet_And_503 verifies that remote candidate PR branches
+// are NOT deleted on "no reviews yet" or HTTP 503 / network errors, and are ONLY deleted on definitive negative reviews.
+func TestR7_2_NonDestructiveCleanup_NoReviewsYet_And_503(t *testing.T) {
+	bareDir, err := os.MkdirTemp("", "artix_remote_bare_cleanup")
+	if err != nil {
+		t.Fatalf("failed to create bare repo: %v", err)
+	}
+	defer os.RemoveAll(bareDir)
+	_ = exec.Command("git", "init", "--bare", bareDir).Run()
+
+	workDir, driver := setupTestRepoForForge(t)
+	defer os.RemoveAll(workDir)
+	_ = exec.Command("git", "-C", workDir, "remote", "add", "origin", bareDir).Run()
+
+	prBranch := "artix-pr-cleanup-test"
+	pusher := NewForgePusher(driver, "origin", prBranch)
+	headSHA, _ := driver.HeadHash()
+	if err := pusher(context.Background(), headSHA); err != nil {
+		t.Fatalf("failed to push candidate branch: %v", err)
+	}
+
+	// 1. "No reviews yet" / no APPROVED review found -> MUST NOT delete remote candidate branch
+	noReviewsVerifier := func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+		return nil, fmt.Errorf("forge approval verification failed: no valid human APPROVED review found")
+	}
+
+	_, err = VerifyAndMergeCandidate(context.Background(), driver, noReviewsVerifier, headSHA, nil, "SPEC-1", "origin", prBranch)
+	if err == nil {
+		t.Fatalf("expected verification failure when no reviews exist")
+	}
+
+	// Branch must still exist in remote bare repo
+	if out, err := exec.Command("git", "-C", bareDir, "rev-parse", "--verify", "refs/heads/"+prBranch).CombinedOutput(); err != nil {
+		t.Fatalf("DESTRUCTIVE BUG (R7-2 b): remote PR branch was destroyed on 'no reviews yet' error: %s", string(out))
+	}
+
+	// 2. HTTP 503 Server Outage -> MUST NOT delete remote candidate branch
+	server503Verifier := func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+		return nil, fmt.Errorf("forge API error: HTTP 503 Service Unavailable")
+	}
+
+	_, err = VerifyAndMergeCandidate(context.Background(), driver, server503Verifier, headSHA, nil, "SPEC-1", "origin", prBranch)
+	if err == nil {
+		t.Fatalf("expected verification failure on 503")
+	}
+
+	// Branch must still exist in remote bare repo
+	if out, err := exec.Command("git", "-C", bareDir, "rev-parse", "--verify", "refs/heads/"+prBranch).CombinedOutput(); err != nil {
+		t.Fatalf("DESTRUCTIVE BUG (R7-2 b): remote PR branch was destroyed on 503 outage error: %s", string(out))
+	}
+
+	// 3. Definitive rejection (CHANGES_REQUESTED) -> MUST delete remote candidate branch
+	changesRequestedVerifier := func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+		return nil, fmt.Errorf("forge approval verification failed: review changes requested by \"reviewer-bob\"")
+	}
+
+	_, err = VerifyAndMergeCandidate(context.Background(), driver, changesRequestedVerifier, headSHA, nil, "SPEC-1", "origin", prBranch)
+	if err == nil {
+		t.Fatalf("expected verification failure on changes requested")
+	}
+
+	// Branch must be deleted
+	if _, err := exec.Command("git", "-C", bareDir, "rev-parse", "--verify", "refs/heads/"+prBranch).CombinedOutput(); err == nil {
+		t.Fatalf("expected remote PR branch to be deleted after definitive CHANGES_REQUESTED rejection")
+	}
+}
+
+// TestR7_2_Phase2_BoundToPhase1AuditRecord verifies that Phase 2 merge verification requires
+// the candidate commit SHA and Spec ID to be cryptographically bound to a Phase 1 audit record.
+func TestR7_2_Phase2_BoundToPhase1AuditRecord(t *testing.T) {
+	tempDir, driver := setupTestRepoForForge(t)
+	defer os.RemoveAll(tempDir)
+
+	headSHA, _ := driver.HeadHash()
+	logger := audit.Default(tempDir)
+
+	// Subtest 1: Unbound / unrecorded SHA passed to Phase 2 is refused
+	approvedVerifier := func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+		return &policy.PRApproval{
+			ApproverUsername: "lead-alice",
+			State:            "APPROVED",
+			CommitSHA:        commitSHA,
+			VerifiedByForge:  true,
+		}, nil
+	}
+
+	_, err := VerifyAndMergeCandidate(context.Background(), driver, approvedVerifier, "unbound-foreign-candidate-sha-99999", logger, "SPEC-BOUND-001", "origin", "artix-pr-1")
+	if err == nil {
+		t.Fatalf("SECURITY VIOLATION (R7-2 e): Phase 2 accepted candidate SHA without Phase 1 audit record binding!")
+	}
+	if !strings.Contains(err.Error(), "audit") && !strings.Contains(err.Error(), "bound") && !strings.Contains(err.Error(), "phase 1") {
+		t.Fatalf("expected error mentioning Phase 1 audit record binding, got: %v", err)
+	}
+
+	// Subtest 2: Record Phase 1 candidate pushed event in audit log
+	_ = logger.Emit(audit.AuditEvent{
+		EventType: "CANDIDATE_PUSHED",
+		Status:    "AWAITING_APPROVAL",
+		Details: map[string]any{
+			"storyId":      "SPEC-BOUND-001",
+			"candidateSHA": headSHA,
+			"prBranch":     "artix-pr-1",
+		},
+	})
+
+	// Now Phase 2 verification succeeds with matching candidate SHA and Spec ID
+	approval, err := VerifyAndMergeCandidate(context.Background(), driver, approvedVerifier, headSHA, logger, "SPEC-BOUND-001", "origin", "artix-pr-1")
+	if err != nil {
+		t.Fatalf("expected Phase 2 verification to succeed when bound to Phase 1 audit record, got: %v", err)
+	}
+	if approval == nil || approval.ApproverUsername != "lead-alice" {
+		t.Fatalf("expected valid approval for lead-alice, got: %+v", approval)
+	}
+}
+
 
 
 
