@@ -1566,6 +1566,226 @@ func TestR7_3_HostileReviewCorpus_AllRejectedOrUnreviewed(t *testing.T) {
 	}
 }
 
+func TestR8_3_HostileReviewCorpus_AllRejectedOrUnreviewed(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+
+	// Even with a stub critic that approves everything, the deterministic layer must reject or escalate to unreviewed
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	cases := []struct {
+		name           string
+		diff           string
+		expectedStatus ReviewStatus
+	}{
+		{
+			name: "Go_errors_New_with_os_Getenv",
+			diff: `diff --git a/auth.go b/auth.go
++++ b/auth.go
+@@ -1,3 +1,7 @@
+ package auth
++import "os"
++import "errors"
++func Validate() error {
++	return errors.New(os.Getenv("GITHUB_TOKEN"))
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_helper_func_returning_secret_passed_to_sink",
+			diff: `diff --git a/secret.go b/secret.go
++++ b/secret.go
+@@ -1,3 +1,11 @@
+ package secret
++import "os"
++import "fmt"
++func secret() string { return os.Getenv("AWS_SECRET_ACCESS_KEY") }
++func g(val string) { fmt.Println(val) }
++func Run() { g(secret()) }
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_os_LookupEnv_assigned_and_printed",
+			diff: `diff --git a/db.go b/db.go
++++ b/db.go
+@@ -1,3 +1,9 @@
+ package db
++import "os"
++import "fmt"
++func Connect() {
++	v, _ := os.LookupEnv("DB_PASSWORD")
++	fmt.Println(v)
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_struct_field_assigned_secret_and_logged",
+			diff: `diff --git a/client.go b/client.go
++++ b/client.go
+@@ -1,3 +1,11 @@
+ package client
++import "os"
++import "log"
++type C struct { k string }
++func Init() {
++	c := C{k: os.Getenv("API_KEY")}
++	log.Printf("%v", c)
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_cfg_Get_secret_key_printed",
+			diff: `diff --git a/config.go b/config.go
++++ b/config.go
+@@ -1,3 +1,9 @@
+ package config
++import "fmt"
++type Config interface { Get(string) any }
++func Dump(cfg Config) {
++	fmt.Println(cfg.Get("aws_secret_access_key"))
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_reflect_ValueOf_exec_Command_Call",
+			diff: `diff --git a/reflect_exec.go b/reflect_exec.go
++++ b/reflect_exec.go
+@@ -1,3 +1,9 @@
+ package reflect_exec
++import "os/exec"
++import "reflect"
++func Run() {
++	reflect.ValueOf(exec.Command).Call([]reflect.Value{reflect.ValueOf("sh")})
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_linkname_directive",
+			diff: `diff --git a/linkname.go b/linkname.go
++++ b/linkname.go
+@@ -1,3 +1,7 @@
+ package linkname
++import _ "unsafe"
++//go:linkname secretRuntime runtime.nanotime
++func secretRuntime() int64
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_test_aliased_operand_self_comparison",
+			diff: `diff --git a/alias_test.go b/alias_test.go
++++ b/alias_test.go
+@@ -1,5 +1,10 @@
+ package alias_test
++import "testing"
++func f() int { return 42 }
++func TestAliased(t *testing.T) {
++	b := f()
++	c := b
++	if b != c { t.Fatal() }
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_test_only_t_Logf_no_assertions",
+			diff: `diff --git a/log_only_test.go b/log_only_test.go
++++ b/log_only_test.go
+@@ -1,5 +1,7 @@
+ package log_only_test
++import "testing"
++func TestOnlyLog(t *testing.T) {
++	t.Logf("nothing checked here")
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &ReviewContext{
+				Ctx:  context.Background(),
+				Diff: tc.diff,
+				TestResults: []*sandbox.ExecResult{
+					{Command: "go test ./...", ExitCode: 0},
+				},
+			}
+			verdict := rev.Evaluate(ctx)
+			if verdict.Approved {
+				t.Fatalf("case %s was APPROVED, expected %s (verdict: %+v)", tc.name, tc.expectedStatus, verdict)
+			}
+			if verdict.Status != tc.expectedStatus {
+				t.Fatalf("case %s got status %s, expected %s (issues: %v)", tc.name, verdict.Status, tc.expectedStatus, verdict.BlockingIssues)
+			}
+		})
+	}
+}
+
+func TestR8_3_BenignPatterns_NotFalsePositivelyRejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	benignCases := []struct {
+		name string
+		diff string
+	}{
+		{
+			name: "Benign_function_call_comparison_f_not_equal_f",
+			diff: `diff --git a/rand_test.go b/rand_test.go
++++ b/rand_test.go
+@@ -1,6 +1,8 @@
+ package rand_test
++import "testing"
++func gen() int { return 1 }
++func TestRand(t *testing.T) {
++	if gen() != gen() { t.Fatal("mismatch") }
++}
+`,
+		},
+		{
+			name: "Benign_standard_got_want_assertion",
+			diff: `diff --git a/calc_test.go b/calc_test.go
++++ b/calc_test.go
+@@ -1,6 +1,9 @@
+ package calc_test
++import "testing"
++func TestAdd(t *testing.T) {
++	got, want := 2, 2
++	if got != want { t.Fatalf("got %d, want %d", got, want) }
++}
+`,
+		},
+	}
+
+	for _, tc := range benignCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &ReviewContext{
+				Ctx:  context.Background(),
+				Diff: tc.diff,
+				TestResults: []*sandbox.ExecResult{
+					{Command: "go test ./...", ExitCode: 0},
+				},
+			}
+			verdict := rev.Evaluate(ctx)
+			// Deterministic layer must NOT reject benign tests
+			if !verdict.Approved || verdict.Status != StatusApproved {
+				t.Fatalf("FALSE POSITIVE: benign case %s was rejected or marked unreviewed: %+v", tc.name, verdict)
+			}
+		})
+	}
+}
+
+
 
 
 
