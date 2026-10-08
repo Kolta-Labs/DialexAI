@@ -591,3 +591,29 @@ go test -race -v -count=1 ./pkg/forge -run "TestG6|TestR2_2|TestWebhook"
 go test -race -v -count=1 ./cmd/artixd -run "Test"
 ```
 
+---
+
+## 12. Cryptographic Release Verification & Trust Anchor (R13-1)
+
+Official Artix Enterprise release tags are cryptographically signed using Ed25519 SSH signatures. The release signing key fingerprint is published in [`.well-known/security.txt`](.well-known/security.txt) and on official distribution channels.
+
+- **Signer Identity / Principal**: `releases@artix.ai`
+- **Key Type**: `ED25519 (SSH format)`
+- **Public Key**: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ4FO6aRcfHA07XqA9SGUUfpiqYfLsaRz+KUwigN2K5x`
+- **Key Fingerprint (SHA-256)**: `SHA256:Dh5vIjePKsm29xfvnLukrKDTOzLM/w5u6rYBcB3hmNg`
+
+### Clean Clone Independent Verification
+To independently verify any release tag against the published fingerprint without trusting the repository state:
+```bash
+TEMP_SIGNERS=$(mktemp)
+echo "releases@artix.ai ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ4FO6aRcfHA07XqA9SGUUfpiqYfLsaRz+KUwigN2K5x" > "$TEMP_SIGNERS"
+
+# Verify that the allowed signer key matches the published trust anchor:
+ssh-keygen -lf "$TEMP_SIGNERS" | grep -F "SHA256:Dh5vIjePKsm29xfvnLukrKDTOzLM/w5u6rYBcB3hmNg" || { echo "Fingerprint mismatch!"; exit 1; }
+
+# Verify the cryptographic tag signature:
+git -c gpg.ssh.allowedSignersFile="$TEMP_SIGNERS" tag -v v0.10.0-enterprise
+rm -f "$TEMP_SIGNERS"
+```
+
+

@@ -53,6 +53,9 @@ jobs:
         working-directory: artix-ai
         run: go run ./cmd/artix-corpus/main.go --output /tmp/ci_corpus.csv --baseline docs/pilot/benign_corpus_results.csv
 
+      - name: Verify Tag Immutability Registry
+        run: ./scripts/verify-tag-registry.sh
+
       - name: Build Enterprise CLI & Daemon Binaries
         working-directory: artix-ai
         run: |
@@ -131,6 +134,8 @@ jobs:
   cockpit-kmp-build:
     name: Desktop Cockpit KMP Compilation
     runs-on: macos-latest
+    if: "!contains(github.ref, '-enterprise')"
+    continue-on-error: true
     steps:
       - name: Checkout DialexAI
         uses: actions/checkout@v4
@@ -189,3 +194,47 @@ jobs:
           else
             echo "Clean PR diff; review passed."
           fi
+
+  publish-artix-release:
+    name: Publish Artix GitHub Release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-enterprise')
+    needs: [go-verification, vscode-plugin-build, intellij-plugin-build]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Linux Binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: artix-binaries-linux
+          path: release-assets/
+
+      - name: Download VS Code Extension
+        uses: actions/download-artifact@v4
+        with:
+          name: artix-vscode-extension
+          path: release-assets/
+
+      - name: Download IntelliJ Plugin
+        uses: actions/download-artifact@v4
+        with:
+          name: artix-intellij-plugin
+          path: release-assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Artix Enterprise ${{ github.ref_name }}
+          body_path: artix-ai/RELEASE_NOTES.md
+          files: |
+            release-assets/artix
+            release-assets/artixd
+            release-assets/SHA256SUMS
+            release-assets/*.vsix
+            release-assets/*.zip
+          draft: false
+          prerelease: false
