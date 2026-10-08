@@ -1,21 +1,28 @@
-# Artix Enterprise Release Notes — v0.7.0-enterprise
+# Artix Enterprise Release Notes — v0.8.0-enterprise
 
 ## Release Summary
-Artix Enterprise `v0.7.0-enterprise` implements complete remediation for Round 9 evaluator findings:
-- **R9-2: Hardened Cryptographic Audit Binding & Verdict Hash Wiring**:
-  - In enterprise mode, `ARTIX_AUDIT_PUBLIC_KEY` (or signed policy public key) is strictly mandatory; unkeyed audit logs are refused.
-  - Malformed public keys (e.g. non-hex strings) trigger immediate hard failure without falling back to unkeyed verification.
-  - Phase 1 records the reviewer verdict SHA-256 hash (`reviewerVerdictHash`) into the signed `CANDIDATE_PUSHED` event; Phase 2 requires and strictly validates this hash.
-  - Event matching strictly requires `CANDIDATE_PUSHED` events with `AWAITING_APPROVAL` or `SUCCESS` status (rejecting generic convergence events).
-  - Phase 1 audit emission is checked before candidate push; any audit error halts execution and aborts/rolls back the push.
-- **R9-3: Advanced AST Taint Tracking, Pointer Dereference Aliases, and Benign Corpus Study**:
-  - Leaking `os.Environ()` iteration variables to stdout/logging/sinks is flagged as an AST taboo violation.
-  - Pointer dereference comparisons (`b := f(); p := &b; if b != *p`) are detected and rejected as self-comparison tautologies via AST star expression analysis.
-  - Tests containing assertions only inside unjoined goroutines (`go func() { ... }()`) or only inside `t.Cleanup` are flagged (synchronous test body assertions are enforced).
-  - Sensitive environment variable heuristics distinguish non-secret configuration (`PORT`, `HOST`, `CI`, `ENV`, `LOG_LEVEL`) from credentials (`TOKEN`, `KEY`, `SECRET`, `PASSWORD`), preventing false-positive secret leak flags.
-  - Composite literal empty-range regex tightened to preserve non-empty slice ranges (`range []int{1, 2}`).
-  - Strict rejection of `t.Skip` is enforced by policy as an intentional defense against test evasion.
-  - Benign corpus study of 52 real test files across Go stdlib and open-source packages demonstrates **0.00% False Positive Rejection (FPR)** and **100.00% Preservation Rate**.
+Artix Enterprise `v0.8.0-enterprise` delivers full remediation for Round 10 evaluator findings:
+- **R10-2: End-to-End Binary Phase 1 to Phase 2 Execution & Verdict Hash Binding**:
+  - `artix code --json` in enterprise mode outputs the computed reviewer verdict SHA-256 hash (`verdictHash`).
+  - `artix merge` accepts `--verdict-hash` (or reads it from the authenticated Phase 1 record keyed by `--sha`/`--spec`).
+  - Strict cryptographic binding verification in Phase 2 ensures that a mismatched verdict hash fails closed (status `failed`).
+  - If an audit log exists in enterprise mode, a nil audit logger parameter is rejected (fail-closed).
+  - Validated via end-to-end binary tests executing the compiled `artix` CLI against a local bare Git repository and mock forge server (`TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash`).
+- **R10-3: Benign Stdlib Corpus Study & Zero False Positive Rejection**:
+  - Deleted prior synthetic corpus claims.
+  - Implemented reproducible evaluation harness `scripts/benign-corpus.sh` (`cmd/artix-corpus/main.go`) evaluating real test files across 34 Go standard library packages from `$(go env GOROOT)/src`.
+  - Discovered and evaluated **262 real test files**.
+  - Results published in `docs/pilot/benign_corpus_results.csv`: **262 Approved / 0 Rejected (0.00% False Positive Rejection / FPR)**.
+  - Fixed edge cases including string literal formatting, Example functions, distinct variable alias comparisons (`b != c` vs `b == c`), and multithreaded test helper analysis.
+- **R10-4: Comprehensive AST Assertion Reachability Analyzer**:
+  - Deterministically detects and rejects tests where no assertion is reachable on the main execution path.
+  - Rejects tests containing only `t.Logf` / `t.Log` without assertions.
+  - Rejects tests with assertions only in unjoined goroutines (`go func() { ... }()`).
+  - Rejects tests with assertions only inside `t.Cleanup`.
+  - Rejects tests with assertions placed after unconditional `return` statements.
+  - Rejects tests with assertions guarded by constant `false` conditions (e.g. `const debug = false; if debug { ... }` or `ok := true; if !ok { ... }`).
+  - Rejects tests with assertions defined in closures that are never called (`_ = check`).
+  - Rejects tests relying solely on helper functions that cannot fail (return unconditionally on all paths).
 
 ---
 
@@ -30,49 +37,49 @@ Artix Enterprise `v0.7.0-enterprise` implements complete remediation for Round 9
 ### Verifying the Tag
 To independently verify the cryptographic signature on this tag:
 ```bash
-git -c gpg.ssh.allowedSignersFile=.allowed_signers tag -v v0.7.0-enterprise
+git -c gpg.ssh.allowedSignersFile=.allowed_signers tag -v v0.8.0-enterprise
 ```
 
 ### Tag Immutability Registry
-Exact commit targets verified via `git rev-parse <tag>^{commit}`:
+Exact commit targets verified via `git rev-parse <tag>^{commit}` and `git rev-parse <tag>`:
 - **`v0.1.0-enterprise`**: `92fc42fa5a2f694c3d2f8f4a556d35a529bdc09b` (tag object: `d42da85a32b4905e62d4b980bb6d3320523efd7d`)
 - **`v0.2.0-enterprise`**: `7b4164992fd24a9e6154db382b2d8d87f68cab89` (tag object: `51c215a385ded1e206fcf01d461549e97bcf76f6`)
 - **`v0.3.0-enterprise`**: `22a07738bbbcbd4b93398801292eb9f9c98299ee` (tag object: `9384732de2a0ffae6aae71935e857ad7c842bed1`)
 - **`v0.4.0-enterprise`**: `3cb016d11557268d8d0050d461d62f342fc102c2` (tag object: `aaaf821939ab414d593b763d806a509b7bdced85`)
 - **`v0.5.0-enterprise`**: `ea197f8108a8824c64364a2c059a3e261475073f` (tag object: `71fbb86f8c0547e749811da19a74fd80bcc6a0cb`)
 - **`v0.6.0-enterprise`**: `e1803c1553c440353051385f304109b9551c992f` (tag object: `30d4c0559ea1eacdeb051ab399de46fe10cf4604`)
-- **`v0.7.0-enterprise`**: Canonical signed release incorporating Round 9 fixes.
+- **`v0.7.0-enterprise`**: `5d31de9c95c4980ed8ff019fb966449acfd085c6` (tag object: `091bed22e42db575235a7b35c99dcc42b380b534`)
+- **`v0.8.0-enterprise`**: Canonical signed release incorporating Round 10 fixes.
 
 ---
 
-## Round 9 Technical Remediations & Verified Test Suites
+## Round 10 Technical Remediations & Verified Test Suites
 
-### R9-1: Release & CI Verification
-- Signed release tag `v0.7.0-enterprise` created with the published ED25519 signing key.
-- Clean clone validation passing `go build ./...`, `go vet ./...`, and `go test -race -count=1 ./...`.
-
-### R9-2: Cryptographic Audit Trail Verification & Verdict Hash Binding
-- **Enterprise Key Requirement**: In enterprise mode, `verifyPhase1AuditBinding` mandates a valid `ARTIX_AUDIT_PUBLIC_KEY`. Refuses unkeyed verification.
-- **Malformed Key Protection**: `hex.DecodeString` errors on public keys trigger immediate verification failure without unkeyed fallback.
-- **Verdict Hash Binding**: Phase 1 records `reviewerVerdictHash: sha256(verdictJSON)` in the event payload. Phase 2 requires non-empty `expectedVerdictHash` and validates equality.
-- **Strict Event Type Matching**: Only matches `CANDIDATE_PUSHED` events. Rejects generic `CONVERGENCE` events.
-- **Pre-Push Emission Validation**: Phase 1 audits the candidate push event prior to running `ForgePusher`, failing closed if emission fails.
+### R10-2: Built-Binary Phase 1 to Phase 2 with Verdict Hash Binding
+- **CLI Phase 1 Output**: `artix code --json` outputs `verdictHash`.
+- **CLI Phase 2 Input**: `artix merge` binds `--verdict-hash` to the cryptographic audit record.
+- **Fail-Closed Audit Binding**: If an audit log exists, nil logger verification is rejected in enterprise mode.
 - **Verified Tests**:
-  - `pkg/forge/e2e_test.go`: `TestR9_2_CryptographicAuditBinding_EnterpriseKeyMandatory_AndMalformedKeyFailure`
-  - `pkg/forge/e2e_test.go`: `TestR9_2_VerdictHashBinding_Phase1ToPhase2`
-  - `pkg/forge/e2e_test.go`: `TestR9_2_StrictCandidatePushedEventMatching_RejectsGenericConvergence`
-  - `pkg/forge/e2e_test.go`: `TestR9_2_Phase1AuditEmitFailure_RefusesCandidatePush`
+  - `pkg/forge/e2e_test.go`: `TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash`
+  - `pkg/forge/forge_test.go`: `TestR10_2_VerifyPhase1AuditBinding_NilLogger_FailsClosedWhenLogExists`
 
-### R9-3: Advanced AST Taint Tracking, Pointer Alias, and Benign Study
-- **Environ Taint Tracking**: Traces range iteration over `os.Environ()` and flags data flow into standard output/logging sinks.
-- **Pointer Dereference Alias Detection**: Analyzes `*ast.StarExpr` against pointer alias maps (`p := &b`) to detect `b != *p` self-comparisons.
-- **Goroutine & Cleanup Assertion Gate**: Rejects tests with assertions only inside unjoined goroutines or `t.Cleanup`.
-- **Benign Pattern Preservation**: Safely allows non-secret environment variables (`PORT`), composite slice ranges (`[]int{1, 2}`), and short mode parameter adjustments.
-- **52-Pattern Benign Corpus Study**: Evaluated 52 real test files from Go stdlib and open-source packages (`pkg/reviewer/benign_corpus_test.go`). Result: **0.00% False Positive Rejection (FPR)**.
+### R10-3: Benign Stdlib Corpus Study
+- **Reproducible Script**: `scripts/benign-corpus.sh` evaluates test files across 34 stdlib packages.
+- **Results**: 262/262 files approved (0.00% FPR), documented in `docs/pilot/benign_corpus_results.csv`.
 - **Verified Tests**:
-  - `pkg/reviewer/reviewer_test.go`: `TestR9_3_HostileReviewCorpus_AllRejectedOrUnreviewed`
-  - `pkg/reviewer/reviewer_test.go`: `TestR9_3_FalsePositives_BenignPatternsPreserved`
-  - `pkg/reviewer/benign_corpus_test.go`: `TestBenignCorpus_FiftyOpenSourceTestPatterns`
+  - `pkg/reviewer/reviewer_test.go`: `TestR10_3_BenignStdlibPatterns_NotFalsePositivelyRejected`
+
+### R10-4: AST Assertion Reachability Analyzer
+- **Only Logging**: Detects tests with only `t.Logf`/`t.Log`.
+- **Unjoined Goroutines**: Flags assertions isolated inside unjoined `go func() { ... }()`.
+- **Cleanup Only**: Flags assertions isolated inside `t.Cleanup`.
+- **Unreachable Code**: Flags assertions placed after unconditional returns.
+- **Constant False Guard**: Flags assertions under `const false` or negated constant true flags.
+- **Uninvoked Closures**: Flags assertion closures assigned to variables that are never called.
+- **Unfailable Helpers**: Flags helper functions that return before reaching assertions.
+- **Panic Swallowing**: Flags `defer func() { recover() }()` panic swallowing in tests.
+- **Verified Tests**:
+  - `pkg/reviewer/reviewer_test.go`: `TestR10_4_HostileReviewCorpus_AssertionReachability_AllRejected`
 
 ---
 
@@ -88,6 +95,9 @@ go vet ./...
 # 3. Verify all tests with race detector
 go test -race -count=1 ./...
 
-# 4. Verify tag signature
-git -c gpg.ssh.allowedSignersFile=.allowed_signers tag -v v0.7.0-enterprise
+# 4. Run reproducible benign corpus evaluation
+./scripts/benign-corpus.sh
+
+# 5. Verify tag signature
+git -c gpg.ssh.allowedSignersFile=.allowed_signers tag -v v0.8.0-enterprise
 ```
