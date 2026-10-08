@@ -254,8 +254,11 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 	// 5. Deterministic Pre-Filter: Fail Closed for Non-Go Languages without Semantic Runner
 	hasNonGo := false
 	for _, tf := range touchedFiles {
-		ext := filepath.Ext(tf)
-		if ext == ".kt" || ext == ".swift" || ext == ".ts" || ext == ".py" || ext == ".js" {
+		ext := strings.ToLower(filepath.Ext(tf))
+		if ext == ".go" {
+			continue
+		}
+		if !isDocsOnlyAllowedFile(tf, ctx.Diff) {
 			hasNonGo = true
 			break
 		}
@@ -266,7 +269,7 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 			if verdict.Status != StatusRejected {
 				verdict.Approved = false
 				verdict.Status = StatusUnreviewed
-				verdict.BlockingIssues = append(verdict.BlockingIssues, "UNREVIEWED: diff touches non-Go files (.kt, .swift, .ts, .py) and no semantic rule runner (Konsist/Detekt/Semgrep/SwiftLint) is configured and executed; fail-closed")
+				verdict.BlockingIssues = append(verdict.BlockingIssues, "UNREVIEWED: diff touches non-Go / non-allowlisted files and no semantic rule runner (Konsist/Detekt/Semgrep/SwiftLint) is configured and executed; fail-closed")
 				return verdict
 			}
 		}
@@ -316,6 +319,29 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 	}
 
 	return verdict
+}
+
+func isDocsOnlyAllowedFile(path string, diff string) bool {
+	tfLower := strings.ToLower(path)
+	ext := strings.ToLower(filepath.Ext(tfLower))
+
+	// Image files
+	if ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".svg" || ext == ".ico" || ext == ".webp" {
+		return true
+	}
+	// Plain text files
+	if ext == ".txt" {
+		return true
+	}
+	// Markdown files (if no taboo attack payload or script commands present)
+	if ext == ".md" {
+		diffLower := strings.ToLower(diff)
+		if strings.Contains(diffLower, "curl ") || strings.Contains(diffLower, "wget ") || strings.Contains(diffLower, "$github_token") || strings.Contains(diffLower, "aws_") || strings.Contains(diffLower, "/etc/") {
+			return false
+		}
+		return true
+	}
+	return false
 }
 
 func isScriptOrBuildFile(path string) bool {

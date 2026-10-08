@@ -825,6 +825,17 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 									}
 								}
 
+								// Header and metadata sinks
+								if sName == "Set" || sName == "Add" {
+									for _, arg := range call.Args {
+										if isSecretExpr(arg) {
+											funcHasSecret[fnName] = true
+											funcHasSink[fnName] = true
+											violations = append(violations, "AST Taboo Violation: forbidden secret read reaching Header/metadata sink in non-test code")
+										}
+									}
+								}
+
 								// Process execution sinks
 								if sName == "Command" || sName == "CommandContext" || sName == "Exec" {
 									funcHasNet[fnName] = true
@@ -870,6 +881,19 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 											}
 										}
 									}
+								}
+							}
+						}
+					}
+
+					if !isTestCode {
+						if cl, ok := in.(*ast.CompositeLit); ok {
+							if isSecretExpr(cl) {
+								typStr := strings.ToLower(formatExpr(cl.Type))
+								if strings.Contains(typStr, "url.values") || strings.Contains(typStr, "header") || strings.Contains(typStr, "request") {
+									funcHasSecret[fnName] = true
+									funcHasSink[fnName] = true
+									violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden secret read reaching network struct sink in non-test code (%s)", typStr))
 								}
 							}
 						}
