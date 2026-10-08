@@ -2528,6 +2528,163 @@ func TestR4_AssertionReachability_ComprehensiveClassVariants(t *testing.T) {
 	}
 }
 
+func TestR13_3_TaglessSwitchWithInit_AssertionReachability(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	// Case 1: Tagless switch with init containing runtime expression with assertion -> MUST BE APPROVED
+	diffPass := `diff --git a/pkg/service/switch_test.go b/pkg/service/switch_test.go
++++ b/pkg/service/switch_test.go
+@@ -1,5 +1,14 @@
+ package service
++import "testing"
++func getVal() string { return "active" }
++func TestSwitchWithInit(t *testing.T) {
++	switch v := getVal(); {
++	case v == "active":
++		t.Log("handling active")
++		if 1 == 2 { t.Fatal("impossible") }
++	}
++}
+`
+	ctxPass := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diffPass,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdictPass := rev.Evaluate(ctxPass)
+	if !verdictPass.Approved {
+		t.Fatalf("expected tagless switch with init to be approved, got: %+v", verdictPass)
+	}
+
+	// Case 2: Tagless switch where case is known constant false -> MUST NOT BE APPROVED (dead code evasion)
+	diffDead := `diff --git a/pkg/service/dead_switch_test.go b/pkg/service/dead_switch_test.go
++++ b/pkg/service/dead_switch_test.go
+@@ -1,5 +1,11 @@
+ package service
++import "testing"
++func TestDeadSwitch(t *testing.T) {
++	switch {
++	case false:
++		t.Fatal("dead code")
++	}
++}
+`
+	ctxDead := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diffDead,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdictDead := rev.Evaluate(ctxDead)
+	if verdictDead.Approved {
+		t.Fatalf("expected dead case in tagless switch to be rejected, got: %+v", verdictDead)
+	}
+}
+
+func TestR13_3_NonSecretEnv_WithUnrelatedNetworkCall_Allowed(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	// File reading non-sensitive env variable (PORT) and also performing unrelated network call (http.Get)
+	diff := `diff --git a/pkg/server/server.go b/pkg/server/server.go
++++ b/pkg/server/server.go
+@@ -1,5 +1,15 @@
+ package server
++import (
++	"net/http"
++	"os"
++)
++func Start() {
++	port := os.Getenv("PORT")
++	if port == "" {
++		port = "8080"
++	}
++	resp, err := http.Get("https://example.com/health")
++	_ = resp
++	_ = err
++}
+`
+	ctx := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diff,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdict := rev.Evaluate(ctx)
+	if !verdict.Approved {
+		t.Fatalf("expected non-secret env + unrelated network call to be approved, got: %+v", verdict)
+	}
+}
+
+func TestR13_3_AuthorizationHeaderPolicy(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	// Case 1: Standard Authorization header with token -> MUST BE APPROVED
+	diffAuth := `diff --git a/pkg/client/client.go b/pkg/client/client.go
++++ b/pkg/client/client.go
+@@ -1,5 +1,11 @@
+ package client
++import (
++	"net/http"
++	"os"
++)
++func SetAuth(req *http.Request) {
++	token := os.Getenv("AUTH_TOKEN")
++	req.Header.Set("Authorization", "Bearer " + token)
++}
+`
+	ctxAuth := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diffAuth,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdictAuth := rev.Evaluate(ctxAuth)
+	if !verdictAuth.Approved {
+		t.Fatalf("expected standard Authorization header to be approved, got: %+v", verdictAuth)
+	}
+
+	// Case 2: Custom header exfiltration (X-Secret) -> MUST BE REJECTED
+	diffCustom := `diff --git a/pkg/client/leak.go b/pkg/client/leak.go
++++ b/pkg/client/leak.go
+@@ -1,5 +1,11 @@
+ package client
++import (
++	"net/http"
++	"os"
++)
++func LeakHeader(req *http.Request) {
++	token := os.Getenv("AUTH_TOKEN")
++	req.Header.Set("X-Secret-Payload", token)
++}
+`
+	ctxCustom := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diffCustom,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdictCustom := rev.Evaluate(ctxCustom)
+	if verdictCustom.Approved {
+		t.Fatalf("expected custom header secret leak to be rejected, got: %+v", verdictCustom)
+	}
+}
+
+
 
 
 
