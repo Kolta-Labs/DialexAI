@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"artix/internal/forgesec"
 	"artix/pkg/audit"
 	"artix/pkg/coder"
 	"artix/pkg/git"
@@ -25,6 +27,7 @@ import (
 	"artix/pkg/spec"
 	"artix/pkg/steering"
 )
+
 
 func setupTestRepoForForge(t *testing.T) (string, *git.Driver) {
 	tempDir, err := os.MkdirTemp("", "artix_forge_e2e_test")
@@ -791,7 +794,7 @@ func TestR6_2_TwoPhaseAutonomousPRFlow_RealBareRepo(t *testing.T) {
 	prodVerifier := NewGitHubVerifier(ghClient, targetRepo, 42)
 
 	// In Subtest C, review is CHANGES_REQUESTED -> VerifyAndMergeCandidate must fail and clean up remote branch
-	_, err = VerifyAndMergeCandidate(context.Background(), driver, prodVerifier, candidateSHA, nil, storySpec.ID, "origin", prBranch)
+	_, err = VerifyAndMergeCandidate(context.Background(), driver, prodVerifier, candidateSHA, nil, storySpec.ID, "origin", prBranch, resPhase1.VerdictHash)
 	if err == nil {
 		t.Fatalf("expected VerifyAndMergeCandidate to fail when verifier rejects")
 	}
@@ -811,7 +814,7 @@ func TestR6_2_TwoPhaseAutonomousPRFlow_RealBareRepo(t *testing.T) {
 	// Change review state on forge to APPROVED
 	remoteReviewState = "APPROVED"
 
-	approval, err := VerifyAndMergeCandidate(context.Background(), driver, prodVerifier, candidateSHA, nil, storySpec.ID, "origin", prBranch)
+	approval, err := VerifyAndMergeCandidate(context.Background(), driver, prodVerifier, candidateSHA, nil, storySpec.ID, "origin", prBranch, resPhase1.VerdictHash)
 	if err != nil {
 		t.Fatalf("expected Phase 2 VerifyAndMergeCandidate to SUCCEED with valid approval, got error: %v", err)
 	}
@@ -1262,10 +1265,14 @@ func TestR10_2_NilAuditLogger_MustNotBypassPhase1BindingWhenAuditLogExists(t *te
 	})
 
 	approvedVerifier := func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+		sig := forgesec.SignToken("lead-alice", "developer-bob", "APPROVED", commitSHA, "github_api_server_verified")
 		return &policy.PRApproval{
 			ApproverUsername: "lead-alice",
+			AuthorUsername:   "developer-bob",
 			State:            "APPROVED",
 			CommitSHA:        commitSHA,
+			Signature:        sig,
+			Source:           "github_api_server_verified",
 			VerifiedByForge:  true,
 		}, nil
 	}
@@ -1315,7 +1322,6 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 	defer os.RemoveAll(workDir)
 	_ = driver
 
-
 	_ = exec.Command("git", "-C", workDir, "remote", "add", "origin", bareDir).Run()
 	_ = exec.Command("git", "-C", workDir, "push", "origin", "HEAD:refs/heads/main").Run()
 
@@ -1323,8 +1329,52 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 	specsDir := filepath.Join(workDir, "docs", "specs")
 	_ = os.MkdirAll(specsDir, 0755)
 	specPath := filepath.Join(specsDir, "STORY-SPEC-BIN-01.md")
-	specContent := "# Story Spec: SPEC-BIN-01\n\nTitle: Binary Phase 1 to 2\n\nAcceptance Criteria:\n- Scenario: file updated\n\nVerification Commands:\n- test -f counter.txt\n"
+	specContent := "# Story Spec: Binary Phase 1 to 2\n\n**Spec ID:** `SPEC-BIN-01`\n\n## 2. Acceptance Criteria\n\n### Scenario 1: file updated\n* **Given** a counter file\n* **When** it updates\n* **Then** it exists\n\n## 5. Verification Test Suite\n\n```bash\ntest -f counter.txt\n```\n"
 	_ = os.WriteFile(specPath, []byte(specContent), 0644)
+
+	// Create and sign enterprise policy file
+	pubHex := os.Getenv("ARTIX_AUDIT_PUBLIC_KEY")
+	policyFile := filepath.Join(workDir, "policy.json")
+	policyJSON := fmt.Sprintf(`{
+		"enterpriseMode": true,
+		"allowAutonomous": true,
+		"requireSignedPolicy": true,
+		"requireForgeApproval": true,
+		"allowedTestCommands": ["test -f counter.txt"],
+		"auditPublicKey": "%s"
+	}`, pubHex)
+	_ = os.WriteFile(policyFile, []byte(policyJSON), 0644)
+	policySignKey := "test-secret-key-1234"
+	_ = policy.SignPolicyFile(policyFile, policySignKey)
+
+	// Mock LLM server
+	llmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		bodyBytes, _ := io.ReadAll(r.Body)
+		bodyStr := string(bodyBytes)
+		if strings.Contains(bodyStr, "adversarial_code_reviewer") || strings.Contains(bodyStr, "rubric") || strings.Contains(bodyStr, "Evaluation Rubric") || strings.Contains(bodyStr, "Reviewer") || strings.Contains(bodyStr, "Adversarial") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id":   "msg_critic",
+				"type": "message",
+				"role": "assistant",
+				"content": []map[string]any{
+					{"type": "text", "text": `{"approved": true, "blocking": [], "warnings": []}`},
+				},
+				"usage": map[string]any{"input_tokens": 10, "output_tokens": 10},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":   "msg_coder",
+			"type": "message",
+			"role": "assistant",
+			"content": []map[string]any{
+				{"type": "text", "text": "```diff\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+100\n```\n"},
+			},
+			"usage": map[string]any{"input_tokens": 20, "output_tokens": 20},
+		})
+	}))
+	defer llmServer.Close()
 
 	// Mock Forge server
 	var currentCandidateSHA string
@@ -1364,6 +1414,9 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 		"--forge-repo", "core",
 		specPath,
 	)
+	var stdoutPhase1, stderrPhase1 strings.Builder
+	cmdPhase1.Stdout = &stdoutPhase1
+	cmdPhase1.Stderr = &stderrPhase1
 	cmdPhase1.Dir = workDir
 	cmdPhase1.Env = append(os.Environ(),
 		"ARTIX_ENTERPRISE=1",
@@ -1371,9 +1424,12 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 		"ARTIX_PR_BRANCH=artix-pr-77",
 		"ARTIX_FORGE_REMOTE=origin",
 		"ANTHROPIC_API_KEY=mock-key",
+		"ARTIX_POLICY_SIGNING_KEY="+policySignKey,
+		"ARTIX_POLICY_PATH="+policyFile,
+		"ARTIX_API_URL="+llmServer.URL,
 	)
 
-	outPhase1, _ := cmdPhase1.CombinedOutput()
+	_ = cmdPhase1.Run()
 	var jsonResPhase1 struct {
 		Ok               bool   `json:"ok"`
 		Status           string `json:"status"`
@@ -1382,15 +1438,14 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 		VerdictHash      string `json:"verdictHash"`
 	}
 
-	// Parse last non-empty line of stdout
-	lines := strings.Split(strings.TrimSpace(string(outPhase1)), "\n")
-	lastLine := lines[len(lines)-1]
-	if err := json.Unmarshal([]byte(lastLine), &jsonResPhase1); err != nil {
-		t.Fatalf("failed to parse Phase 1 JSON output: %v (%s)", err, lastLine)
+	stdoutStr := strings.TrimSpace(stdoutPhase1.String())
+	if err := json.Unmarshal([]byte(stdoutStr), &jsonResPhase1); err != nil {
+		t.Fatalf("failed to parse Phase 1 JSON output: %v (stdout: %s, stderr: %s)", err, stdoutStr, stderrPhase1.String())
 	}
 
+
 	if jsonResPhase1.Status != "awaiting_approval" || !jsonResPhase1.AwaitingApproval {
-		t.Fatalf("expected Phase 1 to return status awaiting_approval, got: %+v (output: %s)", jsonResPhase1, string(outPhase1))
+		t.Fatalf("expected Phase 1 to return status awaiting_approval, got: %+v (stdout: %s, stderr: %s)", jsonResPhase1, stdoutStr, stderrPhase1.String())
 	}
 	if jsonResPhase1.VerdictHash == "" {
 		t.Fatalf("FAIL: Phase 1 JSON did not print verdictHash (got empty string)")
@@ -1418,20 +1473,25 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 	cmdMergeOk.Env = append(os.Environ(),
 		"ARTIX_ENTERPRISE=1",
 		"ARTIX_ALLOW_AUTONOMOUS=1",
+		"ARTIX_POLICY_SIGNING_KEY="+policySignKey,
+		"ARTIX_POLICY_PATH="+policyFile,
 	)
 
-	outMergeOk, errMergeOk := cmdMergeOk.CombinedOutput()
+	var stdoutMergeOk, stderrMergeOk strings.Builder
+	cmdMergeOk.Stdout = &stdoutMergeOk
+	cmdMergeOk.Stderr = &stderrMergeOk
+	errMergeOk := cmdMergeOk.Run()
 	if errMergeOk != nil {
-		t.Fatalf("expected Phase 2 artix merge with valid verdict hash to succeed, got: %v (%s)", errMergeOk, string(outMergeOk))
+		t.Fatalf("expected Phase 2 artix merge with valid verdict hash to succeed, got: %v (stdout: %s, stderr: %s)", errMergeOk, stdoutMergeOk.String(), stderrMergeOk.String())
 	}
 
 	var jsonResMergeOk struct {
 		Ok     bool   `json:"ok"`
 		Status string `json:"status"`
 	}
-	_ = json.Unmarshal([]byte(strings.TrimSpace(string(outMergeOk))), &jsonResMergeOk)
+	_ = json.Unmarshal([]byte(strings.TrimSpace(stdoutMergeOk.String())), &jsonResMergeOk)
 	if !jsonResMergeOk.Ok || jsonResMergeOk.Status != "approval_verified" {
-		t.Fatalf("expected merge status approval_verified, got: %+v (%s)", jsonResMergeOk, string(outMergeOk))
+		t.Fatalf("expected merge status approval_verified, got: %+v (stdout: %s, stderr: %s)", jsonResMergeOk, stdoutMergeOk.String(), stderrMergeOk.String())
 	}
 
 	// Phase 2 Rejection: artix merge with mismatched --verdict-hash
@@ -1451,16 +1511,23 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 	cmdMergeBad.Env = append(os.Environ(),
 		"ARTIX_ENTERPRISE=1",
 		"ARTIX_ALLOW_AUTONOMOUS=1",
+		"ARTIX_POLICY_SIGNING_KEY="+policySignKey,
+		"ARTIX_POLICY_PATH="+policyFile,
 	)
 
-	outMergeBad, errMergeBad := cmdMergeBad.CombinedOutput()
+	var stdoutMergeBad, stderrMergeBad strings.Builder
+	cmdMergeBad.Stdout = &stdoutMergeBad
+	cmdMergeBad.Stderr = &stderrMergeBad
+	errMergeBad := cmdMergeBad.Run()
 	if errMergeBad == nil {
-		t.Fatalf("SECURITY VIOLATION (R10-2): artix merge with mismatched verdict hash succeeded unexpectedly! Output: %s", string(outMergeBad))
+		t.Fatalf("SECURITY VIOLATION (R10-2): artix merge with mismatched verdict hash succeeded unexpectedly! Stdout: %s", stdoutMergeBad.String())
 	}
-	if !strings.Contains(string(outMergeBad), "mismatch") && !strings.Contains(string(outMergeBad), "rejected") {
-		t.Fatalf("expected error output mentioning verdict hash mismatch, got: %s", string(outMergeBad))
+	combinedBad := stdoutMergeBad.String() + " " + stderrMergeBad.String()
+	if !strings.Contains(combinedBad, "mismatch") && !strings.Contains(combinedBad, "rejected") {
+		t.Fatalf("expected error output mentioning verdict hash mismatch, got: %s", combinedBad)
 	}
 }
+
 
 
 

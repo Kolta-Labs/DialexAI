@@ -187,15 +187,33 @@ func VerifyAndMergeCandidate(ctx context.Context, driver *git.Driver, verifier f
 		return nil, fmt.Errorf("verifier is required for Phase 2 forge verification")
 	}
 
-	// Verify Phase 1 audit binding when audit logger is configured
+	workDir := ""
+	if driver != nil {
+		workDir = driver.WorkDir()
+	}
+	logPath := ""
 	if auditLogger != nil {
-		expVerdict := ""
-		if len(expectedVerdictHash) > 0 {
-			expVerdict = expectedVerdictHash[0]
+		logPath = auditLogger.LogPath()
+	} else if workDir != "" {
+		logPath = policy.EffectiveAuditLogPath(workDir)
+	}
+
+	expVerdict := ""
+	if len(expectedVerdictHash) > 0 {
+		expVerdict = strings.TrimSpace(expectedVerdictHash[0])
+	}
+
+	isEnterprise := policy.IsEnterprise() || policy.Active().EnterpriseMode || policy.Active().RequireSignedPolicy || os.Getenv("ARTIX_ENTERPRISE") != ""
+
+	// When audit logger is provided or audit log exists or enterprise mode is active, Phase 1 binding MUST be verified
+	if logPath != "" {
+		if _, statErr := os.Stat(logPath); statErr == nil || isEnterprise || auditLogger != nil {
+			if err := verifyPhase1AuditBinding(logPath, storyID, candidateSHA, expVerdict); err != nil {
+				return nil, fmt.Errorf("phase 2 verification error: %w", err)
+			}
 		}
-		if err := verifyPhase1AuditBinding(auditLogger.LogPath(), storyID, candidateSHA, expVerdict); err != nil {
-			return nil, fmt.Errorf("phase 2 verification error: %w", err)
-		}
+	} else if isEnterprise || auditLogger != nil {
+		return nil, fmt.Errorf("phase 2 verification error: Phase 1 audit binding verification required (fail closed)")
 	}
 
 	approval, err := verifier(ctx, candidateSHA)
@@ -234,9 +252,22 @@ func VerifyAndMergeCandidate(ctx context.Context, driver *git.Driver, verifier f
 				"state":      "APPROVAL_VERIFIED",
 			},
 		})
+	} else if workDir != "" {
+		_ = audit.Default(workDir).Emit(audit.AuditEvent{
+			EventType: audit.EventCodeConvergence,
+			Status:    "APPROVAL_VERIFIED",
+			Approver:  approval.ApproverUsername,
+			Details: map[string]any{
+				"storyId":    storyID,
+				"commitHash": candidateSHA,
+				"prBranch":   prBranch,
+				"state":      "APPROVAL_VERIFIED",
+			},
+		})
 	}
 
 	return approval, nil
 }
+
 
 

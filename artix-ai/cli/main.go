@@ -656,6 +656,7 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 			"awaitingApproval": res.AwaitingApproval,
 			"roundsRun":        res.RoundsRun,
 			"commitHash":       res.CommitHash,
+			"verdictHash":      res.VerdictHash,
 			"error":            res.Error,
 			"finalVerdict":     res.FinalVerdict,
 			"costReport":       res.CostReport,
@@ -682,6 +683,7 @@ func runMerge(cwd string, args []string, human io.Writer, sendJSON func(any), is
 	fs.SetOutput(stderr)
 	prFlag := fs.Int("pr", 0, "Pull Request / Merge Request number")
 	shaFlag := fs.String("sha", "", "Candidate commit SHA to verify and merge")
+	verdictHashFlag := fs.String("verdict-hash", "", "Expected reviewer verdict SHA-256 hash from Phase 1")
 	forgeFlag := fs.String("forge", os.Getenv("ARTIX_FORGE_TYPE"), "Forge provider: github or gitlab")
 	tokenFlag := fs.String("forge-token", "", "Forge API token (defaults to GITHUB_TOKEN or GITLAB_TOKEN)")
 	urlFlag := fs.String("forge-url", os.Getenv("ARTIX_FORGE_URL"), "Forge Base API URL")
@@ -722,7 +724,8 @@ func runMerge(cwd string, args []string, human io.Writer, sendJSON func(any), is
 		prBranch = fmt.Sprintf("artix-pr-%d", *prFlag)
 	}
 
-	approval, err := forge.VerifyAndMergeCandidate(context.Background(), driver, verifier, *shaFlag, audit.Default(cwd), *specIDFlag, *remoteFlag, prBranch)
+	approval, err := forge.VerifyAndMergeCandidate(context.Background(), driver, verifier, *shaFlag, audit.Default(cwd), *specIDFlag, *remoteFlag, prBranch, *verdictHashFlag)
+
 	if err != nil {
 		if isJSON {
 			sendJSON(map[string]any{"ok": false, "status": "rejected", "error": err.Error()})

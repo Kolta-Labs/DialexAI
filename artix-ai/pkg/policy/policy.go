@@ -207,8 +207,13 @@ func ResetCache() {
 // It enforces that the policy file must be root-owned (UID 0) or cryptographically signed.
 func LoadPolicy(path string) (*Policy, error) {
 	if path == "" {
-		path = DefaultPolicyPath
+		if envPath := os.Getenv("ARTIX_POLICY_PATH"); envPath != "" {
+			path = envPath
+		} else {
+			path = DefaultPolicyPath
+		}
 	}
+
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -389,12 +394,17 @@ func Active() *Policy {
 		return &p
 	}
 
-	p, err := LoadPolicy(DefaultPolicyPath)
+	policyPath := DefaultPolicyPath
+	if envPath := os.Getenv("ARTIX_POLICY_PATH"); envPath != "" {
+		policyPath = envPath
+	}
+	p, err := LoadPolicy(policyPath)
 	if err == nil && p != nil && p.IsVerified {
 		cachedPolicy = p
 		res := *cachedPolicy
 		return &res
 	}
+
 
 	// Fallback when no system policy file is present or verification failed
 	isEnvEnterprise := os.Getenv("ARTIX_ENTERPRISE") == "1" || os.Getenv("KRITIX_ENTERPRISE") == "1"

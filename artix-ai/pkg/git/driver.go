@@ -18,6 +18,20 @@ func NewDriver(repoDir string) *Driver {
 	return &Driver{repoDir: repoDir}
 }
 
+// RepoDir returns the repository directory path bound to this driver.
+func (d *Driver) RepoDir() string {
+	if d == nil {
+		return ""
+	}
+	return d.repoDir
+}
+
+// WorkDir returns the repository directory path bound to this driver.
+func (d *Driver) WorkDir() string {
+	return d.RepoDir()
+}
+
+
 // GitStatusResult describes the git working tree status.
 type GitStatusResult struct {
 	Branch         string   `json:"branch"`
