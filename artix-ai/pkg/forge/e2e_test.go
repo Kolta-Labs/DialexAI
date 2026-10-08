@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -442,4 +443,210 @@ func TestR4_2_ApprovePRAtPreCommitHead_BotAddsCommit_RejectedUntilReapproved(t *
 		t.Fatalf("expected error mentioning stale commit or approval on old head, got: %s", res.Error)
 	}
 }
+
+// TestR5_2_AutonomousCandidatePushAndForgeApproval_E2E verifies that Coordinator.Run correctly
+// exercises the push -> approve -> verify flow against a mock forge whose state is independent of local HEAD.
+func TestR5_2_AutonomousCandidatePushAndForgeApproval_E2E(t *testing.T) {
+	policy.ResetCache()
+	defer policy.ResetCache()
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+	t.Setenv("ARTIX_ALLOW_AUTONOMOUS", "1")
+	policy.SetActivePolicyForTest(&policy.Policy{
+		EnterpriseMode:       true,
+		AllowAutonomous:      true,
+		RequireForgeApproval: true,
+		AllowedTestCommands:  []string{"test -f counter.txt"},
+		IsVerified:           true,
+	})
+
+	tempDir, driver := setupTestRepoForForge(t)
+	defer os.RemoveAll(tempDir)
+
+	headBefore, err := driver.HeadHash()
+	if err != nil || headBefore == "" {
+		t.Fatalf("failed to get head hash: %v", err)
+	}
+
+	repoCtx, err := repo.DetectContext(tempDir)
+	if err != nil {
+		t.Fatalf("failed to detect repo context: %v", err)
+	}
+
+	reg := persona.NewRegistry("")
+	coderObj, _ := coder.NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := coder.NewCoordinator(coderObj, rev, driver, box)
+
+	storySpec := &spec.StorySpec{
+		ID:           "SPEC-GH-R5-2",
+		Title:        "Push and Approve Candidate Commit",
+		TestCommands: []string{"test -f counter.txt"},
+	}
+
+	// Mock forge holds independent PR state (independent of local HEAD)
+	var remotePRHead string = "initial-unapproved-sha-111111"
+	var remoteReviews []map[string]any
+
+	ghServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/pulls/301") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"user": map[string]any{"login": "developer-bob", "type": "User"},
+				"head": map[string]any{"sha": remotePRHead},
+			})
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/pulls/301/reviews") {
+			_ = json.NewEncoder(w).Encode(remoteReviews)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer ghServer.Close()
+
+	ghClient := NewGitHubClient(ForgeAuth{
+		Type:    ForgeGitHub,
+		Token:   "gh-secret-token",
+		BaseURL: ghServer.URL,
+	})
+
+	target := &RemoteRepoTarget{Owner: "acme", Repo: "core"}
+	verifier := NewGitHubVerifier(ghClient, target, 301)
+
+	// Subtest 1: Success when ForgePusher pushes candidate to PR branch and human approves that exact SHA
+	pushedSHA := ""
+	opts := &coder.LoopOptions{
+		MaxRounds: 1,
+		Autonomy:  coder.AutonomyAutonomous,
+		ForgePusher: func(ctx context.Context, commitSHA string) error {
+			pushedSHA = commitSHA
+			// Update mock forge remote PR head to the pushed candidate SHA
+			remotePRHead = commitSHA
+			// Human approves the pushed commit on the forge
+			remoteReviews = []map[string]any{
+				{
+					"id":        1,
+					"user":      map[string]any{"login": "lead-alice", "type": "User"},
+					"state":     "APPROVED",
+					"commit_id": commitSHA,
+				},
+			}
+			return nil
+		},
+		ForgeVerifier: verifier,
+		MockPatchGen: func(round int, feedback string) string {
+			return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+42\n"
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, &steering.PersonaSteeringContext{}, &steering.PersonaSteeringContext{}, opts)
+	if !res.Success {
+		t.Fatalf("expected push->approve->verify flow to SUCCEED, got error: %s", res.Error)
+	}
+	if pushedSHA == "" || res.CommitHash != pushedSHA {
+		t.Fatalf("expected candidate commit SHA %s to match pushed SHA %s", res.CommitHash, pushedSHA)
+	}
+
+	// Subtest 2: Refusal when ForgePusher fails or approval is on a different SHA
+	remotePRHead = "unrelated-stale-sha-999999"
+	remoteReviews = []map[string]any{
+		{
+			"id":        2,
+			"user":      map[string]any{"login": "lead-alice", "type": "User"},
+			"state":     "APPROVED",
+			"commit_id": "unrelated-stale-sha-999999",
+		},
+	}
+	optsRefusal := &coder.LoopOptions{
+		MaxRounds:     1,
+		Autonomy:      coder.AutonomyAutonomous,
+		ForgeVerifier: verifier,
+		MockPatchGen: func(round int, feedback string) string {
+			return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-42\n+43\n"
+		},
+	}
+	resRefusal := coord.Run(context.Background(), storySpec, repoCtx, &steering.PersonaSteeringContext{}, &steering.PersonaSteeringContext{}, optsRefusal)
+	if resRefusal.Success {
+		t.Fatalf("expected unpushed / stale PR head to be REJECTED, but run succeeded")
+	}
+}
+
+// TestR5_2_ResetHard_NeverResetsPreExistingUserCommit proves that ResetHard can never reset away
+// a pre-existing user commit when the commit step produced nothing or failed, and never touches a tree
+// the user is working in.
+func TestR5_2_ResetHard_NeverResetsPreExistingUserCommit(t *testing.T) {
+	tempDir, driver := setupTestRepoForForge(t)
+	defer os.RemoveAll(tempDir)
+
+	initialHead, err := driver.HeadHash()
+	if err != nil || initialHead == "" {
+		t.Fatalf("failed to get initial head: %v", err)
+	}
+
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+	reg := persona.NewRegistry("")
+	coderObj, _ := coder.NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := coder.NewCoordinator(coderObj, rev, driver, box)
+
+	storySpec := &spec.StorySpec{
+		ID:           "SPEC-GH-RESET-SAFETY",
+		Title:        "Reset Safety Verification",
+		TestCommands: []string{"test -f counter.txt"},
+	}
+
+	// 1. When patch application / test verification produces no commit
+	optsNoCommit := &coder.LoopOptions{
+		MaxRounds: 1,
+		Autonomy:  coder.AutonomyAutonomous,
+		MockPatchGen: func(round int, feedback string) string {
+			return "invalid-patch-that-fails-to-apply"
+		},
+	}
+	resNoCommit := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, optsNoCommit)
+	if resNoCommit.Success {
+		t.Fatalf("expected invalid patch to fail")
+	}
+
+	curHead, err := driver.HeadHash()
+	if err != nil {
+		t.Fatalf("failed to get head hash after failed run: %v", err)
+	}
+	if curHead != initialHead {
+		t.Fatalf("CRITICAL REGRESSION: pre-existing user commit was reset away! Expected HEAD=%s, got HEAD=%s", initialHead, curHead)
+	}
+
+	// 2. When candidate commit is made but forge approval is rejected
+	optsForgeFail := &coder.LoopOptions{
+		MaxRounds: 1,
+		Autonomy:  coder.AutonomyAutonomous,
+		ForgeVerifier: func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+			return nil, fmt.Errorf("forge approval rejected by security team")
+		},
+		MockPatchGen: func(round int, feedback string) string {
+			return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+777\n"
+		},
+	}
+	resForgeFail := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, optsForgeFail)
+	if resForgeFail.Success {
+		t.Fatalf("expected rejected forge approval to fail")
+	}
+
+	curHeadAfterForgeFail, err := driver.HeadHash()
+	if err != nil {
+		t.Fatalf("failed to get head hash after forge failure: %v", err)
+	}
+	if curHeadAfterForgeFail != initialHead {
+		t.Fatalf("CRITICAL REGRESSION: candidate rollback destroyed pre-existing user commit! Expected HEAD=%s, got HEAD=%s", initialHead, curHeadAfterForgeFail)
+	}
+}
+
 

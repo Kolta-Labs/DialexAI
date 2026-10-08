@@ -46,6 +46,7 @@ type LoopOptions struct {
 	Approver                           string              `json:"approver,omitempty"`
 	ForgeApproval                      *policy.PRApproval  `json:"forgeApproval,omitempty"`
 	ForgeVerifier                      func(ctx context.Context, commitSHA string) (*policy.PRApproval, error)
+	ForgePusher                        func(ctx context.Context, commitSHA string) error
 	MaxConsecutiveIdenticalRejections int                 `json:"maxConsecutiveIdenticalRejections,omitempty"`
 	TestCommandsConfirmed              bool                `json:"testCommandsConfirmed,omitempty"`
 	ConfirmTestCommands                func(commands []string) bool
