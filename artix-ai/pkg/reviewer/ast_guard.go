@@ -376,10 +376,14 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 						}
 						if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 							sName := sel.Sel.Name
-							if sName == "Post" || sName == "Get" || sName == "Do" || sName == "Dial" || sName == "NewRequest" || sName == "Head" {
+							if sName == "Post" || sName == "Get" || sName == "Do" || sName == "Dial" || sName == "NewRequest" || sName == "Head" ||
+								sName == "LookupHost" || sName == "LookupIP" || sName == "LookupTXT" || sName == "LookupCNAME" || sName == "LookupAddr" {
 								funcHasNet[fnName] = true
 							}
-							if sName == "Getenv" {
+							if sName == "Command" || sName == "CommandContext" {
+								funcHasNet[fnName] = true
+							}
+							if sName == "Getenv" || sName == "LookupEnv" {
 								for _, arg := range call.Args {
 									if lit, ok := arg.(*ast.BasicLit); ok {
 										v := strings.ToUpper(lit.Value)
@@ -388,17 +392,19 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 										}
 									}
 								}
+								// Any Getenv in non-test code interacting with net/sink is considered a secret candidate
+								funcHasSecret[fnName] = true
 							}
 							if sName == "Environ" {
 								funcHasSecret[fnName] = true
 							}
 							if sName == "ReadFile" || sName == "Open" {
 								for _, arg := range call.Args {
-									if lit, ok := arg.(*ast.BasicLit); ok {
-										v := strings.ToLower(lit.Value)
-										if strings.Contains(v, "credential") || strings.Contains(v, ".aws") || strings.Contains(v, ".ssh") || strings.Contains(v, "token") || strings.Contains(v, "secret") || strings.Contains(v, "/etc/passwd") {
-											funcHasSecret[fnName] = true
-										}
+									argStr := fmt.Sprintf("%v", arg)
+									argLower := strings.ToLower(argStr)
+									if strings.Contains(argLower, "credential") || strings.Contains(argLower, ".aws") || strings.Contains(argLower, ".ssh") || strings.Contains(argLower, "token") || strings.Contains(argLower, "secret") || strings.Contains(argLower, "/etc/passwd") || strings.Contains(argLower, "/etc/shadow") {
+										funcHasSecret[fnName] = true
+										violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden direct read of credential file %s in non-test code", argStr))
 									}
 								}
 							}
@@ -461,7 +467,7 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 				}
 			}
 
-			// 3. Command execution with shell: exec.Command("sh", ...) or exec.Command("bash", ...)
+			// 3. Command execution with shell: exec.Command("sh", ...) or exec.Command("bash", ...) or curl exfil
 			if call, ok := n.(*ast.CallExpr); ok && checkShellExec {
 				if sel, ok := call.Fun.(*ast.SelectorExpr); ok && (sel.Sel.Name == "Command" || sel.Sel.Name == "CommandContext") {
 					if len(call.Args) > 0 {
@@ -474,20 +480,30 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 							if val == "sh" || val == "bash" || val == "zsh" || val == "/bin/sh" || val == "/bin/bash" || val == "/bin/zsh" {
 								violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden shell interpreter invocation via exec.Command(%q)", val))
 							}
+							if val == "curl" || val == "wget" || val == "nc" {
+								// Check if any subsequent argument reads env or secrets
+								for _, arg := range call.Args[argIdx+1:] {
+									argS := fmt.Sprintf("%v", arg)
+									if strings.Contains(argS, "Getenv") || strings.Contains(argS, "SECRET") || strings.Contains(argS, "KEY") {
+										violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden network exfiltration via exec.Command(%q)", val))
+									}
+								}
+							}
 						}
 					}
 				}
 			}
 
-			// 4. Secret access and network egress in closures or functions
+			// 4. Secret access and network/DNS egress in closures or functions
 			if call, ok := n.(*ast.CallExpr); ok {
 				if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 					name := sel.Sel.Name
-					if name == "Post" || name == "Get" || name == "Do" || name == "Dial" || name == "NewRequest" {
+					if name == "Post" || name == "Get" || name == "Do" || name == "Dial" || name == "NewRequest" ||
+						name == "LookupHost" || name == "LookupIP" || name == "LookupTXT" || name == "LookupCNAME" {
 						// Inspect call arguments for direct secret / env reads
 						for _, arg := range call.Args {
 							argStr := fmt.Sprintf("%v", arg)
-							if strings.Contains(argStr, "Environ") || strings.Contains(argStr, "Getenv") || strings.Contains(argStr, "ReadFile") {
+							if strings.Contains(argStr, "Environ") || strings.Contains(argStr, "Getenv") || strings.Contains(argStr, "ReadFile") || strings.Contains(argStr, "SECRET") || strings.Contains(argStr, "TOKEN") {
 								violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in non-test code")
 							}
 						}
@@ -501,9 +517,12 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 
 	// Also perform string-level check on code blob for egress/secret patterns
 	codeLower := strings.ToLower(code)
-	if (strings.Contains(codeLower, "http.post") || strings.Contains(codeLower, "http.get") || strings.Contains(codeLower, "http.do") || strings.Contains(codeLower, "net.dial")) &&
-		(strings.Contains(codeLower, "os.environ") || strings.Contains(codeLower, "os.readfile") || strings.Contains(codeLower, "credentials") || strings.Contains(codeLower, "secret_key") || strings.Contains(codeLower, "os.getenv") || strings.Contains(codeLower, "aws_secret")) {
+	if (strings.Contains(codeLower, "http.post") || strings.Contains(codeLower, "http.get") || strings.Contains(codeLower, "http.do") || strings.Contains(codeLower, "net.dial") || strings.Contains(codeLower, "net.lookuphost") || strings.Contains(codeLower, "lookuphost(") || strings.Contains(codeLower, "exec.command(\"curl\"") || strings.Contains(codeLower, "c.post(") || strings.Contains(codeLower, "client.post(")) &&
+		(strings.Contains(codeLower, "os.environ") || strings.Contains(codeLower, "os.readfile") || strings.Contains(codeLower, "credentials") || strings.Contains(codeLower, "secret_key") || strings.Contains(codeLower, "os.getenv") || strings.Contains(codeLower, "aws_secret") || strings.Contains(codeLower, "github_token")) {
 		violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in non-test code")
+	}
+	if strings.Contains(codeLower, "os.readfile") && strings.Contains(codeLower, ".aws/credentials") {
+		violations = append(violations, "AST Taboo Violation: forbidden direct read of credential file in non-test code")
 	}
 
 	return deduplicateStrings(violations)
@@ -528,8 +547,17 @@ func inspectMultiLanguageSemantics(code string, taboos []string) []string {
 		strings.Contains(diffLower, "subprocess.run") {
 		violations = append(violations, "Security Taboo: forbidden arbitrary shell/command execution detected")
 	}
-	if strings.Contains(diffLower, "process()") && (strings.Contains(diffLower, "/bin/sh") || strings.Contains(diffLower, "/bin/bash") || strings.Contains(diffLower, "executableurl") || strings.Contains(diffLower, "launchpath") || strings.Contains(diffLower, "fileurlwithpath")) {
-		violations = append(violations, "Security Taboo: forbidden arbitrary shell/command execution detected in Swift (Process)")
+	if (strings.Contains(diffLower, "process()") || strings.Contains(diffLower, "nstask()")) && (strings.Contains(diffLower, "/bin/sh") || strings.Contains(diffLower, "/bin/bash") || strings.Contains(diffLower, "executableurl") || strings.Contains(diffLower, "launchpath") || strings.Contains(diffLower, "fileurlwithpath") || strings.Contains(diffLower, "launch()")) {
+		violations = append(violations, "Security Taboo: forbidden arbitrary shell/command execution detected in Swift (Process/NSTask)")
+	}
+	if strings.Contains(diffLower, "nstask()") || strings.Contains(diffLower, "nstask.launchedtask") {
+		violations = append(violations, "Security Taboo: forbidden arbitrary process execution detected in Swift (NSTask)")
+	}
+	if strings.Contains(diffLower, "new function(") || strings.Contains(diffLower, "new function \"") || strings.Contains(diffLower, "new function('") || strings.Contains(diffLower, "new function(`") {
+		violations = append(violations, "Security Taboo: forbidden dynamic code execution in TypeScript/JavaScript (new Function)")
+	}
+	if (strings.Contains(diffLower, "require('child_'") || strings.Contains(diffLower, "require(\"child_\"")) && (strings.Contains(diffLower, "'process'") || strings.Contains(diffLower, "\"process\"")) {
+		violations = append(violations, "Security Taboo: forbidden arbitrary command execution in TypeScript/JavaScript (child_process)")
 	}
 	if (strings.Contains(diffLower, "java.io.file") || strings.Contains(diffLower, "files.delete") || strings.Contains(diffLower, "file(")) && (strings.Contains(diffLower, "/etc/") || strings.Contains(diffLower, "delete()") || strings.Contains(diffLower, "paths.get") || strings.Contains(diffLower, "delete(")) {
 		violations = append(violations, "Security Taboo: forbidden destructive system file deletion detected")

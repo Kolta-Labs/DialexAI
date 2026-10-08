@@ -121,19 +121,24 @@ func IsAllowedSemanticRunner(cmdStr string) bool {
 		return false
 	}
 
-	// 4. Reject help/version-only invocations that do not analyze code
+	// 4. Reject help/version-only invocations and dummy config bypasses that disable rules or analyze nothing
 	isNoopFlagOnly := true
 	for _, arg := range fields[1:] {
 		argLower := strings.ToLower(arg)
 		if argLower == "--version" || argLower == "-v" || argLower == "-V" || argLower == "--help" || argLower == "-h" {
 			continue
 		}
-		if argLower == "./nothing/..." {
+		if argLower == "./nothing/..." || argLower == "nothing.js" || argLower == "/dev/null" || argLower == "--no-eslintrc" || argLower == "{}" || argLower == "--rule" {
 			return false
 		}
 		isNoopFlagOnly = false
 	}
 	if isNoopFlagOnly && len(fields) > 1 {
+		return false
+	}
+
+	trimmedLower := strings.ToLower(trimmed)
+	if strings.Contains(trimmedLower, "--no-eslintrc") || strings.Contains(trimmedLower, "--rule {}") || strings.Contains(trimmedLower, "-c /dev/null") || strings.Contains(trimmedLower, "nothing.js") || strings.Contains(trimmedLower, "/dev/null") {
 		return false
 	}
 
