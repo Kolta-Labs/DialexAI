@@ -100,6 +100,33 @@ func TestR3_4_ClaudeCodePlugin_RequiresExplicitConfirmationBeforeConfirmTests(t 
 	}
 }
 
+// TestR7_PluginDialogContract_CommandsDisplayedBeforeConfirm asserts that the VS Code
+// (extension.ts) and IntelliJ (Actions.kt) IDE plugins query and display the exact planned
+// test command list in the confirmation dialog before --confirm-tests is passed.
+func TestR7_PluginDialogContract_CommandsDisplayedBeforeConfirm(t *testing.T) {
+	// 1. VS Code extension.ts
+	vsCodePath := "../plugins/vscode/src/extension.ts"
+	vsData, err := os.ReadFile(vsCodePath)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", vsCodePath, err)
+	}
+	vsContent := string(vsData)
+	if !strings.Contains(vsContent, "testCommands") || !strings.Contains(vsContent, "execute the following test commands") {
+		t.Fatalf("SECURITY DEFECT (R7): %s must query plan test commands and display them in the confirmation dialog before --confirm-tests", vsCodePath)
+	}
+
+	// 2. IntelliJ Actions.kt
+	ijPath := "../plugins/intellij/src/main/kotlin/ai/artix/ide/Actions.kt"
+	ijData, err := os.ReadFile(ijPath)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", ijPath, err)
+	}
+	ijContent := string(ijData)
+	if !strings.Contains(ijContent, "testCommands") || !strings.Contains(ijContent, "execute the following test commands") {
+		t.Fatalf("SECURITY DEFECT (R7): %s must query plan test commands and display them in the confirmation dialog before --confirm-tests", ijPath)
+	}
+}
+
 // TestG8_CLI_JSON_SingleLineAndStderrProgress tests that 'plan', 'code', and 'review'
 // with '--json' output EXACTLY one line of valid JSON to stdout and route progress to stderr.
 func TestG8_CLI_Plan_JSON_SuccessAndError(t *testing.T) {

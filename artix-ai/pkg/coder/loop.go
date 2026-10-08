@@ -836,3 +836,17 @@ func isScriptOrBuildFile(path string) bool {
 	}
 	return false
 }
+
+// IsScriptOrBuildIndirection returns true if a test command can execute or read configuration from
+// files modified by the patch (such as Makefiles, scripts, package.json, conftest.py, etc.).
+func IsScriptOrBuildIndirection(cmdStr string, touchedFiles []string) bool {
+	for _, tf := range touchedFiles {
+		if isScriptOrBuildFile(tf) {
+			base := filepath.Base(tf)
+			if strings.Contains(cmdStr, tf) || strings.Contains(cmdStr, "./"+tf) || (base != "" && strings.Contains(cmdStr, base)) {
+				return true
+			}
+		}
+	}
+	return false
+}

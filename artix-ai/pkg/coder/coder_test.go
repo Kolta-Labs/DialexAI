@@ -1674,6 +1674,140 @@ func TestR7_3_CoordinatorRun_HostileCorpus_AllRejected(t *testing.T) {
 	}
 }
 
+func TestR8_TestCommandIndirection_ComprehensiveBuildAndScriptClosure(t *testing.T) {
+	testCases := []struct {
+		name        string
+		testCommand string
+		patchFile   string
+		patchDiff   string
+	}{
+		{
+			name:        "make_test_with_Makefile",
+			testCommand: "make test",
+			patchFile:   "Makefile",
+			patchDiff:   "diff --git a/Makefile b/Makefile\n--- a/Makefile\n+++ b/Makefile\n@@ -1,2 +1,3 @@\n test:\n+\techo bypass\n",
+		},
+		{
+			name:        "make_test_with_scripts_check_sh",
+			testCommand: "make test",
+			patchFile:   "scripts/check.sh",
+			patchDiff:   "diff --git a/scripts/check.sh b/scripts/check.sh\n--- a/scripts/check.sh\n+++ b/scripts/check.sh\n@@ -1,2 +1,3 @@\n+exit 0\n",
+		},
+		{
+			name:        "make_check_with_scripts_lib_helper_sh",
+			testCommand: "make check",
+			patchFile:   "scripts/lib/helper.sh",
+			patchDiff:   "diff --git a/scripts/lib/helper.sh b/scripts/lib/helper.sh\n--- a/scripts/lib/helper.sh\n+++ b/scripts/lib/helper.sh\n@@ -1,2 +1,3 @@\n+exit 0\n",
+		},
+		{
+			name:        "pytest_with_conftest_py",
+			testCommand: "pytest",
+			patchFile:   "conftest.py",
+			patchDiff:   "diff --git a/conftest.py b/conftest.py\n--- a/conftest.py\n+++ b/conftest.py\n@@ -1,2 +1,3 @@\n+import sys\n",
+		},
+		{
+			name:        "pytest_with_pytest_ini",
+			testCommand: "pytest",
+			patchFile:   "pytest.ini",
+			patchDiff:   "diff --git a/pytest.ini b/pytest.ini\n--- a/pytest.ini\n+++ b/pytest.ini\n@@ -1,2 +1,3 @@\n+[pytest]\n",
+		},
+		{
+			name:        "pytest_with_setup_cfg",
+			testCommand: "pytest",
+			patchFile:   "setup.cfg",
+			patchDiff:   "diff --git a/setup.cfg b/setup.cfg\n--- a/setup.cfg\n+++ b/setup.cfg\n@@ -1,2 +1,3 @@\n+[tool:pytest]\n",
+		},
+		{
+			name:        "npm_test_with_package_json",
+			testCommand: "npm test",
+			patchFile:   "package.json",
+			patchDiff:   "diff --git a/package.json b/package.json\n--- a/package.json\n+++ b/package.json\n@@ -1,2 +1,3 @@\n+\"scripts\": {\"test\": \"exit 0\"}\n",
+		},
+		{
+			name:        "npm_test_with_jest_config_js",
+			testCommand: "npm test",
+			patchFile:   "jest.config.js",
+			patchDiff:   "diff --git a/jest.config.js b/jest.config.js\n--- a/jest.config.js\n+++ b/jest.config.js\n@@ -1,2 +1,3 @@\n+module.exports = {}\n",
+		},
+		{
+			name:        "go_test_with_go_mod",
+			testCommand: "go test ./...",
+			patchFile:   "go.mod",
+			patchDiff:   "diff --git a/go.mod b/go.mod\n--- a/go.mod\n+++ b/go.mod\n@@ -1,2 +1,3 @@\n+replace example.com => ./local\n",
+		},
+		{
+			name:        "gradlew_test_with_build_gradle_kts",
+			testCommand: "./gradlew test",
+			patchFile:   "build.gradle.kts",
+			patchDiff:   "diff --git a/build.gradle.kts b/build.gradle.kts\n--- a/build.gradle.kts\n+++ b/build.gradle.kts\n@@ -1,2 +1,3 @@\n+tasks.test { filter { excludeTestsMatching(\"*\") } }\n",
+		},
+		{
+			name:        "cargo_test_with_build_rs",
+			testCommand: "cargo test",
+			patchFile:   "build.rs",
+			patchDiff:   "diff --git a/build.rs b/build.rs\n--- a/build.rs\n+++ b/build.rs\n@@ -1,2 +1,3 @@\n+fn main() {}\n",
+		},
+		{
+			name:        "mvn_test_with_pom_xml",
+			testCommand: "mvn test",
+			patchFile:   "pom.xml",
+			patchDiff:   "diff --git a/pom.xml b/pom.xml\n--- a/pom.xml\n+++ b/pom.xml\n@@ -1,2 +1,3 @@\n+<project></project>\n",
+		},
+		{
+			name:        "make_test_with_tox_ini",
+			testCommand: "make test",
+			patchFile:   "tox.ini",
+			patchDiff:   "diff --git a/tox.ini b/tox.ini\n--- a/tox.ini\n+++ b/tox.ini\n@@ -1,2 +1,3 @@\n+[tox]\n",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir, driver := setupTestRepo(t)
+			defer os.RemoveAll(tempDir)
+
+			_ = os.MkdirAll(filepath.Join(tempDir, filepath.Dir(tc.patchFile)), 0755)
+			_ = os.WriteFile(filepath.Join(tempDir, tc.patchFile), []byte("base\n"), 0644)
+			_, _ = driver.CommitAll("initial")
+
+			repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+			storySpec := &spec.StorySpec{
+				ID:           "S-R8-INDIR",
+				Title:        "R8 Indirection Test",
+				TestCommands: []string{tc.testCommand},
+			}
+
+			reg := persona.NewRegistry("")
+			coder, _ := NewDomainCoder("backend_engineer", reg)
+			rev := reviewer.NewAdversarialReviewer(reg)
+			rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+				return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+			})
+			box := sandbox.NewSandbox(tempDir)
+			coord := NewCoordinator(coder, rev, driver, box)
+
+			opts := &LoopOptions{
+				MaxRounds:             1,
+				Autonomy:              AutonomySupervised,
+				TestCommandsConfirmed: true,
+				MockPatchGen: func(round int, feedback string) string {
+					return tc.patchDiff
+				},
+			}
+
+			if !IsScriptOrBuildIndirection(tc.testCommand, []string{tc.patchFile}) {
+				t.Fatalf("SECURITY VIOLATION: IsScriptOrBuildIndirection returned false for command %q and modified file %q!", tc.testCommand, tc.patchFile)
+			}
+
+			res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+			if res.Success {
+				t.Fatalf("SECURITY VIOLATION: case %s with command %q and modified file %q succeeded instead of blocking indirection!", tc.name, tc.testCommand, tc.patchFile)
+			}
+		})
+	}
+}
+
+
 
 
 
