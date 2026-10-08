@@ -60,6 +60,34 @@ func TestG8_PluginSourcesNeverPassAutonomous(t *testing.T) {
 	}
 }
 
+// TestR3_4_ClaudeCodePlugin_RequiresExplicitConfirmationBeforeConfirmTests asserts that
+// plugins/claude-code/commands/artix-code.md displays test commands and obtains explicit
+// user confirmation before invoking --confirm-tests, preventing silent bypass of the confirmation gate.
+func TestR3_4_ClaudeCodePlugin_RequiresExplicitConfirmationBeforeConfirmTests(t *testing.T) {
+	cmdPath := "../plugins/claude-code/commands/artix-code.md"
+	data, err := os.ReadFile(cmdPath)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", cmdPath, err)
+	}
+	content := string(data)
+
+	// Must not blindly execute --confirm-tests without display and user confirmation
+	lines := strings.Split(content, "\n")
+	for _, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if strings.HasPrefix(trimmed, "Run `artix code") && strings.Contains(trimmed, "--confirm-tests") {
+			t.Errorf("SECURITY DEFECT (R3-4): %s passes --confirm-tests unconditionally without test display and confirmation steps first: %s", cmdPath, trimmed)
+		}
+	}
+
+	// Must require displaying/extracting test commands to user and asking confirmation
+	hasDisplay := strings.Contains(content, "Test Commands") || strings.Contains(content, "test command") || strings.Contains(content, "display")
+	hasExplicitConfirm := strings.Contains(content, "confirm") || strings.Contains(content, "AskUser") || strings.Contains(content, "confirmation")
+	if !hasDisplay || !hasExplicitConfirm {
+		t.Errorf("SECURITY DEFECT (R3-4): %s must instruct Claude Code to extract/display test commands and obtain explicit user confirmation before executing artix code with --confirm-tests", cmdPath)
+	}
+}
+
 // TestG8_CLI_JSON_SingleLineAndStderrProgress tests that 'plan', 'code', and 'review'
 // with '--json' output EXACTLY one line of valid JSON to stdout and route progress to stderr.
 func TestG8_CLI_Plan_JSON_SuccessAndError(t *testing.T) {
