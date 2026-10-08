@@ -648,3 +648,41 @@ func TestR2_6_EnterpriseMode_ForgedRecordWithPolicyHMACKeyIsRejected(t *testing.
 	}
 }
 
+// TestR3_5_PrivateKeyPath_TestedAgainstSandboxReadablePaths asserts that SetPrivateKeyPath
+// rejects private key paths located inside any sandbox-readable directory (workspace, /tmp, os.TempDir())
+// and accepts keys in protected/external paths.
+func TestR3_5_PrivateKeyPath_TestedAgainstSandboxReadablePaths(t *testing.T) {
+	tempDir := t.TempDir()
+	logger := NewLogger(tempDir)
+	defer logger.Close()
+
+	// 1. Inside workspace -> rejected
+	insideWs := filepath.Join(tempDir, "audit.key")
+	_ = os.WriteFile(insideWs, []byte("key"), 0600)
+	if err := logger.SetPrivateKeyPath(insideWs); err == nil {
+		t.Fatalf("expected error for private key inside workspace, got nil")
+	}
+
+	// 2. In /tmp or temp dir root -> rejected if it is world-accessible / readable by sandbox
+	inTmp := filepath.Join(os.TempDir(), "artix_world_readable_test.key")
+	_ = os.WriteFile(inTmp, []byte("key"), 0600)
+	defer os.Remove(inTmp)
+	if err := logger.SetPrivateKeyPath(inTmp); err == nil {
+		t.Fatalf("expected error for private key in sandbox-accessible temp root %s, got nil", inTmp)
+	}
+
+	// 3. In protected directory or external secure directory -> accepted
+	extDir := t.TempDir()
+	secSubdir := filepath.Join(extDir, ".artix-keys")
+	_ = os.MkdirAll(secSubdir, 0700)
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	extKey := filepath.Join(secSubdir, "audit_ed25519.key")
+	_ = os.WriteFile(extKey, []byte(hex.EncodeToString(priv)), 0600)
+	_ = pub
+
+	if err := logger.SetPrivateKeyPath(extKey); err != nil {
+		t.Fatalf("expected success for private key in secure external path, got: %v", err)
+	}
+}
+
+

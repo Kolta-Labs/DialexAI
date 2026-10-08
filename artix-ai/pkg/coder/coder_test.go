@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"artix/pkg/audit"
 	"artix/pkg/git"
 	"artix/pkg/persona"
 	"artix/pkg/policy"
@@ -1325,6 +1326,79 @@ func TestR2_3_Coordinator_NonGo_WarningAnalyzerFindingDoesNotApproveTaboo(t *tes
 		t.Fatalf("expected final verdict to NOT be approved for dangerous non-Go diff, got approved with: %+v", res.FinalVerdict)
 	}
 }
+
+// TestR3_5_EnterpriseMode_AuditFailureAbortsAndRollsBackCommit verifies that in enterprise mode,
+// if the audit logger cannot emit an audit event (e.g. missing/invalid asymmetric key),
+// the coordinator strictly aborts convergence, rolls back all changes, and never commits to git.
+func TestR3_5_EnterpriseMode_AuditFailureAbortsAndRollsBackCommit(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	specPath := filepath.Join(tempDir, "docs", "specs", "STORY-101.md")
+	_ = os.MkdirAll(filepath.Dir(specPath), 0755)
+	storySpec := &spec.StorySpec{
+		ID:        "STORY-101",
+		Title:     "Audit Fail-Closed Test",
+		UserStory: "Ensure audit logging failure rolls back commit in enterprise mode",
+		AcceptanceCriteria: []spec.Scenario{
+			{Name: "Audit Safety", Given: "enterprise mode active", When: "audit fails", Then: "commit aborted"},
+		},
+		TestCommands: []string{`echo "test passed"`},
+	}
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	// Set enterprise policy WITHOUT valid ed25519 key (so audit logger has initError)
+	entPol := &policy.Policy{
+		EnterpriseMode:      true,
+		RequireSignedPolicy: true,
+		IsVerified:          true,
+		AllowedTestCommands: []string{`echo "test passed"`},
+	}
+	policy.SetActivePolicyForTest(entPol)
+	defer policy.ResetTestPolicy()
+
+	// Recreate default logger for tempDir so it inherits enterprise policy without key
+	audit.SetDefaultLogger(audit.NewLogger(tempDir))
+
+	opts := &LoopOptions{
+		MaxRounds:             1,
+		Autonomy:              AutonomySupervised,
+		TestCommandsConfirmed: true,
+		MockPatchGen: func(round int, feedback string) string {
+			return `diff --git a/safe.txt b/safe.txt
+--- /dev/null
++++ b/safe.txt
+@@ -0,0 +1 @@
++safe content
+`
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+
+	// In enterprise mode, audit failure MUST abort and rollback
+	if res.Success {
+		t.Fatalf("SECURITY VIOLATION (R3-5): coordinator succeeded and committed despite audit logging failure in enterprise mode!")
+	}
+	if !strings.Contains(res.Error, "audit") {
+		t.Fatalf("expected coordinator error to mention audit failure, got: %s", res.Error)
+	}
+
+	// Verify no commit was made and safe.txt was rolled back
+	if _, err := os.Stat(filepath.Join(tempDir, "safe.txt")); err == nil {
+		t.Fatalf("SECURITY VIOLATION (R3-5): uncommitted/committed changes survived in working tree after audit failure!")
+	}
+}
+
 
 
 
