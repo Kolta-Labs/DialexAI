@@ -150,21 +150,28 @@ func CheckTestIntegrity(diff string) []string {
 				violations = append(violations, fmt.Sprintf("test integrity violation: tautological assertion / dead test condition detected (%s)", trimmed))
 			}
 
-			// Detect self-comparison e.g. "a != a" or "x != x" or "a == a"
-			if strings.Contains(trimmed, "!=") || strings.Contains(trimmed, "==") {
-				for _, op := range []string{"!=", "=="} {
-					if strings.Contains(trimmed, op) {
-						parts := strings.Split(trimmed, op)
-						if len(parts) == 2 {
-							lhs := strings.TrimSpace(strings.Trim(strings.TrimPrefix(strings.TrimSpace(parts[0]), "if "), "(){}"))
-							rhs := strings.TrimSpace(strings.Trim(strings.TrimSuffix(strings.TrimSpace(parts[1]), "{"), "(){}"))
+			// Detect self-comparison e.g. "a != a" or "x != x" or "a == a" or "if a != a { t.Fatal(1) }"
+			for _, op := range []string{"!=", "==", "<=", ">=", "<", ">"} {
+				if strings.Contains(trimmed, op) {
+					parts := strings.Split(trimmed, op)
+					if len(parts) >= 2 {
+						lhsTokens := strings.Fields(parts[0])
+						rhsTokens := strings.Fields(parts[1])
+						if len(lhsTokens) > 0 && len(rhsTokens) > 0 {
+							lhs := strings.Trim(lhsTokens[len(lhsTokens)-1], "(){},;[]")
+							rhs := strings.Trim(rhsTokens[0], "(){},;[]")
 							if lhs != "" && lhs == rhs {
-								violations = append(violations, fmt.Sprintf("test integrity violation: self-comparison tautology detected (%s)", trimmed))
+								violations = append(violations, fmt.Sprintf("test integrity violation: self-comparison tautology detected (%s %s %s)", lhs, op, rhs))
 								break
 							}
 						}
 					}
 				}
+			}
+
+			// Detect assertion inside loop over empty slice/collection e.g. for range []string{} { t.Fatal(...) }
+			if (strings.Contains(trimmed, "range []") || strings.Contains(trimmed, "range []string{}") || strings.Contains(trimmed, "range []int{}") || strings.Contains(trimmed, "for i := 0; i < 0;")) {
+				violations = append(violations, fmt.Sprintf("test integrity violation: assertion inside empty loop detected (%s)", trimmed))
 			}
 
 			// Detect defer recover() panic swallowing in tests
@@ -197,6 +204,49 @@ func isAssertionStatement(s string) bool {
 		strings.Contains(lower, "assertfalse") ||
 		strings.Contains(lower, "expect(")
 }
+
+func formatExpr(expr ast.Expr) string {
+	if expr == nil {
+		return ""
+	}
+	switch e := expr.(type) {
+	case *ast.Ident:
+		return e.Name
+	case *ast.BasicLit:
+		return e.Value
+	case *ast.SelectorExpr:
+		return formatExpr(e.X) + "." + e.Sel.Name
+	case *ast.CallExpr:
+		var args []string
+		for _, a := range e.Args {
+			args = append(args, formatExpr(a))
+		}
+		return formatExpr(e.Fun) + "(" + strings.Join(args, ", ") + ")"
+	case *ast.ParenExpr:
+		return formatExpr(e.X)
+	case *ast.UnaryExpr:
+		return e.Op.String() + formatExpr(e.X)
+	case *ast.BinaryExpr:
+		return formatExpr(e.X) + " " + e.Op.String() + " " + formatExpr(e.Y)
+	default:
+		return fmt.Sprintf("%v", e)
+	}
+}
+
+func isAssertionCall(call *ast.CallExpr) bool {
+	if call == nil {
+		return false
+	}
+	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+		name := strings.ToLower(sel.Sel.Name)
+		if name == "fatal" || name == "fatalf" || name == "error" || name == "errorf" || name == "fail" || name == "failnow" ||
+			strings.HasPrefix(name, "assert") || strings.HasPrefix(name, "require") {
+			return true
+		}
+	}
+	return false
+}
+
 
 // CheckSemanticASTTaboos checks diff against taboo patterns using AST parsing for Go and comment-aware filtering.
 // Note: The deterministic rule and taboo checks serve as defense-in-depth pre-filters and are not claimed to be exhaustive.
@@ -361,39 +411,123 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 			}
 		}
 
-		// Build local function call graph
+		// Build local function call graph and sink tracking
 		funcCalls := make(map[string][]string)
 		funcHasNet := make(map[string]bool)
 		funcHasSecret := make(map[string]bool)
+		funcHasSink := make(map[string]bool)
 
 		for _, decl := range node.Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil {
 				fnName := fn.Name.Name
 				ast.Inspect(fn.Body, func(in ast.Node) bool {
+					// 1. Binary expression self-comparison check
+					if bin, ok := in.(*ast.BinaryExpr); ok {
+						if bin.Op == token.NEQ || bin.Op == token.EQL || bin.Op == token.LSS || bin.Op == token.GTR || bin.Op == token.LEQ || bin.Op == token.GEQ {
+							xStr := formatExpr(bin.X)
+							yStr := formatExpr(bin.Y)
+							if xStr != "" && xStr == yStr {
+								violations = append(violations, fmt.Sprintf("test integrity violation: self-comparison tautology detected (%s %s %s)", xStr, bin.Op.String(), yStr))
+							}
+						}
+					}
+
+					// 2. Empty range loop with assertions
+					if rStmt, ok := in.(*ast.RangeStmt); ok {
+						isEmpty := false
+						if cl, ok := rStmt.X.(*ast.CompositeLit); ok && len(cl.Elts) == 0 {
+							isEmpty = true
+						}
+						if isEmpty && rStmt.Body != nil {
+							ast.Inspect(rStmt.Body, func(bn ast.Node) bool {
+								if call, ok := bn.(*ast.CallExpr); ok && isAssertionCall(call) {
+									violations = append(violations, "test integrity violation: assertion inside empty range loop detected")
+								}
+								return true
+							})
+						}
+					}
+
 					if call, ok := in.(*ast.CallExpr); ok {
 						if ident, ok := call.Fun.(*ast.Ident); ok {
 							funcCalls[fnName] = append(funcCalls[fnName], ident.Name)
+							// If calling helper with secret or any helper in general
+							for _, arg := range call.Args {
+								argS := fmt.Sprintf("%v", arg)
+								if strings.Contains(argS, "Getenv") || strings.Contains(argS, "SECRET") || strings.Contains(argS, "TOKEN") || strings.Contains(argS, "KEY") {
+									funcHasSecret[fnName] = true
+									funcHasSink[fnName] = true
+								}
+							}
 						}
 						if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 							sName := sel.Sel.Name
+							pkgName := ""
+							if pkgIdent, ok := sel.X.(*ast.Ident); ok {
+								pkgName = pkgIdent.Name
+							}
+
+							// Network sinks
 							if sName == "Post" || sName == "Get" || sName == "Do" || sName == "Dial" || sName == "NewRequest" || sName == "Head" ||
 								sName == "LookupHost" || sName == "LookupIP" || sName == "LookupTXT" || sName == "LookupCNAME" || sName == "LookupAddr" {
 								funcHasNet[fnName] = true
+								funcHasSink[fnName] = true
 							}
-							if sName == "Command" || sName == "CommandContext" {
+
+							// Process execution sinks
+							if sName == "Command" || sName == "CommandContext" || sName == "Exec" {
 								funcHasNet[fnName] = true
+								funcHasSink[fnName] = true
 							}
-							if sName == "Getenv" || sName == "LookupEnv" {
+
+							// File write sinks
+							if sName == "WriteFile" || sName == "Create" || sName == "OpenFile" || sName == "WriteString" {
+								funcHasSink[fnName] = true
+							}
+
+							// Output / stdout / log sinks
+							if pkgName == "fmt" && (sName == "Println" || sName == "Printf" || sName == "Print" || sName == "Fprintf" || sName == "Sprintf" || sName == "Errorf") {
+								funcHasSink[fnName] = true
+							}
+							if pkgName == "log" && (sName == "Println" || sName == "Printf" || sName == "Print" || sName == "Fatal" || sName == "Fatalf") {
+								funcHasSink[fnName] = true
+							}
+							if pkgName == "errors" && sName == "New" {
+								funcHasSink[fnName] = true
+							}
+
+							// Dynamic code loading & system calls
+							if pkgName == "plugin" && sName == "Open" {
+								violations = append(violations, "AST Taboo Violation: forbidden dynamic code loading via plugin.Open in non-test code")
+							}
+							if pkgName == "syscall" && (sName == "Exec" || sName == "ForkExec") {
+								violations = append(violations, "AST Taboo Violation: forbidden low-level process execution via syscall.Exec in non-test code")
+							}
+							if pkgName == "C" && (sName == "system" || sName == "popen") {
+								violations = append(violations, "AST Taboo Violation: forbidden cgo system execution (C.system)")
+							}
+							if sName == "Setenv" {
 								for _, arg := range call.Args {
 									if lit, ok := arg.(*ast.BasicLit); ok {
 										v := strings.ToUpper(lit.Value)
-										if strings.Contains(v, "SECRET") || strings.Contains(v, "KEY") || strings.Contains(v, "TOKEN") || strings.Contains(v, "AWS") || strings.Contains(v, "GITHUB") || strings.Contains(v, "PASS") || strings.Contains(v, "CRED") {
+										if strings.Contains(v, "LD_PRELOAD") || strings.Contains(v, "DYLD_INSERT_LIBRARIES") || strings.Contains(v, "LD_LIBRARY_PATH") {
+											violations = append(violations, "AST Taboo Violation: forbidden dynamic linker environment variable modification (LD_PRELOAD)")
+										}
+									}
+								}
+							}
+
+							// Secret reads
+							if sName == "Getenv" || sName == "LookupEnv" {
+								funcHasSecret[fnName] = true
+								for _, arg := range call.Args {
+									if lit, ok := arg.(*ast.BasicLit); ok {
+										v := strings.ToUpper(lit.Value)
+										if strings.Contains(v, "SECRET") || strings.Contains(v, "KEY") || strings.Contains(v, "TOKEN") || strings.Contains(v, "AWS") || strings.Contains(v, "GITHUB") || strings.Contains(v, "PASS") || strings.Contains(v, "CRED") || strings.Contains(v, "AUTH") || strings.Contains(v, "API") {
 											funcHasSecret[fnName] = true
 										}
 									}
 								}
-								// Any Getenv in non-test code interacting with net/sink is considered a secret candidate
-								funcHasSecret[fnName] = true
 							}
 							if sName == "Environ" {
 								funcHasSecret[fnName] = true
@@ -415,12 +549,13 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 			}
 		}
 
-		// Check transitive secret exfiltration reachable from any non-test function
+		// Check transitive secret exfiltration / sink reachability from any non-test function
 		for fnName := range funcCalls {
-			netReachable := transitivelyHasProp(fnName, funcCalls, funcHasNet, make(map[string]bool))
 			secretReachable := transitivelyHasProp(fnName, funcCalls, funcHasSecret, make(map[string]bool))
-			if netReachable && secretReachable {
-				violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in non-test code")
+			sinkReachable := transitivelyHasProp(fnName, funcCalls, funcHasSink, make(map[string]bool))
+			netReachable := transitivelyHasProp(fnName, funcCalls, funcHasNet, make(map[string]bool))
+			if secretReachable && (sinkReachable || netReachable) {
+				violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / secret read reaching sink in non-test code")
 			}
 		}
 
@@ -467,7 +602,7 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 				}
 			}
 
-			// 3. Command execution with shell: exec.Command("sh", ...) or exec.Command("bash", ...) or curl exfil
+			// 3. Command execution with shell or remote push: exec.Command("sh", ...) or exec.Command("git", "push", ...)
 			if call, ok := n.(*ast.CallExpr); ok && checkShellExec {
 				if sel, ok := call.Fun.(*ast.SelectorExpr); ok && (sel.Sel.Name == "Command" || sel.Sel.Name == "CommandContext") {
 					if len(call.Args) > 0 {
@@ -479,6 +614,12 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 							val := strings.Trim(lit.Value, `"`)
 							if val == "sh" || val == "bash" || val == "zsh" || val == "/bin/sh" || val == "/bin/bash" || val == "/bin/zsh" {
 								violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden shell interpreter invocation via exec.Command(%q)", val))
+							}
+							if val == "git" && len(call.Args) > argIdx+1 {
+								arg1S := fmt.Sprintf("%v", call.Args[argIdx+1])
+								if strings.Contains(arg1S, "push") {
+									violations = append(violations, "AST Taboo Violation: forbidden remote git push via exec.Command")
+								}
 							}
 							if val == "curl" || val == "wget" || val == "nc" {
 								// Check if any subsequent argument reads env or secrets
@@ -523,6 +664,24 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 	}
 	if strings.Contains(codeLower, "os.readfile") && strings.Contains(codeLower, ".aws/credentials") {
 		violations = append(violations, "AST Taboo Violation: forbidden direct read of credential file in non-test code")
+	}
+	if strings.Contains(codeLower, "plugin.open(") {
+		violations = append(violations, "AST Taboo Violation: forbidden dynamic code loading via plugin.Open in non-test code")
+	}
+	if strings.Contains(codeLower, "syscall.exec(") {
+		violations = append(violations, "AST Taboo Violation: forbidden low-level process execution via syscall.Exec in non-test code")
+	}
+	if strings.Contains(codeLower, "c.system(") || strings.Contains(codeLower, "c.system (") {
+		violations = append(violations, "AST Taboo Violation: forbidden cgo system execution (C.system)")
+	}
+	if strings.Contains(codeLower, "ld_preload") && strings.Contains(codeLower, "setenv") {
+		violations = append(violations, "AST Taboo Violation: forbidden dynamic linker environment variable modification (LD_PRELOAD)")
+	}
+	if strings.Contains(codeLower, "exec.command(\"git\"") && strings.Contains(codeLower, "\"push\"") {
+		violations = append(violations, "AST Taboo Violation: forbidden remote git push via exec.Command")
+	}
+	if strings.Contains(codeLower, "os.getenv") && (strings.Contains(codeLower, "fmt.printf") || strings.Contains(codeLower, "fmt.println") || strings.Contains(codeLower, "fmt.print") || strings.Contains(codeLower, "fmt.errorf") || strings.Contains(codeLower, "os.writefile") || strings.Contains(codeLower, "sink(")) {
+		violations = append(violations, "AST Taboo Violation: forbidden secret read reaching sink in non-test code")
 	}
 
 	return deduplicateStrings(violations)
