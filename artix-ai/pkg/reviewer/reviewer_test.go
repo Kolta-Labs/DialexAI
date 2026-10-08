@@ -1785,6 +1785,195 @@ func TestR8_3_BenignPatterns_NotFalsePositivelyRejected(t *testing.T) {
 	}
 }
 
+func TestR9_3_HostileReviewCorpus_AllRejectedOrUnreviewed(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	cases := []struct {
+		name           string
+		diff           string
+		expectedStatus ReviewStatus
+	}{
+		{
+			name: "Go_os_Environ_range_iteration_printed_to_stdout",
+			diff: `diff --git a/env.go b/env.go
++++ b/env.go
+@@ -1,5 +1,11 @@
+ package main
++import "fmt"
++import "os"
++func LeakEnviron() {
++	for _, e := range os.Environ() {
++		fmt.Println(e)
++	}
++}
+`,
+			expectedStatus: StatusUnreviewed,
+		},
+		{
+			name: "Go_pointer_alias_self_comparison",
+			diff: `diff --git a/ptr_test.go b/ptr_test.go
++++ b/ptr_test.go
+@@ -1,5 +1,11 @@
+ package ptr_test
++import "testing"
++func f() int { return 42 }
++func TestPointerAlias(t *testing.T) {
++	b := f()
++	p := &b
++	if b != *p { t.Fatal(1) }
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_test_only_t_Logf_and_no_assertions",
+			diff: `diff --git a/log_only_test.go b/log_only_test.go
++++ b/log_only_test.go
+@@ -1,5 +1,7 @@
+ package log_only_test
++import "testing"
++func TestLogOnly(t *testing.T) {
++	t.Logf("logging value without assertions")
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_test_assertions_only_inside_unjoined_goroutine",
+			diff: `diff --git a/goroutine_test.go b/goroutine_test.go
++++ b/goroutine_test.go
+@@ -1,5 +1,11 @@
+ package goroutine_test
++import "testing"
++func TestUnjoinedGoroutine(t *testing.T) {
++	go func() {
++		if 1 != 2 {
++			t.Fatal("fail")
++		}
++	}()
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_test_assertions_only_inside_t_Cleanup",
+			diff: `diff --git a/cleanup_test.go b/cleanup_test.go
++++ b/cleanup_test.go
+@@ -1,5 +1,11 @@
+ package cleanup_test
++import "testing"
++func TestCleanupOnly(t *testing.T) {
++	t.Cleanup(func() {
++		if 1 != 2 {
++			t.Fatal("fail")
++		}
++	})
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &ReviewContext{
+				Ctx:  context.Background(),
+				Diff: tc.diff,
+				TestResults: []*sandbox.ExecResult{
+					{Command: "go test ./...", ExitCode: 0},
+				},
+			}
+			verdict := rev.Evaluate(ctx)
+			if verdict.Approved {
+				t.Fatalf("SECURITY VIOLATION (R9-3): case %s was APPROVED, expected %s (verdict: %+v)", tc.name, tc.expectedStatus, verdict)
+			}
+			if verdict.Status != tc.expectedStatus {
+				t.Fatalf("case %s got status %s, expected %s (issues: %v)", tc.name, verdict.Status, tc.expectedStatus, verdict.BlockingIssues)
+			}
+		})
+	}
+}
+
+func TestR9_3_FalsePositives_BenignPatternsPreserved(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	benignCases := []struct {
+		name string
+		diff string
+	}{
+		{
+			name: "Benign_non_empty_slice_literal_range_loop_with_assertions",
+			diff: `diff --git a/slice_test.go b/slice_test.go
++++ b/slice_test.go
+@@ -1,6 +1,11 @@
+ package slice_test
++import "testing"
++func f(c int) int { return c }
++func TestNonEmptySliceRange(t *testing.T) {
++	for _, c := range []int{1, 2} {
++		if f(c) != c {
++			t.Fatal(c)
++		}
++	}
++}
+`,
+		},
+		{
+			name: "Benign_non_secret_PORT_env_read_and_printed",
+			diff: `diff --git a/server.go b/server.go
++++ b/server.go
+@@ -1,5 +1,9 @@
+ package server
++import "fmt"
++import "os"
++func PrintPort() {
++	fmt.Println(os.Getenv("PORT"))
++}
+`,
+		},
+		{
+			name: "Benign_standard_table_driven_test",
+			diff: `diff --git a/table_test.go b/table_test.go
++++ b/table_test.go
+@@ -1,6 +1,12 @@
+ package table_test
++import "testing"
++func TestTableDriven(t *testing.T) {
++	cases := []struct{ in, want int }{{1, 1}, {2, 2}}
++	for _, tc := range cases {
++		if tc.in != tc.want {
++			t.Fatalf("mismatch: %d vs %d", tc.in, tc.want)
++		}
++	}
++}
+`,
+		},
+	}
+
+	for _, tc := range benignCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &ReviewContext{
+				Ctx:  context.Background(),
+				Diff: tc.diff,
+				TestResults: []*sandbox.ExecResult{
+					{Command: "go test ./...", ExitCode: 0},
+				},
+			}
+			verdict := rev.Evaluate(ctx)
+			// Deterministic layer must NOT reject benign tests
+			if !verdict.Approved || verdict.Status != StatusApproved {
+				t.Fatalf("FALSE POSITIVE (R9-3): benign case %s was rejected or marked unreviewed: %+v", tc.name, verdict)
+			}
+		})
+	}
+}
+
 
 
 
