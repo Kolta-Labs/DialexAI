@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"artix/pkg/policy"
+	"artix/pkg/sandbox"
 )
 
 var (
@@ -645,6 +646,32 @@ func (l *Logger) SetPrivateKeyPath(path string) error {
 			rel, errRel := filepath.Rel(absWs, absPath)
 			if errRel == nil && !strings.HasPrefix(rel, "..") {
 				return fmt.Errorf("signing key refused: private key must be located outside sandbox-readable paths (%s is inside workspace %s)", absPath, absWs)
+			}
+		}
+	}
+
+	// Check if path is protected from sandbox reads via SensitiveReadDenyPaths (e.g. .artix, .ssh, .aws)
+	isProtectedDenyPath := false
+	for _, denyRel := range sandbox.SensitiveReadDenyPaths {
+		if strings.Contains(absPath, "/"+denyRel+"/") || strings.HasSuffix(absPath, "/"+denyRel) || strings.Contains(absPath, "\\"+denyRel+"\\") {
+			isProtectedDenyPath = true
+			break
+		}
+	}
+
+	// If not inside a protected denied directory, reject if located in open temp directories readable by sandbox
+	if !isProtectedDenyPath {
+		tempRoots := []string{os.TempDir(), "/tmp", "/private/tmp", "/var/tmp"}
+		for _, tr := range tempRoots {
+			if tr == "" {
+				continue
+			}
+			absTr, errTr := filepath.Abs(tr)
+			if errTr == nil {
+				rel, errRel := filepath.Rel(absTr, absPath)
+				if errRel == nil && !strings.HasPrefix(rel, "..") {
+					return fmt.Errorf("signing key refused: private key must be located outside sandbox-readable temp paths (%s is inside temp dir %s)", absPath, absTr)
+				}
 			}
 		}
 	}

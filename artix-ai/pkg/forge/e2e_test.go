@@ -2,6 +2,8 @@ package forge
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -26,6 +28,18 @@ func setupTestRepoForForge(t *testing.T) (string, *git.Driver) {
 	tempDir, err := os.MkdirTemp("", "artix_forge_e2e_test")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	// Create test ed25519 audit signing key outside workspace under a protected .artix dir
+	keysDir, err := os.MkdirTemp("", "artix_forge_test_keys")
+	if err == nil {
+		secDir := filepath.Join(keysDir, ".artix")
+		_ = os.MkdirAll(secDir, 0700)
+		pub, priv, _ := ed25519.GenerateKey(nil)
+		keyPath := filepath.Join(secDir, "audit_ed25519.key")
+		_ = os.WriteFile(keyPath, []byte(hex.EncodeToString(priv)), 0600)
+		t.Setenv("ARTIX_AUDIT_PRIVATE_KEY_PATH", keyPath)
+		t.Setenv("ARTIX_AUDIT_PUBLIC_KEY", hex.EncodeToString(pub))
 	}
 
 	_ = exec.Command("git", "init", tempDir).Run()

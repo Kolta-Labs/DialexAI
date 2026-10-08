@@ -566,11 +566,13 @@ func TestR2_6_EnterpriseMode_RequiresExternalEd25519KeyAndRefusesOtherwise(t *te
 
 	// 3. Private key path set to outside workspace with valid Ed25519 key -> succeeds
 	extDir := t.TempDir()
+	secDir := filepath.Join(extDir, ".artix")
+	_ = os.MkdirAll(secDir, 0700)
 	pubKey, privKey, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	extKeyPath := filepath.Join(extDir, "outside_ed25519.key")
+	extKeyPath := filepath.Join(secDir, "outside_ed25519.key")
 	if err := os.WriteFile(extKeyPath, []byte(hex.EncodeToString(privKey)), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -673,7 +675,7 @@ func TestR3_5_PrivateKeyPath_TestedAgainstSandboxReadablePaths(t *testing.T) {
 
 	// 3. In protected directory or external secure directory -> accepted
 	extDir := t.TempDir()
-	secSubdir := filepath.Join(extDir, ".artix-keys")
+	secSubdir := filepath.Join(extDir, ".artix")
 	_ = os.MkdirAll(secSubdir, 0700)
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	extKey := filepath.Join(secSubdir, "audit_ed25519.key")

@@ -202,6 +202,15 @@ func (c *ConvergenceCoordinator) Run(
 	initialTestCount := reviewer.CountTestsInWorkspace(repoCtx.RootDir)
 	initialCoverage := 0.0
 
+	auditLogger := audit.Default(repoCtx.RootDir)
+	if policy.IsEnterprise() {
+		if initErr := auditLogger.InitError(); initErr != nil {
+			res.Success = false
+			res.Error = fmt.Sprintf("enterprise audit failure: %v (convergence refused)", initErr)
+			return res
+		}
+	}
+
 	for round := 1; round <= maxRounds; round++ {
 		res.RoundsRun = round
 
@@ -528,6 +537,13 @@ func (c *ConvergenceCoordinator) Run(
 			res.CostReport = costReport
 
 			var forgeApproval *policy.PRApproval
+			approverIdentity := ""
+			if forgeApproval != nil {
+				approverIdentity = forgeApproval.ApproverUsername
+			} else if opts != nil {
+				approverIdentity = opts.Approver
+			}
+
 			// Autonomous commit gate: only reached when ARTIX_ALLOW_AUTONOMOUS=1 has already been
 			// confirmed at loop entry (enterprise gate fires before the first round). The guard
 			// below exists solely to require at least one verified test command before committing.
@@ -573,9 +589,11 @@ func (c *ConvergenceCoordinator) Run(
 						res.Error = fmt.Sprintf("autonomous commit blocked: %v", err)
 						return res
 					}
+					approverIdentity = forgeApproval.ApproverUsername
 				} else {
 					if opts != nil && opts.ForgeApproval != nil {
 						forgeApproval = opts.ForgeApproval
+						approverIdentity = forgeApproval.ApproverUsername
 					}
 					// Validate approver unconditionally under Separation of Duties
 					if err := policy.ValidateApprover("artix-agent", approver); err != nil {
@@ -610,6 +628,26 @@ func (c *ConvergenceCoordinator) Run(
 					}
 				}
 
+				// In enterprise mode, verify audit emission succeeds before proceeding to commit
+				if policy.IsEnterprise() {
+					preCommitAuditErr := auditLogger.Emit(audit.AuditEvent{
+						EventType: audit.EventCodeConvergence,
+						Status:    "PENDING_COMMIT",
+						Approver:  approverIdentity,
+						Details: map[string]any{
+							"storyId":          s.ID,
+							"roundsRun":        res.RoundsRun,
+							"testCommandsHash": testCommandsHash,
+						},
+					})
+					if preCommitAuditErr != nil {
+						_ = activeSession.Rollback()
+						res.Success = false
+						res.Error = fmt.Sprintf("enterprise audit logging failed: %v (commit aborted, changes rolled back)", preCommitAuditErr)
+						return res
+					}
+				}
+
 				commitMsg := fmt.Sprintf("feat: %s (Spec: %s)", s.Title, s.ID)
 				hash, err := c.driver.CommitAll(commitMsg)
 				if err != nil {
@@ -619,13 +657,7 @@ func (c *ConvergenceCoordinator) Run(
 				}
 			}
 
-			approverIdentity := ""
-			if forgeApproval != nil {
-				approverIdentity = forgeApproval.ApproverUsername
-			} else if opts != nil {
-				approverIdentity = opts.Approver
-			}
-			_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+			emitErr := auditLogger.Emit(audit.AuditEvent{
 				EventType: audit.EventCodeConvergence,
 				Status:    "SUCCESS",
 				Approver:  approverIdentity,
@@ -633,11 +665,18 @@ func (c *ConvergenceCoordinator) Run(
 					"storyId":          s.ID,
 					"roundsRun":        res.RoundsRun,
 					"success":          true,
+					"commitHash":       res.CommitHash,
 					"totalTokens":      costReport.TotalTokens,
 					"dnaOverhead":      costReport.DNAOverheadTokens,
 					"testCommandsHash": testCommandsHash,
 				},
 			})
+			if emitErr != nil && policy.IsEnterprise() {
+				_ = activeSession.Rollback()
+				res.Success = false
+				res.Error = fmt.Sprintf("enterprise audit logging failed: %v (commit aborted, changes rolled back)", emitErr)
+				return res
+			}
 			return res
 		}
 

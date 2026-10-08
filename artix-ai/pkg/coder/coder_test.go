@@ -2,6 +2,8 @@ package coder
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
@@ -64,6 +66,18 @@ func setupTestRepo(t *testing.T) (string, *git.Driver) {
 	tempDir, err := os.MkdirTemp("", "kritix_loop_test")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	// Create test ed25519 audit signing key outside workspace under a protected .artix dir
+	keysDir, err := os.MkdirTemp("", "artix_test_keys")
+	if err == nil {
+		secDir := filepath.Join(keysDir, ".artix")
+		_ = os.MkdirAll(secDir, 0700)
+		pub, priv, _ := ed25519.GenerateKey(nil)
+		keyPath := filepath.Join(secDir, "audit_ed25519.key")
+		_ = os.WriteFile(keyPath, []byte(hex.EncodeToString(priv)), 0600)
+		t.Setenv("ARTIX_AUDIT_PRIVATE_KEY_PATH", keyPath)
+		t.Setenv("ARTIX_AUDIT_PUBLIC_KEY", hex.EncodeToString(pub))
 	}
 
 	_ = exec.Command("git", "init", tempDir).Run()
@@ -1357,6 +1371,8 @@ func TestR3_5_EnterpriseMode_AuditFailureAbortsAndRollsBackCommit(t *testing.T) 
 	coord := NewCoordinator(coder, rev, driver, box)
 
 	// Set enterprise policy WITHOUT valid ed25519 key (so audit logger has initError)
+	t.Setenv("ARTIX_AUDIT_PRIVATE_KEY_PATH", "")
+	t.Setenv("ARTIX_AUDIT_KEY_PATH", "")
 	entPol := &policy.Policy{
 		EnterpriseMode:      true,
 		RequireSignedPolicy: true,
