@@ -1966,13 +1966,262 @@ func TestR9_3_FalsePositives_BenignPatternsPreserved(t *testing.T) {
 				},
 			}
 			verdict := rev.Evaluate(ctx)
-			// Deterministic layer must NOT reject benign tests
 			if !verdict.Approved || verdict.Status != StatusApproved {
 				t.Fatalf("FALSE POSITIVE (R9-3): benign case %s was rejected or marked unreviewed: %+v", tc.name, verdict)
 			}
 		})
 	}
 }
+
+func TestR10_4_HostileAssertionReachabilityCorpus_AllRejectedOrUnreviewed(t *testing.T) {
+
+
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	// Stub critic approving to test deterministic pre-filter reaches all 7 evasion vectors
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	cases := []struct {
+		name           string
+		diff           string
+		expectedStatus ReviewStatus
+	}{
+		{
+			name: "Go_test_only_t_Logf_statement",
+			diff: `diff --git a/log_test.go b/log_test.go
++++ b/log_test.go
+@@ -1,5 +1,7 @@
+ package log_test
++import "testing"
++func TestOnlyLogf(t *testing.T) {
++	t.Logf("informational log only without assertion")
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_test_assertions_only_inside_unjoined_goroutine",
+			diff: `diff --git a/goroutine_test.go b/goroutine_test.go
++++ b/goroutine_test.go
+@@ -1,5 +1,11 @@
+ package goroutine_test
++import "testing"
++func TestUnjoinedGo(t *testing.T) {
++	go func() {
++		if 1 != 2 {
++			t.Fatal("unjoined goroutine assertion")
++		}
++	}()
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_test_assertions_only_inside_t_Cleanup",
+			diff: `diff --git a/cleanup_test.go b/cleanup_test.go
++++ b/cleanup_test.go
+@@ -1,5 +1,11 @@
+ package cleanup_test
++import "testing"
++func TestOnlyInCleanup(t *testing.T) {
++	t.Cleanup(func() {
++		if 1 != 2 {
++			t.Fatal("cleanup assertion only")
++		}
++	})
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_test_assertion_after_unconditional_return",
+			diff: `diff --git a/unreachable_test.go b/unreachable_test.go
++++ b/unreachable_test.go
+@@ -1,5 +1,9 @@
+ package unreachable_test
++import "testing"
++func TestUnreachableAssertion(t *testing.T) {
++	t.Logf("running")
++	return
++	t.Fatal(1)
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_test_assertion_under_constant_false_if",
+			diff: `diff --git a/const_false_test.go b/const_false_test.go
++++ b/const_false_test.go
+@@ -1,5 +1,9 @@
+ package const_false_test
++import "testing"
++const debug = false
++func TestConstFalse(t *testing.T) {
++	if debug {
++		t.Fatal(1)
++	}
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_test_assertion_inside_uninvoked_closure",
+			diff: `diff --git a/closure_test.go b/closure_test.go
++++ b/closure_test.go
+@@ -1,5 +1,10 @@
+ package closure_test
++import "testing"
++func TestUninvokedClosure(t *testing.T) {
++	check := func() {
++		t.Fatal(1)
++	}
++	_ = check
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+		{
+			name: "Go_test_helper_that_cannot_fail_returns_both_branches",
+			diff: `diff --git a/helper_test.go b/helper_test.go
++++ b/helper_test.go
+@@ -1,5 +1,14 @@
+ package helper_test
++import "testing"
++func chk(t *testing.T, ok bool) {
++	if ok {
++		return
++	} else {
++		return
++	}
++}
++func TestHelperCannotFail(t *testing.T) {
++	chk(t, true)
++}
+`,
+			expectedStatus: StatusRejected,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &ReviewContext{
+				Ctx:  context.Background(),
+				Diff: tc.diff,
+				TestResults: []*sandbox.ExecResult{
+ 					{Command: "go test ./...", ExitCode: 0},
+				},
+			}
+			verdict := rev.Evaluate(ctx)
+			if verdict.Approved {
+				t.Fatalf("SECURITY VIOLATION (R10-4): case %s was APPROVED, expected %s (verdict: %+v)", tc.name, tc.expectedStatus, verdict)
+			}
+			if verdict.Status != tc.expectedStatus {
+				t.Fatalf("case %s got status %s, expected %s (issues: %v)", tc.name, verdict.Status, tc.expectedStatus, verdict.BlockingIssues)
+			}
+		})
+	}
+}
+
+func TestR10_3_BenignStdlibPatterns_NotFalsePositivelyRejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	benignCases := []struct {
+		name string
+		diff string
+	}{
+		{
+			name: "Benign_format_string_containing_percent_q_not_equal",
+			diff: `diff --git a/format_test.go b/format_test.go
++++ b/format_test.go
+@@ -1,6 +1,9 @@
+ package format_test
++import "testing"
++func TestFormatString(t *testing.T) {
++	a, b := "hello", "world"
++	if a == b { t.Fatalf("got %q != %q expected mismatch", a, b) }
++}
+`,
+		},
+		{
+			name: "Benign_err_not_equal_err2_comparison_of_distinct_variables",
+			diff: `diff --git a/err_test.go b/err_test.go
++++ b/err_test.go
+@@ -1,6 +1,11 @@
+ package err_test
++import "testing"
++import "errors"
++func TestDistinctErrors(t *testing.T) {
++	err1 := errors.New("e1")
++	err2 := errors.New("e2")
++	if err1 == err2 { t.Fatalf("expected distinct errors, got equal") }
++}
+`,
+		},
+		{
+			name: "Benign_bounds_check_b_less_than_min",
+			diff: `diff --git a/bounds_test.go b/bounds_test.go
++++ b/bounds_test.go
+@@ -1,6 +1,9 @@
+ package bounds_test
++import "testing"
++func TestBounds(t *testing.T) {
++	b, min := 10, 5
++	if b < min { t.Fatalf("b %d is less than min %d", b, min) }
++}
+`,
+		},
+		{
+			name: "Benign_conditional_skip_under_testing_Short",
+			diff: `diff --git a/short_test.go b/short_test.go
++++ b/short_test.go
+@@ -1,6 +1,11 @@
+ package short_test
++import "testing"
++func TestShortMode(t *testing.T) {
++	if testing.Short() {
++		t.Skip("skipping slow integration test in short mode")
++	}
++	if 1+1 != 2 { t.Fatal("math broken") }
++}
+`,
+		},
+		{
+			name: "Benign_standard_idiomatic_if_not_ok_check",
+			diff: `diff --git a/map_test.go b/map_test.go
++++ b/map_test.go
+@@ -1,6 +1,10 @@
+ package map_test
++import "testing"
++func TestMapLookup(t *testing.T) {
++	m := map[string]int{"a": 1}
++	v, ok := m["a"]
++	if !ok || v != 1 { t.Fatalf("lookup failed") }
++}
+`,
+		},
+	}
+
+	for _, tc := range benignCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &ReviewContext{
+				Ctx:  context.Background(),
+				Diff: tc.diff,
+				TestResults: []*sandbox.ExecResult{
+					{Command: "go test ./...", ExitCode: 0},
+				},
+			}
+			verdict := rev.Evaluate(ctx)
+			if !verdict.Approved || verdict.Status != StatusApproved {
+				t.Fatalf("FALSE POSITIVE (R10-3): benign case %s was rejected or marked unreviewed: %+v", tc.name, verdict)
+			}
+		})
+	}
+}
+
 
 
 

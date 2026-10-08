@@ -1225,11 +1225,243 @@ func TestR9_2_CryptographicAuditBinding_HostileEvaluatorCorpus(t *testing.T) {
 			},
 		})
 
+
 		if err := verifyPhase1AuditBinding(logger.LogPath(), "SPEC-ORD-SUCCESS", headSHA, "some-hash-1234"); err == nil {
 			t.Fatalf("SECURITY VIOLATION (R9-2 d): verifyPhase1AuditBinding accepted ordinary EventCodeConvergence event instead of CANDIDATE_PUSHED!")
 		}
 	})
 }
+
+
+// TestR10_2_NilAuditLogger_MustNotBypassPhase1BindingWhenAuditLogExists asserts that passing a nil
+// *audit.Logger pointer cannot bypass Phase 1 cryptographic audit binding when an audit log exists or in enterprise mode.
+func TestR10_2_NilAuditLogger_MustNotBypassPhase1BindingWhenAuditLogExists(t *testing.T) {
+	tempDir, driver := setupTestRepoForForge(t)
+	defer os.RemoveAll(tempDir)
+	headSHA, _ := driver.HeadHash()
+
+	// Enterprise mode active
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+	policy.SetActivePolicyForTest(&policy.Policy{
+		EnterpriseMode: true,
+		AuditPublicKey: os.Getenv("ARTIX_AUDIT_PUBLIC_KEY"),
+	})
+	defer policy.ResetCache()
+
+	// Emit an audit record
+	logger := audit.Default(tempDir)
+	_ = logger.Emit(audit.AuditEvent{
+		EventType:   "CANDIDATE_PUSHED",
+		Status:      "AWAITING_APPROVAL",
+		StorySpecID: "SPEC-NIL-LOGGER",
+		Details: map[string]any{
+			"storyId":             "SPEC-NIL-LOGGER",
+			"candidateSHA":        headSHA,
+			"reviewerVerdictHash": "real-verdict-hash-1234",
+		},
+	})
+
+	approvedVerifier := func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+		return &policy.PRApproval{
+			ApproverUsername: "lead-alice",
+			State:            "APPROVED",
+			CommitSHA:        commitSHA,
+			VerifiedByForge:  true,
+		}, nil
+	}
+
+	// 1. Calling VerifyAndMergeCandidate with nil logger and wrong verdict hash must FAIL (nil logger must NOT skip verification)
+	_, err := VerifyAndMergeCandidate(context.Background(), driver, approvedVerifier, headSHA, nil, "SPEC-NIL-LOGGER", "origin", "artix-pr-1", "wrong-verdict-hash")
+	if err == nil {
+		t.Fatalf("SECURITY VIOLATION (R10-2): VerifyAndMergeCandidate bypassed Phase 1 audit verification when auditLogger was nil!")
+	}
+
+	// 2. Calling with matching verdict hash must succeed
+	app, err := VerifyAndMergeCandidate(context.Background(), driver, approvedVerifier, headSHA, nil, "SPEC-NIL-LOGGER", "origin", "artix-pr-1", "real-verdict-hash-1234")
+	if err != nil {
+		t.Fatalf("expected VerifyAndMergeCandidate with valid matching Phase 1 binding to succeed, got: %v", err)
+	}
+	if app == nil || app.ApproverUsername != "lead-alice" {
+		t.Fatalf("expected valid approval, got: %v", app)
+	}
+}
+
+// TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash tests that the real compiled artix binary
+// outputs verdictHash in Phase 1 JSON and requires that exact --verdict-hash in Phase 2 artix merge.
+func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) {
+	tempBinDir, err := os.MkdirTemp("", "artix_bin_test")
+	if err != nil {
+		t.Fatalf("failed to create temp bin dir: %v", err)
+	}
+	defer os.RemoveAll(tempBinDir)
+
+	binPath := filepath.Join(tempBinDir, "artix")
+	// Compile real binary from CLI package
+	buildCmd := exec.Command("go", "build", "-o", binPath, "artix/cli")
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build artix binary: %v (%s)", err, string(out))
+	}
+
+	// Create real bare remote repo
+	bareDir, err := os.MkdirTemp("", "artix_bare_remote")
+	if err != nil {
+		t.Fatalf("failed to create bare repo: %v", err)
+	}
+	defer os.RemoveAll(bareDir)
+	_ = exec.Command("git", "init", "--bare", bareDir).Run()
+
+	// Create working repo
+	workDir, driver := setupTestRepoForForge(t)
+	defer os.RemoveAll(workDir)
+	_ = driver
+
+
+	_ = exec.Command("git", "-C", workDir, "remote", "add", "origin", bareDir).Run()
+	_ = exec.Command("git", "-C", workDir, "push", "origin", "HEAD:refs/heads/main").Run()
+
+	// Write story spec
+	specsDir := filepath.Join(workDir, "docs", "specs")
+	_ = os.MkdirAll(specsDir, 0755)
+	specPath := filepath.Join(specsDir, "STORY-SPEC-BIN-01.md")
+	specContent := "# Story Spec: SPEC-BIN-01\n\nTitle: Binary Phase 1 to 2\n\nAcceptance Criteria:\n- Scenario: file updated\n\nVerification Commands:\n- test -f counter.txt\n"
+	_ = os.WriteFile(specPath, []byte(specContent), 0644)
+
+	// Mock Forge server
+	var currentCandidateSHA string
+	ghServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/pulls/77") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"user": map[string]any{"login": "developer-bob", "type": "User"},
+				"head": map[string]any{"sha": currentCandidateSHA},
+			})
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/pulls/77/reviews") {
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{
+					"id":        1,
+					"user":      map[string]any{"login": "security-lead-alice", "type": "User"},
+					"state":     "APPROVED",
+					"commit_id": currentCandidateSHA,
+				},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer ghServer.Close()
+
+	// Phase 1: Run artix code --json with PR branch
+	cmdPhase1 := exec.Command(binPath, "code", "--json",
+		"--autonomy", "autonomous",
+		"--provider", "anthropic",
+		"--model", "claude-3-5-sonnet-20241022",
+		"--forge", "github",
+		"--forge-pr", "77",
+		"--forge-url", ghServer.URL,
+		"--forge-owner", "acme",
+		"--forge-repo", "core",
+		specPath,
+	)
+	cmdPhase1.Dir = workDir
+	cmdPhase1.Env = append(os.Environ(),
+		"ARTIX_ENTERPRISE=1",
+		"ARTIX_ALLOW_AUTONOMOUS=1",
+		"ARTIX_PR_BRANCH=artix-pr-77",
+		"ARTIX_FORGE_REMOTE=origin",
+		"ANTHROPIC_API_KEY=mock-key",
+	)
+
+	outPhase1, _ := cmdPhase1.CombinedOutput()
+	var jsonResPhase1 struct {
+		Ok               bool   `json:"ok"`
+		Status           string `json:"status"`
+		AwaitingApproval bool   `json:"awaitingApproval"`
+		CommitHash       string `json:"commitHash"`
+		VerdictHash      string `json:"verdictHash"`
+	}
+
+	// Parse last non-empty line of stdout
+	lines := strings.Split(strings.TrimSpace(string(outPhase1)), "\n")
+	lastLine := lines[len(lines)-1]
+	if err := json.Unmarshal([]byte(lastLine), &jsonResPhase1); err != nil {
+		t.Fatalf("failed to parse Phase 1 JSON output: %v (%s)", err, lastLine)
+	}
+
+	if jsonResPhase1.Status != "awaiting_approval" || !jsonResPhase1.AwaitingApproval {
+		t.Fatalf("expected Phase 1 to return status awaiting_approval, got: %+v (output: %s)", jsonResPhase1, string(outPhase1))
+	}
+	if jsonResPhase1.VerdictHash == "" {
+		t.Fatalf("FAIL: Phase 1 JSON did not print verdictHash (got empty string)")
+	}
+	if jsonResPhase1.CommitHash == "" {
+		t.Fatalf("expected Phase 1 to produce candidate commit hash")
+	}
+
+	currentCandidateSHA = jsonResPhase1.CommitHash
+
+	// Phase 2 Success: artix merge with matching --verdict-hash
+	cmdMergeOk := exec.Command(binPath, "merge", "--json",
+		"--pr", "77",
+		"--sha", jsonResPhase1.CommitHash,
+		"--spec", "SPEC-BIN-01",
+		"--verdict-hash", jsonResPhase1.VerdictHash,
+		"--forge", "github",
+		"--forge-url", ghServer.URL,
+		"--forge-owner", "acme",
+		"--forge-repo", "core",
+		"--remote", "origin",
+		"--branch", "artix-pr-77",
+	)
+	cmdMergeOk.Dir = workDir
+	cmdMergeOk.Env = append(os.Environ(),
+		"ARTIX_ENTERPRISE=1",
+		"ARTIX_ALLOW_AUTONOMOUS=1",
+	)
+
+	outMergeOk, errMergeOk := cmdMergeOk.CombinedOutput()
+	if errMergeOk != nil {
+		t.Fatalf("expected Phase 2 artix merge with valid verdict hash to succeed, got: %v (%s)", errMergeOk, string(outMergeOk))
+	}
+
+	var jsonResMergeOk struct {
+		Ok     bool   `json:"ok"`
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal([]byte(strings.TrimSpace(string(outMergeOk))), &jsonResMergeOk)
+	if !jsonResMergeOk.Ok || jsonResMergeOk.Status != "approval_verified" {
+		t.Fatalf("expected merge status approval_verified, got: %+v (%s)", jsonResMergeOk, string(outMergeOk))
+	}
+
+	// Phase 2 Rejection: artix merge with mismatched --verdict-hash
+	cmdMergeBad := exec.Command(binPath, "merge", "--json",
+		"--pr", "77",
+		"--sha", jsonResPhase1.CommitHash,
+		"--spec", "SPEC-BIN-01",
+		"--verdict-hash", "bad-mismatched-verdict-hash-00000000000000000000000000000000",
+		"--forge", "github",
+		"--forge-url", ghServer.URL,
+		"--forge-owner", "acme",
+		"--forge-repo", "core",
+		"--remote", "origin",
+		"--branch", "artix-pr-77",
+	)
+	cmdMergeBad.Dir = workDir
+	cmdMergeBad.Env = append(os.Environ(),
+		"ARTIX_ENTERPRISE=1",
+		"ARTIX_ALLOW_AUTONOMOUS=1",
+	)
+
+	outMergeBad, errMergeBad := cmdMergeBad.CombinedOutput()
+	if errMergeBad == nil {
+		t.Fatalf("SECURITY VIOLATION (R10-2): artix merge with mismatched verdict hash succeeded unexpectedly! Output: %s", string(outMergeBad))
+	}
+	if !strings.Contains(string(outMergeBad), "mismatch") && !strings.Contains(string(outMergeBad), "rejected") {
+		t.Fatalf("expected error output mentioning verdict hash mismatch, got: %s", string(outMergeBad))
+	}
+}
+
 
 
 

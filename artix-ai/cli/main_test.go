@@ -76,3 +76,16 @@ func TestRunCLI_MergeCommandValidation(t *testing.T) {
 	}
 }
 
+func TestRunCLI_MergeCommand_AcceptsVerdictHashFlag(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	// When --verdict-hash is supplied, verify it parses and does not fail with "flag provided but not defined"
+	code := RunCLI("", nil, []string{"merge", "--pr", "1", "--sha", "abcdef123456", "--verdict-hash", "hash1234"}, &stdout, &stderr)
+	// It will fail because forge/network/audit is not configured, but NOT with unknown flag
+	if strings.Contains(stderr.String(), "flag provided but not defined: -verdict-hash") {
+		t.Fatalf("runMerge failed to recognize --verdict-hash flag: %s", stderr.String())
+	}
+	_ = code
+}
+
+
