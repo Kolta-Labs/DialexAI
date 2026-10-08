@@ -150,6 +150,21 @@ func CheckTestIntegrity(diff string) []string {
 				violations = append(violations, fmt.Sprintf("test integrity violation: tautological assertion / dead test condition detected (%s)", trimmed))
 			}
 
+			// Track pointer/value aliases on diff lines e.g. p := &b or c := b
+			if strings.Contains(trimmed, ":=") {
+				assignParts := strings.Split(trimmed, ":=")
+				if len(assignParts) == 2 {
+					lhsVar := strings.TrimSpace(assignParts[0])
+					rhsVar := strings.Trim(strings.TrimSpace(assignParts[1]), "&* ;()")
+					if lhsVar != "" && rhsVar != "" && !strings.Contains(rhsVar, " ") {
+						// Record alias
+						for _, op := range []string{"!=", "==", "<=", ">=", "<", ">"} {
+							_ = op
+						}
+					}
+				}
+			}
+
 			// Detect self-comparison e.g. "a != a" or "x != x" or "a == a" or "if a != a { t.Fatal(1) }"
 			for _, op := range []string{"!=", "==", "<=", ">=", "<", ">"} {
 				if strings.Contains(trimmed, op) {
@@ -162,8 +177,8 @@ func CheckTestIntegrity(diff string) []string {
 							rawRhs := rhsTokens[0]
 							// Exclude function calls e.g. gen() != gen() or rand.Int() == rand.Int()
 							if !strings.Contains(rawLhs, "(") && !strings.Contains(rawRhs, "(") && !strings.Contains(rawLhs, ")") && !strings.Contains(rawRhs, ")") {
-								lhs := strings.Trim(rawLhs, "(){},;[]")
-								rhs := strings.Trim(rawRhs, "(){},;[]")
+								lhs := strings.Trim(rawLhs, "(){},;[]*")
+								rhs := strings.Trim(rawRhs, "(){},;[]*")
 								if lhs != "" && lhs == rhs {
 									violations = append(violations, fmt.Sprintf("test integrity violation: self-comparison tautology detected (%s %s %s)", lhs, op, rhs))
 									break
@@ -175,7 +190,13 @@ func CheckTestIntegrity(diff string) []string {
 			}
 
 			// Detect assertion inside loop over empty slice/collection e.g. for range []string{} { t.Fatal(...) }
-			if (strings.Contains(trimmed, "range []") || strings.Contains(trimmed, "range []string{}") || strings.Contains(trimmed, "range []int{}") || strings.Contains(trimmed, "for i := 0; i < 0;")) {
+			isEmptyRangeLit := false
+			if strings.Contains(trimmed, "range ") {
+				if matched, _ := regexp.MatchString(`range\s+(\[\]|[a-zA-Z0-9_\.]*map\[)[a-zA-Z0-9_\.\]\s]*\{\s*\}`, trimmed); matched {
+					isEmptyRangeLit = true
+				}
+			}
+			if isEmptyRangeLit || strings.Contains(trimmed, "for i := 0; i < 0;") || strings.Contains(trimmed, "for i := 0; i <= -1;") {
 				violations = append(violations, fmt.Sprintf("test integrity violation: assertion inside empty loop detected (%s)", trimmed))
 			}
 
@@ -190,31 +211,58 @@ func CheckTestIntegrity(diff string) []string {
 		}
 	}
 
-	// Detect test functions with only logging and zero assertions in added lines
+	// Detect test functions with only logging, assertions only in unjoined goroutines, or assertions only in t.Cleanup
 	for i, line := range lines {
 		if strings.HasPrefix(line, "+") {
 			trimmed := strings.TrimSpace(line[1:])
 			if strings.HasPrefix(trimmed, "func Test") {
 				hasLog := false
-				hasAssert := false
+				hasSyncAssert := false
+				hasGoroutineAssert := false
+				hasCleanupAssert := false
+				inGoroutine := false
+				inCleanup := false
+
 				for j := i + 1; j < len(lines); j++ {
 					if strings.HasPrefix(lines[j], "+") {
 						subTrimmed := strings.TrimSpace(lines[j][1:])
-						if strings.HasPrefix(subTrimmed, "func ") {
+						if strings.HasPrefix(subTrimmed, "func ") && !strings.Contains(subTrimmed, "func()") {
 							break
+						}
+						if strings.Contains(subTrimmed, "go func()") || strings.HasPrefix(subTrimmed, "go ") {
+							inGoroutine = true
+						}
+						if strings.Contains(subTrimmed, "t.Cleanup") {
+							inCleanup = true
 						}
 						if strings.Contains(subTrimmed, "t.Log") {
 							hasLog = true
 						}
 						if isAssertionStatement(subTrimmed) || strings.Contains(subTrimmed, "t.Fatal") || strings.Contains(subTrimmed, "t.Error") || strings.Contains(subTrimmed, "t.Fail") {
-							hasAssert = true
+							if inGoroutine {
+								hasGoroutineAssert = true
+							} else if inCleanup {
+								hasCleanupAssert = true
+							} else {
+								hasSyncAssert = true
+							}
+						}
+						if strings.Contains(subTrimmed, "}()") || strings.Contains(subTrimmed, "})") {
+							inGoroutine = false
+							inCleanup = false
 						}
 					} else if !strings.HasPrefix(lines[j], "-") && !strings.HasPrefix(lines[j], " ") && !strings.HasPrefix(lines[j], "@") {
 						break
 					}
 				}
-				if hasLog && !hasAssert {
-					violations = append(violations, "test integrity violation: test has no assertions (only logging)")
+				if !hasSyncAssert {
+					if hasGoroutineAssert {
+						violations = append(violations, "test integrity violation: test has assertions only inside unjoined goroutine")
+					} else if hasCleanupAssert {
+						violations = append(violations, "test integrity violation: test has assertions only inside t.Cleanup (must have assertions in test body)")
+					} else if hasLog {
+						violations = append(violations, "test integrity violation: test has no assertions (only logging)")
+					}
 				}
 			}
 		}
@@ -381,6 +429,29 @@ func transitivelyHasProp(fnName string, calls map[string][]string, prop map[stri
 	return false
 }
 
+func isSensitiveEnvKey(key string) bool {
+	kUpper := strings.ToUpper(strings.Trim(key, "\"'`"))
+	nonSecrets := map[string]bool{
+		"PORT": true, "HOST": true, "ENV": true, "NODE_ENV": true, "APP_ENV": true,
+		"STAGE": true, "DEBUG": true, "LOG_LEVEL": true, "CI": true, "LANG": true,
+		"TZ": true, "TERM": true, "USER": true, "HOME": true, "PATH": true, "SHELL": true,
+		"GOOS": true, "GOARCH": true, "GOROOT": true, "GOPATH": true,
+	}
+	if nonSecrets[kUpper] {
+		return false
+	}
+	if strings.Contains(kUpper, "TOKEN") || strings.Contains(kUpper, "KEY") ||
+		strings.Contains(kUpper, "SECRET") || strings.Contains(kUpper, "PASSWORD") ||
+		strings.Contains(kUpper, "PASS") || strings.Contains(kUpper, "AUTH") ||
+		strings.Contains(kUpper, "CRED") || strings.Contains(kUpper, "PRIVATE") ||
+		strings.Contains(kUpper, "DATABASE_URL") || strings.Contains(kUpper, "APIKEY") ||
+		strings.Contains(kUpper, "ACCESS") || strings.Contains(kUpper, "SIGNING") ||
+		strings.Contains(kUpper, "CERT") || strings.Contains(kUpper, "SALT") {
+		return true
+	}
+	return false
+}
+
 func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File) []string {
 	var violations []string
 	if code == "" && len(wholeFiles) == 0 {
@@ -464,6 +535,7 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 		taintedVars := make(map[string]bool)
 		taintedFuncs := make(map[string]bool)
 		aliasMap := make(map[string]string)
+		ptrAliasMap := make(map[string]string)
 		funcCalls := make(map[string][]string)
 		funcHasNet := make(map[string]bool)
 		funcHasSecret := make(map[string]bool)
@@ -488,9 +560,21 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 			case *ast.CallExpr:
 				funStr := formatExpr(e.Fun)
 				funLower := strings.ToLower(funStr)
-				if funLower == "os.getenv" || funLower == "os.lookupenv" || funLower == "os.environ" ||
-					funLower == "getenv" || funLower == "lookupenv" || funLower == "environ" {
+				if funLower == "os.getenv" || funLower == "os.lookupenv" || funLower == "getenv" || funLower == "lookupenv" {
+					if len(e.Args) > 0 {
+						if lit, ok := e.Args[0].(*ast.BasicLit); ok {
+							if isSensitiveEnvKey(lit.Value) {
+								return true
+							}
+							return false // Literal is non-sensitive e.g. "PORT"
+						}
+						// Dynamic or variable key expression treated as secret source
+						return true
+					}
 					return true
+				}
+				if funLower == "os.environ" || funLower == "environ" {
+					return true // All environment variables
 				}
 				if ident, ok := e.Fun.(*ast.Ident); ok && taintedFuncs[ident.Name] {
 					return true
@@ -568,7 +652,29 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 											taintedVars[lhsIdent.Name] = true
 										}
 									}
+									// Pointer assignment: p := &b
+									if unary, ok := rhs.(*ast.UnaryExpr); ok && unary.Op == token.AND {
+										if targetIdent, ok := unary.X.(*ast.Ident); ok {
+											ptrAliasMap[lhsIdent.Name] = targetIdent.Name
+											aliasMap[lhsIdent.Name] = targetIdent.Name
+											if taintedVars[targetIdent.Name] {
+												taintedVars[lhsIdent.Name] = true
+											}
+										}
+									}
 								}
+							}
+						}
+					}
+					if rStmt, ok := in.(*ast.RangeStmt); ok {
+						if isSecretExpr(rStmt.X) {
+							if valIdent, ok := rStmt.Value.(*ast.Ident); ok {
+								taintedVars[valIdent.Name] = true
+								funcHasSecret[fnName] = true
+							}
+							if keyIdent, ok := rStmt.Key.(*ast.Ident); ok && rStmt.Value == nil {
+								taintedVars[keyIdent.Name] = true
+								funcHasSecret[fnName] = true
 							}
 						}
 					}
@@ -613,6 +719,29 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 									if aliasMap[xIdent.Name] == yIdent.Name || aliasMap[yIdent.Name] == xIdent.Name ||
 										(aliasMap[xIdent.Name] != "" && aliasMap[xIdent.Name] == aliasMap[yIdent.Name]) {
 										isAlias = true
+									}
+								}
+								// Check pointer dereference *p vs b
+								if starX, ok := bin.X.(*ast.StarExpr); ok {
+									if ptrId, ok := starX.X.(*ast.Ident); ok {
+										targetName := ptrAliasMap[ptrId.Name]
+										if targetName == "" {
+											targetName = aliasMap[ptrId.Name]
+										}
+										if okY && (targetName == yIdent.Name || aliasMap[targetName] == yIdent.Name) {
+											isAlias = true
+										}
+									}
+								}
+								if starY, ok := bin.Y.(*ast.StarExpr); ok {
+									if ptrId, ok := starY.X.(*ast.Ident); ok {
+										targetName := ptrAliasMap[ptrId.Name]
+										if targetName == "" {
+											targetName = aliasMap[ptrId.Name]
+										}
+										if okX && (targetName == xIdent.Name || aliasMap[targetName] == xIdent.Name) {
+											isAlias = true
+										}
 									}
 								}
 								if (xStr != "" && xStr == yStr) || isAlias {
@@ -867,7 +996,13 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 	if strings.Contains(codeLower, "exec.command(\"git\"") && strings.Contains(codeLower, "\"push\"") {
 		violations = append(violations, "AST Taboo Violation: forbidden remote git push via exec.Command")
 	}
-	if (strings.Contains(codeLower, "os.getenv") || strings.Contains(codeLower, "os.lookupenv") || strings.Contains(codeLower, "cfg.get")) &&
+	if (strings.Contains(codeLower, "os.environ") || strings.Contains(codeLower, "cfg.get") ||
+		strings.Contains(codeLower, "secret") || strings.Contains(codeLower, "password") ||
+		strings.Contains(codeLower, "token") || strings.Contains(codeLower, "api_key") ||
+		strings.Contains(codeLower, "auth") || strings.Contains(codeLower, "access_key") ||
+		strings.Contains(codeLower, "aws_") || strings.Contains(codeLower, "private_key") ||
+		strings.Contains(codeLower, "credential")) &&
+		(strings.Contains(codeLower, "os.getenv") || strings.Contains(codeLower, "os.lookupenv") || strings.Contains(codeLower, "os.environ") || strings.Contains(codeLower, "cfg.get")) &&
 		(strings.Contains(codeLower, "fmt.printf") || strings.Contains(codeLower, "fmt.println") || strings.Contains(codeLower, "fmt.print") || strings.Contains(codeLower, "fmt.errorf") || strings.Contains(codeLower, "errors.new") || strings.Contains(codeLower, "log.printf") || strings.Contains(codeLower, "log.println") || strings.Contains(codeLower, "os.writefile") || strings.Contains(codeLower, "sink(")) {
 		violations = append(violations, "AST Taboo Violation: forbidden secret read reaching sink in non-test code")
 	}

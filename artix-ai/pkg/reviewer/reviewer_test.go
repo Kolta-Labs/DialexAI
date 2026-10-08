@@ -1810,7 +1810,7 @@ func TestR9_3_HostileReviewCorpus_AllRejectedOrUnreviewed(t *testing.T) {
 +	}
 +}
 `,
-			expectedStatus: StatusUnreviewed,
+			expectedStatus: StatusRejected,
 		},
 		{
 			name: "Go_pointer_alias_self_comparison",
