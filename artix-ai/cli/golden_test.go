@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"io/fs"
 	"net/http"
@@ -16,6 +18,7 @@ import (
 	"artix/pkg/coder"
 	"artix/pkg/git"
 	"artix/pkg/persona"
+	"artix/pkg/policy"
 	"artix/pkg/repo"
 	"artix/pkg/reviewer"
 	"artix/pkg/sandbox"
@@ -666,6 +669,29 @@ func TestR8_4_Phase1_AwaitingApproval_ReportsSuccessFalse_StatusAwaitingApproval
 
 	// 4. Verify Phase 1 LoopResult and CLI JSON output
 	// Coordinator loop in Phase 1 with ForgePusher MUST emit Success: false, AwaitingApproval: true
+	policy.ResetCache()
+	defer policy.ResetCache()
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+	t.Setenv("ARTIX_ALLOW_AUTONOMOUS", "1")
+
+	keysDir := t.TempDir()
+	secDir := filepath.Join(keysDir, ".artix")
+	_ = os.MkdirAll(secDir, 0700)
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	keyPath := filepath.Join(secDir, "audit_ed25519.key")
+	_ = os.WriteFile(keyPath, []byte(hex.EncodeToString(priv)), 0600)
+	t.Setenv("ARTIX_AUDIT_PRIVATE_KEY_PATH", keyPath)
+	t.Setenv("ARTIX_AUDIT_PUBLIC_KEY", hex.EncodeToString(pub))
+
+	policy.SetActivePolicyForTest(&policy.Policy{
+		EnterpriseMode:       true,
+		AllowAutonomous:      true,
+		RequireForgeApproval: true,
+		AuditPublicKey:       hex.EncodeToString(pub),
+		AllowedTestCommands:  []string{`test -f counter.txt`},
+		IsVerified:           true,
+	})
+
 	tempDir := t.TempDir()
 	runGit := func(args ...string) {
 		cmd := exec.Command("git", append([]string{"-C", tempDir}, args...)...)
@@ -676,10 +702,10 @@ func TestR8_4_Phase1_AwaitingApproval_ReportsSuccessFalse_StatusAwaitingApproval
 	runGit("init")
 	runGit("config", "user.name", "Artix Tester")
 	runGit("config", "user.email", "tester@artix.ai")
-	if err := os.WriteFile(filepath.Join(tempDir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tempDir, "counter.txt"), []byte("0\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	runGit("add", "main.go")
+	runGit("add", "counter.txt")
 	runGit("commit", "-m", "initial commit")
 
 	// Create story spec
@@ -691,7 +717,7 @@ func TestR8_4_Phase1_AwaitingApproval_ReportsSuccessFalse_StatusAwaitingApproval
 ## Acceptance Criteria
 - Scenario: Pass
 ## Test Commands
-` + "```bash\n" + `echo "ok"
+` + "```bash\n" + `test -f counter.txt
 ` + "```\n"
 	if err := os.WriteFile(filepath.Join(specDir, "STORY-001.md"), []byte(specContent), 0644); err != nil {
 		t.Fatal(err)
@@ -720,7 +746,7 @@ func TestR8_4_Phase1_AwaitingApproval_ReportsSuccessFalse_StatusAwaitingApproval
 	storySpec := &spec.StorySpec{
 		ID:           "STORY-001",
 		Title:        "R8-4 Awaiting Approval Test",
-		TestCommands: []string{`echo "ok"`},
+		TestCommands: []string{`test -f counter.txt`},
 	}
 
 	res := coordinator.Run(context.Background(), storySpec, repoCtx, nil, nil, &coder.LoopOptions{
@@ -730,12 +756,12 @@ func TestR8_4_Phase1_AwaitingApproval_ReportsSuccessFalse_StatusAwaitingApproval
 		ForgePusher:           pusher,
 		TestCommandsConfirmed: true,
 		MockPatchGen: func(round int, feedback string) string {
-			return "diff --git a/main.go b/main.go\n--- a/main.go\n+++ b/main.go\n@@ -1,2 +1,2 @@\n-package main\n+package main\n// updated\n"
+			return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+100\n"
 		},
 	})
 
 	if !pushed {
-		t.Fatalf("expected candidate to be pushed via ForgePusher")
+		t.Fatalf("expected candidate to be pushed via ForgePusher, got error: %s (roundsRun: %d)", res.Error, res.RoundsRun)
 	}
 	if !res.AwaitingApproval {
 		t.Fatalf("expected res.AwaitingApproval == true, got false")

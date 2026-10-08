@@ -732,8 +732,8 @@ func TestR6_2_TwoPhaseAutonomousPRFlow_RealBareRepo(t *testing.T) {
 	}
 
 	resPhase1 := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, optsPhase1)
-	if !resPhase1.Success {
-		t.Fatalf("Phase 1 failed: %s", resPhase1.Error)
+	if resPhase1.Success {
+		t.Fatalf("SECURITY VIOLATION (R8-4): Phase 1 must return Success: false while awaiting approval, got true")
 	}
 	if !resPhase1.AwaitingApproval {
 		t.Fatalf("expected Phase 1 to return AwaitingApproval: true, got false")

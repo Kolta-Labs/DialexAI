@@ -640,7 +640,7 @@ func (c *ConvergenceCoordinator) Run(
 									},
 								})
 							}
-							res.Success = true
+							res.Success = false
 							res.AwaitingApproval = true
 							res.CommitHash = newCommitSHA
 							res.Error = ""
