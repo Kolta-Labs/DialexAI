@@ -6,9 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
+
+	"artix/pkg/audit"
 )
 
 // TaskRecord represents an independently evaluated task execution record.
@@ -34,15 +38,72 @@ type TaskRecord struct {
 type Harness struct {
 	mu      sync.RWMutex
 	records []TaskRecord
+	workDir string
 }
 
 // NewHarness instantiates a pilot harness.
-func NewHarness() *Harness {
-	return &Harness{}
+func NewHarness(workDir ...string) *Harness {
+	wd := ""
+	if len(workDir) > 0 {
+		wd = workDir[0]
+	}
+	return &Harness{workDir: wd}
+}
+
+// VerifyCommitObject resolves the commit SHA using git cat-file -e against the repository.
+func VerifyCommitObject(repoDir, commitSHA string) error {
+	if commitSHA == "" {
+		return errors.New("missing commit SHA")
+	}
+	cmd := exec.Command("git", "cat-file", "-e", commitSHA+"^{commit}")
+	if repoDir != "" {
+		cmd.Dir = repoDir
+	}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git object resolution failed for commit %s: %w (%s)", commitSHA, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// VerifyAuditRecord resolves and recomputes the audit record hash from the signed audit log.
+func VerifyAuditRecord(auditLogPath, expectedHash string) error {
+	if auditLogPath == "" {
+		return errors.New("missing audit log path")
+	}
+	data, err := os.ReadFile(auditLogPath)
+	if err != nil {
+		return fmt.Errorf("failed to read audit log at %s: %w", auditLogPath, err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var evt audit.AuditEvent
+		if err := json.Unmarshal([]byte(line), &evt); err == nil {
+			computed := audit.ComputeRecordHash(&evt)
+			if computed == expectedHash && evt.RecordHash == expectedHash {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("audit record hash %s not found or altered in %s", expectedHash, auditLogPath)
+}
+
+// VerifyLedgerEntry verifies that a referenced ledger file exists on disk.
+func VerifyLedgerEntry(ledgerPath string) error {
+	if ledgerPath == "" {
+		return errors.New("missing ledger path")
+	}
+	if _, err := os.Stat(ledgerPath); err != nil {
+		return fmt.Errorf("ledger file not found at %s: %w", ledgerPath, err)
+	}
+	return nil
 }
 
 // ValidateAndJoinRecord verifies the complete joinability and independence of a task record.
-func ValidateAndJoinRecord(r TaskRecord) error {
+func ValidateAndJoinRecord(r TaskRecord, repoDir ...string) error {
 	if r.TaskID == "" {
 		return errors.New("pilot task record missing taskId")
 	}
@@ -80,12 +141,18 @@ func ValidateAndJoinRecord(r TaskRecord) error {
 	if r.LedgerRef == "" {
 		return errors.New("pilot task record missing ledgerRef (cannot join to ledger entry)")
 	}
+
+	if len(repoDir) > 0 && repoDir[0] != "" {
+		if err := VerifyCommitObject(repoDir[0], r.CommitSHA); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 // RecordTask registers a verified task run into the harness, strictly rejecting unverified/self-attested entries.
 func (h *Harness) RecordTask(r TaskRecord) error {
-	if err := ValidateAndJoinRecord(r); err != nil {
+	if err := ValidateAndJoinRecord(r, h.workDir); err != nil {
 		return err
 	}
 	if r.Timestamp.IsZero() {
@@ -113,7 +180,7 @@ func (h *Harness) LoadRawResults(r io.Reader) ([]TaskRecord, error) {
 			return nil, fmt.Errorf("invalid json in raw pilot results: %w", err)
 		}
 		// Rows that cannot be joined or fail criteria are discarded
-		if err := ValidateAndJoinRecord(rec); err != nil {
+		if err := ValidateAndJoinRecord(rec, h.workDir); err != nil {
 			continue
 		}
 		records = append(records, rec)
@@ -139,3 +206,4 @@ func (h *Harness) ExportRawResults(w io.Writer) error {
 	}
 	return nil
 }
+
