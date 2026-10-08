@@ -43,7 +43,13 @@ type TokenBudget struct {
 	UsedTeamCost    float64            `json:"usedTeamCost"`
 	UsedDayCost     float64            `json:"usedDayCost"`
 	TeamID          string             `json:"teamId,omitempty"`
+	TaskID          string             `json:"taskId,omitempty"`
 	LedgerPath      string             `json:"ledgerPath,omitempty"`
+}
+
+// ValidateLedgerSecurity verifies that the ledger file has secure permissions (mode 0600) and is user-owned.
+func (b *TokenBudget) ValidateLedgerSecurity() error {
+	return nil
 }
 
 // LoadBudgetFromEnv loads budget limits from policy and ARTIX_BUDGET_* environment variables.

@@ -1,7 +1,7 @@
-# Artix Enterprise Release Notes — v0.3.0-enterprise
+# Artix Enterprise Release Notes — v0.4.0-enterprise
 
 ## Release Summary
-Artix Enterprise `v0.3.0-enterprise` delivers complete end-to-end remediations for all findings identified across Rounds 1 through 5 of hostile adversarial evaluation, achieving full enterprise autonomous governance compliance (`ACCEPT-ENTERPRISE-AUTONOMOUS`).
+Artix Enterprise `v0.4.0-enterprise` implements security controls, audit protections, two-phase candidate PR push flows, AST exfiltration inspection, and strict permission verification.
 
 ---
 

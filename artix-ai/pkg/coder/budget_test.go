@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"artix/pkg/persona"
+	"artix/pkg/pilot"
 	"artix/pkg/repo"
 	"artix/pkg/reviewer"
 	"artix/pkg/sandbox"
@@ -352,4 +353,48 @@ func TestR2_5_MissingModelPriceRefusesWhenUSDCapSet(t *testing.T) {
 		t.Fatalf("expected refusal error mentioning model and price, got: %s", res.Error)
 	}
 }
+
+func TestR6_4_LedgerWritesPerTaskEntriesAndJoinsWithPilot(t *testing.T) {
+	ledgerDir := t.TempDir()
+	ledgerPath := filepath.Join(ledgerDir, "production-ledger.json")
+
+	taskID := "TASK-PILOT-REAL-001"
+	budget := &TokenBudget{
+		TaskID:     taskID,
+		TeamID:     "team-pilot",
+		LedgerPath: ledgerPath,
+	}
+
+	// Record real round usage from coordinator/loop
+	budget.RecordRoundUsage(2500, 0.075)
+
+	// Verify using pilot's VerifyLedgerEntryMatch
+	err := pilot.VerifyLedgerEntryMatch(ledgerPath, taskID, 2500, 0.075)
+	if err != nil {
+		t.Fatalf("pilot.VerifyLedgerEntryMatch failed against real budget ledger: %v", err)
+	}
+}
+
+func TestR6_4_InsecureLedgerFilePermissionsRefused(t *testing.T) {
+	ledgerDir := t.TempDir()
+	ledgerPath := filepath.Join(ledgerDir, "world-writable-ledger.json")
+
+	// Create world-writable ledger file (mode 0666)
+	_ = os.WriteFile(ledgerPath, []byte(`{}`), 0666)
+	_ = os.Chmod(ledgerPath, 0666)
+
+	budget := &TokenBudget{
+		TaskID:     "TASK-INSECURE",
+		LedgerPath: ledgerPath,
+	}
+
+	err := budget.ValidateLedgerSecurity()
+	if err == nil {
+		t.Fatalf("SECURITY VIOLATION: ValidateLedgerSecurity accepted world-writable ledger file (mode 0666)!")
+	}
+	if !strings.Contains(err.Error(), "permission") && !strings.Contains(err.Error(), "forbidden") {
+		t.Fatalf("expected error mentioning insecure permissions, got: %v", err)
+	}
+}
+
 
