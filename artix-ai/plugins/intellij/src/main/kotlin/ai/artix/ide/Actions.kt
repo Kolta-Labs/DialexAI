@@ -55,29 +55,34 @@ class PlanAction : AnAction() {
 class CodeAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val p = e.project ?: return
-        val confirmed = Messages.showOkCancelDialog(
-            p,
-            "Artix supervised mode will execute repository test commands to verify generated patches. Do you want to proceed?",
-            "Confirm Test Commands",
-            "Confirm & Run",
-            "Cancel",
-            Messages.getQuestionIcon()
-        )
-        if (confirmed != Messages.OK) return
-        runArtix(p, "code", "--autonomy", "supervised", "--confirm-tests") { j, err ->
-            val status = j?.str("status")
-            val isAwaiting = status == "awaiting_approval" || j?.get("awaitingApproval")?.asBoolean == true
-            if (isAwaiting) {
-                notify(p, NotificationType.INFORMATION, "Candidate commit ${j?.str("commitHash") ?: ""} pushed to PR branch. Awaiting human approval on forge.")
-            } else if (j?.get("success")?.asBoolean == true) {
-                val commitHash = j?.str("commitHash")
-                if (!commitHash.isNullOrBlank()) {
-                    notify(p, NotificationType.INFORMATION, "Converged in ${j.get("roundsRun")} round(s). Committed: $commitHash")
+        runArtix(p, "plan", "--json") { planJson, _ ->
+            val testCmds = planJson?.getAsJsonArray("testCommands")?.map { it.asString } ?: emptyList()
+            val cmdListStr = if (testCmds.isNotEmpty()) testCmds.joinToString("\n") { "  • $it" } else "  (default test runner)"
+            val msg = "Artix supervised mode will execute the following test commands:\n$cmdListStr\n\nDo you want to proceed?"
+            val confirmed = Messages.showOkCancelDialog(
+                p,
+                msg,
+                "Confirm Test Commands",
+                "Confirm & Run",
+                "Cancel",
+                Messages.getQuestionIcon()
+            )
+            if (confirmed != Messages.OK) return@runArtix
+            runArtix(p, "code", "--autonomy", "supervised", "--confirm-tests") { j, err ->
+                val status = j?.str("status")
+                val isAwaiting = status == "awaiting_approval" || j?.get("awaitingApproval")?.asBoolean == true
+                if (isAwaiting) {
+                    notify(p, NotificationType.INFORMATION, "Candidate commit ${j?.str("commitHash") ?: ""} pushed to PR branch. Awaiting human approval on forge.")
+                } else if (j?.get("success")?.asBoolean == true) {
+                    val commitHash = j?.str("commitHash")
+                    if (!commitHash.isNullOrBlank()) {
+                        notify(p, NotificationType.INFORMATION, "Converged in ${j.get("roundsRun")} round(s). Committed: $commitHash")
+                    } else {
+                        notify(p, NotificationType.INFORMATION, "Converged in ${j.get("roundsRun")} round(s). Review the diff; nothing was committed.")
+                    }
                 } else {
-                    notify(p, NotificationType.INFORMATION, "Converged in ${j.get("roundsRun")} round(s). Review the diff; nothing was committed.")
+                    notify(p, NotificationType.ERROR, "Code failed: ${j?.str("error") ?: err.takeLast(400)}")
                 }
-            } else {
-                notify(p, NotificationType.ERROR, "Code failed: ${j?.str("error") ?: err.takeLast(400)}")
             }
         }
     }

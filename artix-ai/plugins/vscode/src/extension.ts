@@ -39,9 +39,12 @@ export function activate(ctx: vscode.ExtensionContext) {
   });
 
   reg("artix.code", async () => {
-    // Never autonomous from the IDE.
+    // Never autonomous from the IDE. Query plan for planned test commands
+    const planRes = await run(["plan", "--json"]);
+    const testCmds: string[] = planRes.json?.testCommands ?? [];
+    const cmdListStr = testCmds.length > 0 ? testCmds.map(c => `  • ${c}`).join("\n") : "  (default test runner)";
     const confirm = await vscode.window.showInformationMessage(
-      "Artix supervised mode will execute repository test commands to verify generated patches. Do you want to proceed?",
+      `Artix supervised mode will execute the following test commands:\n${cmdListStr}\n\nDo you want to proceed?`,
       { modal: true },
       "Confirm & Run", "Cancel"
     );

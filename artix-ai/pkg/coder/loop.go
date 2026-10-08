@@ -329,17 +329,12 @@ func (c *ConvergenceCoordinator) Run(
 		var testResults []*sandbox.ExecResult
 		priorFailures = nil // only the latest round's failures are relevant to the next attempt
 
-		// Script/Makefile indirection check: refuse commands referencing modified scripts/Makefiles before execution
+		// Script/Makefile indirection check: refuse commands referencing or executing modified scripts/Makefiles/build configs
 		touchedByPatch := extractTouchedFilesFromDiff(diff)
 		var indirectionViolations []string
 		for _, cmdStr := range effectiveTestCommands {
-			for _, tf := range touchedByPatch {
-				if isScriptOrBuildFile(tf) {
-					base := filepath.Base(tf)
-					if strings.Contains(cmdStr, tf) || strings.Contains(cmdStr, "./"+tf) || (base != "" && strings.Contains(cmdStr, base)) {
-						indirectionViolations = append(indirectionViolations, fmt.Sprintf("test execution blocked: command %q references file %q modified by patch (script/Makefile indirection forbidden)", cmdStr, tf))
-					}
-				}
+			if IsScriptOrBuildIndirection(cmdStr, touchedByPatch) {
+				indirectionViolations = append(indirectionViolations, fmt.Sprintf("test execution blocked: command %q references or executes script/build configuration modified by patch (indirection forbidden)", cmdStr))
 			}
 		}
 
@@ -826,24 +821,109 @@ func extractTouchedFilesFromDiff(diff string) []string {
 }
 
 func isScriptOrBuildFile(path string) bool {
-	base := filepath.Base(path)
-	ext := strings.ToLower(filepath.Ext(path))
-	if base == "Makefile" || base == "makefile" || base == "GNUmakefile" {
+	tfLower := strings.ToLower(path)
+	base := filepath.Base(tfLower)
+	ext := filepath.Ext(tfLower)
+	if strings.Contains(base, "makefile") || strings.HasSuffix(tfLower, ".mk") || base == "tox.ini" {
 		return true
 	}
-	if ext == ".sh" || ext == ".bash" || ext == ".zsh" || ext == ".py" || ext == ".rb" || ext == ".pl" {
+	if ext == ".sh" || ext == ".bash" || ext == ".zsh" || ext == ".py" || ext == ".rb" || ext == ".pl" || ext == ".bat" || ext == ".ps1" {
+		return true
+	}
+	if base == "package.json" || base == "tsconfig.json" || strings.HasPrefix(base, "jest.config") || strings.HasPrefix(base, "vitest.config") {
+		return true
+	}
+	if base == "conftest.py" || base == "pytest.ini" || base == "setup.cfg" || base == "pyproject.toml" || base == "setup.py" {
+		return true
+	}
+	if base == "go.mod" || base == "go.work" {
+		return true
+	}
+	if strings.HasPrefix(base, "build.gradle") || strings.HasPrefix(base, "settings.gradle") || strings.HasPrefix(tfLower, "gradle/") {
+		return true
+	}
+	if base == "build.rs" || base == "cargo.toml" || base == "cargo.lock" {
+		return true
+	}
+	if base == "pom.xml" {
 		return true
 	}
 	return false
 }
 
 // IsScriptOrBuildIndirection returns true if a test command can execute or read configuration from
-// files modified by the patch (such as Makefiles, scripts, package.json, conftest.py, etc.).
+// files modified by the patch (such as Makefiles, scripts, package.json, conftest.py, build files, etc.).
 func IsScriptOrBuildIndirection(cmdStr string, touchedFiles []string) bool {
+	cmdLower := strings.ToLower(cmdStr)
 	for _, tf := range touchedFiles {
-		if isScriptOrBuildFile(tf) {
-			base := filepath.Base(tf)
-			if strings.Contains(cmdStr, tf) || strings.Contains(cmdStr, "./"+tf) || (base != "" && strings.Contains(cmdStr, base)) {
+		tfLower := strings.ToLower(tf)
+		base := filepath.Base(tfLower)
+		ext := filepath.Ext(tfLower)
+
+		if !isScriptOrBuildFile(tf) && !strings.HasPrefix(tfLower, "scripts/") && !strings.HasPrefix(tfLower, "gradle/") {
+			continue
+		}
+
+		// 1. Direct path/base mention in command
+		if strings.Contains(cmdLower, tfLower) || strings.Contains(cmdLower, "./"+tfLower) || (base != "" && strings.Contains(cmdLower, base)) {
+			return true
+		}
+
+		// 2. Make indirection: make / gmake executes Makefile, GNUmakefile, *.mk, scripts/, tox.ini
+		if strings.Contains(cmdLower, "make") {
+			if strings.Contains(base, "makefile") || strings.HasSuffix(tfLower, ".mk") || strings.HasPrefix(tfLower, "scripts/") || base == "tox.ini" {
+				return true
+			}
+			if ext == ".sh" || ext == ".bash" || ext == ".zsh" || ext == ".py" || ext == ".rb" || ext == ".pl" {
+				return true
+			}
+		}
+
+		// 3. Pytest / Python test indirection: pytest.ini, conftest.py, setup.cfg, tox.ini, pyproject.toml, scripts/
+		if strings.Contains(cmdLower, "pytest") || strings.Contains(cmdLower, "python") || strings.Contains(cmdLower, "unittest") {
+			if base == "conftest.py" || base == "pytest.ini" || base == "setup.cfg" || base == "tox.ini" || base == "pyproject.toml" || base == "setup.py" || strings.HasPrefix(tfLower, "scripts/") {
+				return true
+			}
+		}
+
+		// 4. Node / JS / TS test indirection: package.json, jest.config.*, vitest.config.*, karma.conf.*, tsconfig.json
+		if strings.Contains(cmdLower, "npm") || strings.Contains(cmdLower, "yarn") || strings.Contains(cmdLower, "pnpm") || strings.Contains(cmdLower, "jest") || strings.Contains(cmdLower, "vitest") || strings.Contains(cmdLower, "mocha") || strings.Contains(cmdLower, "node") {
+			if base == "package.json" || strings.HasPrefix(base, "jest.config") || strings.HasPrefix(base, "vitest.config") || base == "tsconfig.json" || strings.HasPrefix(tfLower, "scripts/") {
+				return true
+			}
+		}
+
+		// 5. Go test indirection: go.mod, go.work
+		if strings.Contains(cmdLower, "go test") {
+			if base == "go.mod" || base == "go.work" || strings.HasPrefix(tfLower, "scripts/") || ext == ".sh" || ext == ".bash" {
+				return true
+			}
+		}
+
+		// 6. Gradle test indirection: build.gradle*, settings.gradle*, gradle/
+		if strings.Contains(cmdLower, "gradle") || strings.Contains(cmdLower, "gradlew") {
+			if strings.HasPrefix(base, "build.gradle") || strings.HasPrefix(base, "settings.gradle") || strings.HasPrefix(tfLower, "gradle/") {
+				return true
+			}
+		}
+
+		// 7. Rust / Cargo test indirection: build.rs, Cargo.toml, Cargo.lock
+		if strings.Contains(cmdLower, "cargo") {
+			if base == "build.rs" || base == "cargo.toml" || base == "cargo.lock" {
+				return true
+			}
+		}
+
+		// 8. Maven test indirection: pom.xml
+		if strings.Contains(cmdLower, "mvn") {
+			if base == "pom.xml" {
+				return true
+			}
+		}
+
+		// 9. Generic script execution: if patch modifies any script and command executes a script runner
+		if ext == ".sh" || ext == ".bash" || ext == ".zsh" || ext == ".py" || ext == ".rb" || ext == ".pl" || ext == ".bat" || ext == ".ps1" {
+			if strings.Contains(cmdLower, "sh") || strings.Contains(cmdLower, "bash") || strings.Contains(cmdLower, "python") || strings.Contains(cmdLower, "ruby") || strings.Contains(cmdLower, "perl") {
 				return true
 			}
 		}
