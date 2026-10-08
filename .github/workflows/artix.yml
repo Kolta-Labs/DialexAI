@@ -49,6 +49,10 @@ jobs:
         working-directory: artix-ai
         run: go test -v -race -cover ./...
 
+      - name: Benign Corpus Evaluation (3-Source Check & Regression Gate)
+        working-directory: artix-ai
+        run: go run ./cmd/artix-corpus/main.go --output /tmp/ci_corpus.csv --baseline docs/pilot/benign_corpus_results.csv
+
       - name: Build Enterprise CLI & Daemon Binaries
         working-directory: artix-ai
         run: |

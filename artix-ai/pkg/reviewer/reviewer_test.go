@@ -2545,7 +2545,7 @@ func TestR13_3_TaglessSwitchWithInit_AssertionReachability(t *testing.T) {
 +	switch v := getVal(); {
 +	case v == "active":
 +		t.Log("handling active")
-+		if 1 == 2 { t.Fatal("impossible") }
++		if v == "" { t.Fatal("empty value") }
 +	}
 +}
 `

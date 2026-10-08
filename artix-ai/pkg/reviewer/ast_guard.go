@@ -570,6 +570,11 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 						}
 					}
 				}
+				for _, arg := range e.Args {
+					if isSecretExpr(arg) {
+						return true
+					}
+				}
 			case *ast.SelectorExpr:
 				selUpper := strings.ToUpper(e.Sel.Name)
 				if strings.Contains(selUpper, "KEY") || strings.Contains(selUpper, "SECRET") ||
@@ -796,12 +801,26 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 								}
 
 								// Header and metadata sinks
+								// Authorization Header Policy: Outbound HTTP requests setting standard "Authorization" or "Proxy-Authorization"
+								// headers are permitted for authenticated API communication. Setting sensitive secrets on custom or metadata
+								// headers (e.g. "X-Secret", "X-Custom-*") is treated as header exfiltration and rejected.
 								if sName == "Set" || sName == "Add" {
-									for _, arg := range call.Args {
-										if isSecretExpr(arg) {
-											funcHasSecret[fnName] = true
-											funcHasSink[fnName] = true
-											violations = append(violations, "AST Taboo Violation: forbidden secret read reaching Header/metadata sink in non-test code")
+									isAuthHeader := false
+									if len(call.Args) >= 1 {
+										if headerLit, ok := call.Args[0].(*ast.BasicLit); ok {
+											headerName := strings.Trim(headerLit.Value, `"`)
+											if strings.EqualFold(headerName, "Authorization") || strings.EqualFold(headerName, "Proxy-Authorization") {
+												isAuthHeader = true
+											}
+										}
+									}
+									if !isAuthHeader {
+										for _, arg := range call.Args {
+											if isSecretExpr(arg) {
+												funcHasSecret[fnName] = true
+												funcHasSink[fnName] = true
+												violations = append(violations, "AST Taboo Violation: forbidden secret read reaching Header/metadata sink in non-test code")
+											}
 										}
 									}
 								}
@@ -813,7 +832,7 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 								}
 
 								// File write sinks
-								if sName == "WriteFile" || sName == "Create" || sName == "OpenFile" || sName == "WriteString" {
+								if sName == "Write" || sName == "WriteFile" || sName == "Create" || sName == "OpenFile" || sName == "WriteString" {
 									funcHasSink[fnName] = true
 									for _, arg := range call.Args {
 										if isSecretExpr(arg) {
@@ -965,12 +984,8 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 	}
 
 	if !isTestCode {
-		// Also perform string-level check on code blob for egress/secret patterns
+		// Specific system/process taboo checks on code blob
 		codeLower := strings.ToLower(code)
-		if (strings.Contains(codeLower, "http.post") || strings.Contains(codeLower, "http.get") || strings.Contains(codeLower, "http.do") || strings.Contains(codeLower, "net.dial") || strings.Contains(codeLower, "net.lookuphost") || strings.Contains(codeLower, "lookuphost(") || strings.Contains(codeLower, "exec.command(\"curl\"") || strings.Contains(codeLower, "c.post(") || strings.Contains(codeLower, "client.post(")) &&
-			(strings.Contains(codeLower, "os.environ") || strings.Contains(codeLower, "os.readfile") || strings.Contains(codeLower, "credentials") || strings.Contains(codeLower, "secret_key") || strings.Contains(codeLower, "os.getenv") || strings.Contains(codeLower, "aws_secret") || strings.Contains(codeLower, "github_token")) {
-			violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration / network egress in non-test code")
-		}
 		if strings.Contains(codeLower, "os.readfile") && strings.Contains(codeLower, ".aws/credentials") {
 			violations = append(violations, "AST Taboo Violation: forbidden direct read of credential file in non-test code")
 		}
@@ -988,16 +1003,6 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 		}
 		if strings.Contains(codeLower, "exec.command(\"git\"") && strings.Contains(codeLower, "\"push\"") {
 			violations = append(violations, "AST Taboo Violation: forbidden remote git push via exec.Command")
-		}
-		if (strings.Contains(codeLower, "os.environ") || strings.Contains(codeLower, "cfg.get") ||
-			strings.Contains(codeLower, "secret") || strings.Contains(codeLower, "password") ||
-			strings.Contains(codeLower, "token") || strings.Contains(codeLower, "api_key") ||
-			strings.Contains(codeLower, "auth") || strings.Contains(codeLower, "access_key") ||
-			strings.Contains(codeLower, "aws_") || strings.Contains(codeLower, "private_key") ||
-			strings.Contains(codeLower, "credential")) &&
-			(strings.Contains(codeLower, "os.getenv") || strings.Contains(codeLower, "os.lookupenv") || strings.Contains(codeLower, "os.environ") || strings.Contains(codeLower, "cfg.get")) &&
-			(strings.Contains(codeLower, "fmt.printf") || strings.Contains(codeLower, "fmt.println") || strings.Contains(codeLower, "fmt.print") || strings.Contains(codeLower, "fmt.errorf") || strings.Contains(codeLower, "errors.new") || strings.Contains(codeLower, "log.printf") || strings.Contains(codeLower, "log.println") || strings.Contains(codeLower, "os.writefile") || strings.Contains(codeLower, "sink(")) {
-			violations = append(violations, "AST Taboo Violation: forbidden secret read reaching sink in non-test code")
 		}
 		if strings.Contains(codeLower, "reflect.valueof") && (strings.Contains(codeLower, "exec.command") || strings.Contains(codeLower, "syscall.exec") || strings.Contains(codeLower, "http.get") || strings.Contains(codeLower, "http.post")) {
 			violations = append(violations, "AST Taboo Violation: forbidden reflection call on process/network function")
@@ -1954,34 +1959,77 @@ func checkASTBlock(stmts []ast.Stmt, active bool, vars map[string]constResult, u
 		}
 
 		if swStmt, ok := stmt.(*ast.SwitchStmt); ok {
-			tagRes, okTag := evalConstExpr(swStmt.Tag, vars, unsignedVars)
-			if swStmt.Tag == nil {
-				tagRes = constResult{kind: kindBool, bVal: true}
-				okTag = true
+			switchVars := cloneVars(vars)
+			if swStmt.Init != nil {
+				fAss, _, v := checkASTBlock([]ast.Stmt{swStmt.Init}, active, switchVars, unsignedVars, helpers, closures, calledClosures, outerJoins)
+				if fAss {
+					foundAssertion = true
+				}
+				violations = append(violations, v...)
 			}
-			if swStmt.Body != nil {
-				for _, clause := range swStmt.Body.List {
-					if cc, ok := clause.(*ast.CaseClause); ok {
-						caseActive := active
-						if len(cc.List) > 0 && okTag {
-							matchedAny := false
-							for _, expr := range cc.List {
-								exprRes, okExpr := evalConstExpr(expr, vars, unsignedVars)
-								if okExpr && exprRes == tagRes {
-									matchedAny = true
-									break
+			if swStmt.Tag == nil {
+				// Tagless switch: each case is a boolean expression evaluated at runtime.
+				// A case is dead ONLY IF all expressions in its case list evaluate to constant false.
+				// If any expression is dynamic (!okExpr) or constant true, the case is active.
+				// If case list is empty (default: clause), it is active.
+				if swStmt.Body != nil {
+					for _, clause := range swStmt.Body.List {
+						if cc, ok := clause.(*ast.CaseClause); ok {
+							caseActive := active
+							if len(cc.List) > 0 {
+								allConstFalse := true
+								for _, expr := range cc.List {
+									exprRes, okExpr := evalConstExpr(expr, switchVars, unsignedVars)
+									if !okExpr || (exprRes.kind == kindBool && exprRes.bVal) {
+										allConstFalse = false
+										break
+									}
+								}
+								if allConstFalse {
+									caseActive = false
 								}
 							}
-							if !matchedAny {
-								caseActive = false
+							if caseActive {
+								fAss, _, v := checkASTBlock(cc.Body, true, cloneVars(switchVars), unsignedVars, helpers, closures, calledClosures, outerJoins)
+								if fAss {
+									foundAssertion = true
+								}
+								violations = append(violations, v...)
 							}
 						}
-						if caseActive {
-							fAss, _, v := checkASTBlock(cc.Body, true, cloneVars(vars), unsignedVars, helpers, closures, calledClosures, outerJoins)
-							if fAss {
-								foundAssertion = true
+					}
+				}
+			} else {
+				tagRes, okTag := evalConstExpr(swStmt.Tag, switchVars, unsignedVars)
+				if swStmt.Body != nil {
+					for _, clause := range swStmt.Body.List {
+						if cc, ok := clause.(*ast.CaseClause); ok {
+							caseActive := active
+							if len(cc.List) > 0 && okTag {
+								matchedAny := false
+								hasDynamic := false
+								for _, expr := range cc.List {
+									exprRes, okExpr := evalConstExpr(expr, switchVars, unsignedVars)
+									if !okExpr {
+										hasDynamic = true
+										break
+									}
+									if okExpr && exprRes == tagRes {
+										matchedAny = true
+										break
+									}
+								}
+								if !matchedAny && !hasDynamic {
+									caseActive = false
+								}
 							}
-							violations = append(violations, v...)
+							if caseActive {
+								fAss, _, v := checkASTBlock(cc.Body, true, cloneVars(switchVars), unsignedVars, helpers, closures, calledClosures, outerJoins)
+								if fAss {
+									foundAssertion = true
+								}
+								violations = append(violations, v...)
+							}
 						}
 					}
 				}

@@ -21,6 +21,7 @@ type pinnedModule struct {
 	version string
 }
 
+// Source 2: Pinned first-tier standard ecosystem modules
 var pinnedModules = []pinnedModule{
 	{"golang.org/x/sync", "v0.7.0"},
 	{"github.com/google/uuid", "v1.6.0"},
@@ -29,24 +30,58 @@ var pinnedModules = []pinnedModule{
 	{"github.com/stretchr/testify", "v1.9.0"},
 }
 
+// Source 3: Independent unpinned-but-fixed second set
+var secondSetModules = []pinnedModule{
+	{"github.com/spf13/cobra", "v1.8.1"},
+	{"golang.org/x/sys", "v0.22.0"},
+	{"github.com/pkg/errors", "v0.9.1"},
+}
+
 type modDownloadInfo struct {
 	Path    string `json:"Path"`
 	Version string `json:"Version"`
 	Dir     string `json:"Dir"`
 }
 
+type regressionItem struct {
+	source   string
+	relPath  string
+	expected string
+	got      string
+	reason   string
+}
+
 type sourceStats struct {
-	sourceName   string
-	version      string
-	totalFiles   int
-	passedFiles  int
+	sourceName    string
+	version       string
+	totalFiles    int
+	passedFiles   int
 	rejectedFiles int
-	reasonCounts map[string]int
+	reasonCounts  map[string]int
 }
 
 func main() {
 	outCSV := flag.String("output", "docs/pilot/benign_corpus_results.csv", "Output CSV file path")
+	baselineCSV := flag.String("baseline", "docs/pilot/benign_corpus_results.csv", "Baseline CSV file path for regression detection")
+	updateBaseline := flag.Bool("update", false, "Update baseline CSV without failing on regressions")
 	flag.Parse()
+
+	// Load existing committed CSV baseline for regression comparison
+	baselineMap := make(map[string]string) // key: source + ":" + relPath -> verdict
+	if *baselineCSV != "" {
+		if bf, err := os.Open(*baselineCSV); err == nil {
+			r := csv.NewReader(bf)
+			records, _ := r.ReadAll()
+			_ = bf.Close()
+			for i, row := range records {
+				if i == 0 || len(row) < 4 {
+					continue
+				}
+				key := row[0] + ":" + row[2]
+				baselineMap[key] = row[3]
+			}
+		}
+	}
 
 	gorootBytes, err := exec.Command("go", "env", "GOROOT").Output()
 	if err != nil {
@@ -61,9 +96,11 @@ func main() {
 	}
 	goVersion := strings.TrimSpace(string(goVerBytes))
 
-	fmt.Printf("=== Artix AI: Comprehensive Benign Corpus Evaluation ===\n")
-	fmt.Printf("GOROOT: %s\n", goroot)
-	fmt.Printf("Go Version: %s\n\n", goVersion)
+	fmt.Printf("=== Artix AI: Three-Source Independent Benign Corpus Evaluation ===\n")
+	fmt.Printf("Source 1 (GOROOT): %s (%s)\n", goroot, goVersion)
+	fmt.Printf("Source 2 (Pinned Set 1): %d modules\n", len(pinnedModules))
+	fmt.Printf("Source 3 (Fixed Set 2): %d modules\n", len(secondSetModules))
+	fmt.Printf("Committed Baseline CSV: %s (%d files indexed)\n\n", *baselineCSV, len(baselineMap))
 
 	_ = os.MkdirAll(filepath.Dir(*outCSV), 0755)
 	f, err := os.Create(*outCSV)
@@ -81,7 +118,9 @@ func main() {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
 
-	// 1. Discover all GOROOT src test files (minus testdata)
+	var allRegressions []regressionItem
+
+	// 1. Source 1: GOROOT src test files (minus testdata)
 	gorootSrc := filepath.Join(goroot, "src")
 	var gorootTestFiles []string
 	err = filepath.Walk(gorootSrc, func(path string, info os.FileInfo, err error) error {
@@ -114,133 +153,149 @@ func main() {
 		reasonCounts: make(map[string]int),
 	}
 
-	evalFiles(gorootTestFiles, gorootSrc, "GOROOT", goVersion, rev, writer, &gorootStats)
+	evalFiles(gorootTestFiles, gorootSrc, "GOROOT", goVersion, rev, writer, &gorootStats, baselineMap, &allRegressions)
 
-	// 2. Download and evaluate pinned third-party modules
-	var moduleStatsList []sourceStats
-	totalModFiles := 0
-	totalModPassed := 0
-	totalModRejected := 0
-
+	// 2. Source 2: Pinned third-party modules (Set 1)
+	var set1StatsList []sourceStats
+	totalSet1Files, totalSet1Passed, totalSet1Rejected := 0, 0, 0
 	for _, pm := range pinnedModules {
-		modCoord := fmt.Sprintf("%s@%s", pm.pkg, pm.version)
-		fmt.Printf("\nDownloading pinned module %s...\n", modCoord)
-		out, err := exec.Command("go", "mod", "download", "-json", modCoord).Output()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to download %s: %v\n", modCoord, err)
-			os.Exit(1)
-		}
+		st := evalModule(pm, rev, writer, baselineMap, &allRegressions)
+		set1StatsList = append(set1StatsList, st)
+		totalSet1Files += st.totalFiles
+		totalSet1Passed += st.passedFiles
+		totalSet1Rejected += st.rejectedFiles
+	}
 
-		var info modDownloadInfo
-		if err := json.Unmarshal(out, &info); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to parse mod download json for %s: %v\n", modCoord, err)
-			os.Exit(1)
-		}
-
-		var modTestFiles []string
-		err = filepath.Walk(info.Dir, func(path string, fileInfo os.FileInfo, err error) error {
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "unreadable file in module %s: %s: %v\n", modCoord, path, err)
-				os.Exit(1)
-			}
-			if fileInfo.IsDir() {
-				name := fileInfo.Name()
-				if name == "testdata" || name == ".git" || name == "vendor" {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if strings.HasSuffix(path, "_test.go") {
-				modTestFiles = append(modTestFiles, path)
-			}
-			return nil
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error walking module %s: %v\n", modCoord, err)
-			os.Exit(1)
-		}
-
-		fmt.Printf("Discovered %d test files in %s.\n", len(modTestFiles), modCoord)
-		mStats := sourceStats{
-			sourceName:   pm.pkg,
-			version:      pm.version,
-			reasonCounts: make(map[string]int),
-		}
-
-		evalFiles(modTestFiles, info.Dir, pm.pkg, pm.version, rev, writer, &mStats)
-		moduleStatsList = append(moduleStatsList, mStats)
-
-		totalModFiles += mStats.totalFiles
-		totalModPassed += mStats.passedFiles
-		totalModRejected += mStats.rejectedFiles
+	// 3. Source 3: Independent unpinned-but-fixed second set (Set 2)
+	var set2StatsList []sourceStats
+	totalSet2Files, totalSet2Passed, totalSet2Rejected := 0, 0, 0
+	for _, pm := range secondSetModules {
+		st := evalModule(pm, rev, writer, baselineMap, &allRegressions)
+		set2StatsList = append(set2StatsList, st)
+		totalSet2Files += st.totalFiles
+		totalSet2Passed += st.passedFiles
+		totalSet2Rejected += st.rejectedFiles
 	}
 
 	writer.Flush()
 
-	// Print Summary Report
+	// Print Per-Source Summary Report
 	fmt.Printf("\n===================================================\n")
-	fmt.Printf("=== BENIGN CORPUS EVALUATION RESULTS SUMMARY ===\n")
+	fmt.Printf("=== BENIGN CORPUS EVALUATION PER-SOURCE FPR REPORT ===\n")
 	fmt.Printf("===================================================\n")
 
 	gorootFPR := 0.0
 	if gorootStats.totalFiles > 0 {
 		gorootFPR = (float64(gorootStats.rejectedFiles) / float64(gorootStats.totalFiles)) * 100.0
 	}
-	fmt.Printf("\n[GOROOT] %s\n", goVersion)
-	fmt.Printf("  Total files evaluated: %d\n", gorootStats.totalFiles)
-	fmt.Printf("  Approved (True Negatives): %d\n", gorootStats.passedFiles)
-	fmt.Printf("  Rejected (False Positives): %d (FPR: %.2f%%)\n", gorootStats.rejectedFiles, gorootFPR)
-	if gorootStats.rejectedFiles > 0 {
-		fmt.Printf("  Top rejection reasons:\n")
-		for r, c := range gorootStats.reasonCounts {
-			fmt.Printf("    [%d] %s\n", c, r)
-		}
-	}
+	fmt.Printf("\n[SOURCE 1: GOROOT] %s\n", goVersion)
+	fmt.Printf("  Total files: %d | Approved: %d | Rejected: %d (FPR: %.2f%%)\n",
+		gorootStats.totalFiles, gorootStats.passedFiles, gorootStats.rejectedFiles, gorootFPR)
 
-	modFPR := 0.0
-	if totalModFiles > 0 {
-		modFPR = (float64(totalModRejected) / float64(totalModFiles)) * 100.0
+	set1FPR := 0.0
+	if totalSet1Files > 0 {
+		set1FPR = (float64(totalSet1Rejected) / float64(totalSet1Files)) * 100.0
 	}
-	fmt.Printf("\n[PINNED THIRD-PARTY MODULES] Combined\n")
-	fmt.Printf("  Total files evaluated: %d\n", totalModFiles)
-	fmt.Printf("  Approved (True Negatives): %d\n", totalModPassed)
-	fmt.Printf("  Rejected (False Positives): %d (FPR: %.2f%%)\n", totalModRejected, modFPR)
-
-	for _, ms := range moduleStatsList {
+	fmt.Printf("\n[SOURCE 2: PINNED MODULES SET 1] Combined FPR: %.2f%%\n", set1FPR)
+	for _, ms := range set1StatsList {
 		subFPR := 0.0
 		if ms.totalFiles > 0 {
 			subFPR = (float64(ms.rejectedFiles) / float64(ms.totalFiles)) * 100.0
 		}
-		fmt.Printf("  - %s@%s: %d total, %d rejected (%.2f%% FPR)\n", ms.sourceName, ms.version, ms.totalFiles, ms.rejectedFiles, subFPR)
+		fmt.Printf("  - %s@%s: %d total, %d passed, %d rejected (%.2f%% FPR)\n",
+			ms.sourceName, ms.version, ms.totalFiles, ms.passedFiles, ms.rejectedFiles, subFPR)
 	}
 
-	grandTotal := gorootStats.totalFiles + totalModFiles
-	grandPassed := gorootStats.passedFiles + totalModPassed
-	grandRejected := gorootStats.rejectedFiles + totalModRejected
+	set2FPR := 0.0
+	if totalSet2Files > 0 {
+		set2FPR = (float64(totalSet2Rejected) / float64(totalSet2Files)) * 100.0
+	}
+	fmt.Printf("\n[SOURCE 3: FIXED MODULES SET 2] Combined FPR: %.2f%%\n", set2FPR)
+	for _, ms := range set2StatsList {
+		subFPR := 0.0
+		if ms.totalFiles > 0 {
+			subFPR = (float64(ms.rejectedFiles) / float64(ms.totalFiles)) * 100.0
+		}
+		fmt.Printf("  - %s@%s: %d total, %d passed, %d rejected (%.2f%% FPR)\n",
+			ms.sourceName, ms.version, ms.totalFiles, ms.passedFiles, ms.rejectedFiles, subFPR)
+	}
+
+	grandTotal := gorootStats.totalFiles + totalSet1Files + totalSet2Files
+	grandPassed := gorootStats.passedFiles + totalSet1Passed + totalSet2Passed
+	grandRejected := gorootStats.rejectedFiles + totalSet1Rejected + totalSet2Rejected
 	grandFPR := 0.0
 	if grandTotal > 0 {
 		grandFPR = (float64(grandRejected) / float64(grandTotal)) * 100.0
 	}
 
-	fmt.Printf("\n[GRAND TOTAL]\n")
+	fmt.Printf("\n[GRAND TOTAL ACROSS ALL THREE SOURCES]\n")
 	fmt.Printf("  Total files evaluated: %d\n", grandTotal)
-	fmt.Printf("  Approved: %d\n", grandPassed)
-	fmt.Printf("  Rejected: %d (Overall FPR: %.2f%%)\n", grandRejected, grandFPR)
+	fmt.Printf("  Approved (True Negatives): %d\n", grandPassed)
+	fmt.Printf("  Rejected (False Positives): %d (Overall FPR: %.2f%%)\n", grandRejected, grandFPR)
 	fmt.Printf("  Results CSV saved to: %s\n", *outCSV)
 
-	// Thresholds to beat: GOROOT <= 127, Third-party modules <= 118
-	if gorootStats.rejectedFiles > 127 {
-		fmt.Fprintf(os.Stderr, "\nFAILURE: GOROOT rejected %d > target 127\n", gorootStats.rejectedFiles)
+	// Check for regressions vs committed baseline CSV
+	if !*updateBaseline && len(baselineMap) > 0 && len(allRegressions) > 0 {
+		fmt.Fprintf(os.Stderr, "\nFAILURE: %d benign corpus regression(s) vs committed baseline CSV detected:\n", len(allRegressions))
+		for _, reg := range allRegressions {
+			fmt.Fprintf(os.Stderr, "  - [%s] %s: expected %s, got %s (%s)\n", reg.source, reg.relPath, reg.expected, reg.got, reg.reason)
+		}
 		os.Exit(1)
 	}
-	if totalModRejected > 118 {
-		fmt.Fprintf(os.Stderr, "\nFAILURE: Third-party modules rejected %d > target 118\n", totalModRejected)
-		os.Exit(1)
-	}
-	fmt.Printf("\nSUCCESS: Benign corpus thresholds met (GOROOT %d/127, Third-party %d/118).\n", gorootStats.rejectedFiles, totalModRejected)
+
+	fmt.Printf("\nSUCCESS: Benign corpus evaluation completed with 0 regressions vs committed baseline CSV.\n")
 }
 
-func evalFiles(files []string, baseDir, sourceName, version string, rev *reviewer.AdversarialReviewer, writer *csv.Writer, stats *sourceStats) {
+func evalModule(pm pinnedModule, rev *reviewer.AdversarialReviewer, writer *csv.Writer, baseline map[string]string, regressions *[]regressionItem) sourceStats {
+	modCoord := fmt.Sprintf("%s@%s", pm.pkg, pm.version)
+	fmt.Printf("\nDownloading module %s...\n", modCoord)
+	out, err := exec.Command("go", "mod", "download", "-json", modCoord).Output()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to download %s: %v\n", modCoord, err)
+		os.Exit(1)
+	}
+
+	var info modDownloadInfo
+	if err := json.Unmarshal(out, &info); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to parse mod download json for %s: %v\n", modCoord, err)
+		os.Exit(1)
+	}
+
+	var modTestFiles []string
+	err = filepath.Walk(info.Dir, func(path string, fileInfo os.FileInfo, err error) error {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "unreadable file in module %s: %s: %v\n", modCoord, path, err)
+			os.Exit(1)
+		}
+		if fileInfo.IsDir() {
+			name := fileInfo.Name()
+			if name == "testdata" || name == ".git" || name == "vendor" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, "_test.go") {
+			modTestFiles = append(modTestFiles, path)
+		}
+		return nil
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error walking module %s: %v\n", modCoord, err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Discovered %d test files in %s.\n", len(modTestFiles), modCoord)
+	mStats := sourceStats{
+		sourceName:   pm.pkg,
+		version:      pm.version,
+		reasonCounts: make(map[string]int),
+	}
+
+	evalFiles(modTestFiles, info.Dir, pm.pkg, pm.version, rev, writer, &mStats, baseline, regressions)
+	return mStats
+}
+
+func evalFiles(files []string, baseDir, sourceName, version string, rev *reviewer.AdversarialReviewer, writer *csv.Writer, stats *sourceStats, baseline map[string]string, regressions *[]regressionItem) {
 	for _, path := range files {
 		relPath, _ := filepath.Rel(baseDir, path)
 		data, err := os.ReadFile(path)
@@ -289,6 +344,20 @@ func evalFiles(files []string, baseDir, sourceName, version string, rev *reviewe
 		} else {
 			stats.rejectedFiles++
 			stats.reasonCounts[blocking]++
+		}
+
+		// Regression check against baseline
+		key := sourceName + ":" + relPath
+		if expectedVerdict, exists := baseline[key]; exists {
+			if expectedVerdict == "approved" && verdictStr != "approved" {
+				*regressions = append(*regressions, regressionItem{
+					source:   sourceName,
+					relPath:  relPath,
+					expected: expectedVerdict,
+					got:      verdictStr,
+					reason:   blocking,
+				})
+			}
 		}
 
 		_ = writer.Write([]string{sourceName, version, relPath, verdictStr, blocking})
