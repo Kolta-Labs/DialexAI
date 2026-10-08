@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io/fs"
 	"net/http"
@@ -11,6 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"artix/pkg/coder"
+	"artix/pkg/git"
+	"artix/pkg/persona"
+	"artix/pkg/repo"
+	"artix/pkg/reviewer"
+	"artix/pkg/sandbox"
+	"artix/pkg/spec"
 )
 
 // TestG8_PluginSourcesNeverPassAutonomous asserts that no IDE plugin ever passes
@@ -613,6 +622,129 @@ func TestR7_2_CLI_JSON_AwaitingApproval_Contract(t *testing.T) {
 		t.Fatalf("expected ok=false in JSON response, got: %+v", res)
 	}
 }
+
+// TestR8_4_Phase1_AwaitingApproval_ReportsSuccessFalse_StatusAwaitingApproval_AndPluginsContract
+// asserts that Phase 1 Candidate Push returns success:false, ok:false, status:"awaiting_approval",
+// awaitingApproval:true so consumers never misinterpret awaiting-approval as plain convergence,
+// and verifies that Claude Code, VS Code, and IntelliJ plugins adhere to this contract.
+func TestR8_4_Phase1_AwaitingApproval_ReportsSuccessFalse_StatusAwaitingApproval_AndPluginsContract(t *testing.T) {
+	// 1. Check Claude Code command contract
+	claudeCodePath := filepath.Join("..", "plugins", "claude-code", "commands", "artix-code.md")
+	content, err := os.ReadFile(claudeCodePath)
+	if err != nil {
+		t.Fatalf("failed to read claude code command: %v", err)
+	}
+	claudeStr := string(content)
+	if !strings.Contains(claudeStr, "awaiting_approval") && !strings.Contains(claudeStr, "awaitingApproval") {
+		t.Fatalf("R8-4 VIOLATION: plugins/claude-code/commands/artix-code.md has no awaiting_approval handling: %s", claudeStr)
+	}
+	if !strings.Contains(claudeStr, "artix merge") {
+		t.Fatalf("R8-4 VIOLATION: plugins/claude-code/commands/artix-code.md does not instruct user to execute artix merge after forge review")
+	}
+
+	// 2. Check VS Code extension contract
+	vscodePath := filepath.Join("..", "plugins", "vscode", "src", "extension.ts")
+	vsContent, err := os.ReadFile(vscodePath)
+	if err != nil {
+		t.Fatalf("failed to read vscode extension.ts: %v", err)
+	}
+	vsStr := string(vsContent)
+	if !strings.Contains(vsStr, "awaiting_approval") {
+		t.Fatalf("R8-4 VIOLATION: plugins/vscode/src/extension.ts does not check awaiting_approval status")
+	}
+
+	// 3. Check IntelliJ plugin contract
+	intellijPath := filepath.Join("..", "plugins", "intellij", "src", "main", "kotlin", "ai", "artix", "ide", "Actions.kt")
+	ijContent, err := os.ReadFile(intellijPath)
+	if err != nil {
+		t.Fatalf("failed to read intellij Actions.kt: %v", err)
+	}
+	ijStr := string(ijContent)
+	if !strings.Contains(ijStr, "awaiting_approval") {
+		t.Fatalf("R8-4 VIOLATION: plugins/intellij Actions.kt does not check awaiting_approval status")
+	}
+
+	// 4. Verify Phase 1 LoopResult and CLI JSON output
+	// Coordinator loop in Phase 1 with ForgePusher MUST emit Success: false, AwaitingApproval: true
+	tempDir := t.TempDir()
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", tempDir}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v\nOutput: %s", args, err, string(out))
+		}
+	}
+	runGit("init")
+	runGit("config", "user.name", "Artix Tester")
+	runGit("config", "user.email", "tester@artix.ai")
+	if err := os.WriteFile(filepath.Join(tempDir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", "main.go")
+	runGit("commit", "-m", "initial commit")
+
+	// Create story spec
+	specDir := filepath.Join(tempDir, "docs", "specs")
+	if err := os.MkdirAll(specDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	specContent := `# Story Spec STORY-001: R8-4 Awaiting Approval Test
+## Acceptance Criteria
+- Scenario: Pass
+## Test Commands
+` + "```bash\n" + `echo "ok"
+` + "```\n"
+	if err := os.WriteFile(filepath.Join(specDir, "STORY-001.md"), []byte(specContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	pushed := false
+	pusher := func(ctx context.Context, commitSHA string) error {
+		pushed = true
+		return nil
+	}
+
+	driver := git.NewDriver(tempDir)
+	repoCtx, err := repo.DetectContext(tempDir)
+	if err != nil {
+		t.Fatalf("failed to detect repo context: %v", err)
+	}
+	reg := persona.NewRegistry("")
+	coderObj, _ := coder.NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coordinator := coder.NewCoordinator(coderObj, rev, driver, box)
+
+	storySpec := &spec.StorySpec{
+		ID:           "STORY-001",
+		Title:        "R8-4 Awaiting Approval Test",
+		TestCommands: []string{`echo "ok"`},
+	}
+
+	res := coordinator.Run(context.Background(), storySpec, repoCtx, nil, nil, &coder.LoopOptions{
+		MaxRounds:             1,
+		Autonomy:              coder.AutonomyAutonomous,
+		TwoPhaseAutonomous:    true,
+		ForgePusher:           pusher,
+		TestCommandsConfirmed: true,
+		MockPatchGen: func(round int, feedback string) string {
+			return "diff --git a/main.go b/main.go\n--- a/main.go\n+++ b/main.go\n@@ -1,2 +1,2 @@\n-package main\n+package main\n// updated\n"
+		},
+	})
+
+	if !pushed {
+		t.Fatalf("expected candidate to be pushed via ForgePusher")
+	}
+	if !res.AwaitingApproval {
+		t.Fatalf("expected res.AwaitingApproval == true, got false")
+	}
+	if res.Success != false {
+		t.Fatalf("SECURITY VIOLATION (R8-4): Phase 1 returned res.Success == true while awaiting approval! Must be false so consumers never misinterpret awaiting-approval as plain convergence.")
+	}
+}
+
 
 
 
