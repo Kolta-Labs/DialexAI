@@ -103,6 +103,13 @@ func setupTestRepo(t *testing.T) (string, *git.Driver) {
 	return tempDir, driver
 }
 
+func newTestReviewer(reg *persona.Registry) *reviewer.AdversarialReviewer {
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCoderFamily("anthropic")
+	rev.SetCriticFamily("openai")
+	return rev
+}
+
 func TestConvergenceCoordinatorLoop(t *testing.T) {
 	t.Setenv("ARTIX_ALLOW_AUTONOMOUS", "1")
 	tempDir, driver := setupTestRepo(t)
@@ -110,7 +117,7 @@ func TestConvergenceCoordinatorLoop(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -180,7 +187,7 @@ func TestNoModelPathYieldsUnreviewedAndBlocksAutoCommit(t *testing.T) {
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
 	// Reviewer without critic
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	box := sandbox.NewSandbox(tempDir)
 	coord := NewCoordinator(coder, rev, driver, box)
 
@@ -233,7 +240,7 @@ func TestAutonomousModeBlockedInEnterpriseWithoutOptIn(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -310,7 +317,7 @@ func TestTokenBudgetExhaustionMidLoop(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	box := sandbox.NewSandbox(tempDir)
 	coord := NewCoordinator(coder, rev, driver, box)
 
@@ -421,7 +428,7 @@ func TestFinancialCostBudgetExhaustion(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	box := sandbox.NewSandbox(tempDir)
 	coord := NewCoordinator(coder, rev, driver, box)
 
@@ -476,7 +483,7 @@ func TestAutonomousCommitBlockedWhenApproverEmptyInEnterpriseMode(t *testing.T) 
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -562,7 +569,7 @@ func TestAutonomousCommitBlockedWhenSelfApprovalAttempted(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -616,7 +623,7 @@ func TestAutonomousLoopBlockedByUnapprovedTestCommandInEnterprise(t *testing.T) 
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	box := sandbox.NewSandbox(tempDir)
 	coord := NewCoordinator(coder, rev, driver, box)
 
@@ -720,7 +727,7 @@ func TestAutonomousCommit_RejectsCallerSuppliedForgedApprovalInEnterprise(t *tes
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -775,7 +782,7 @@ func TestG4_SupervisedModeRequiresExplicitConfirmationOutsideEnterprise(t *testi
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -825,7 +832,7 @@ func TestG4_AuditRecordsTestCommandsHash(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -889,7 +896,7 @@ func TestG4_ScriptIndirectionRefused_OutsideEnterprise(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -948,7 +955,7 @@ func TestG4_ScriptIndirectionRefused_EnterpriseMode(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -1003,7 +1010,7 @@ func TestR2_2_Coordinator_RejectsCallerSuppliedForgeApprovalInEnterprise(t *test
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -1066,7 +1073,7 @@ func TestR2_2_Coordinator_AcceptsMockedForgeApprovalInEnterprise(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -1110,7 +1117,7 @@ func TestR2_3_Coordinator_RejectsEarlyReturnIfTrue(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -1162,7 +1169,7 @@ func TestR2_3_Coordinator_RejectsEarlyReturnIfEnvCI(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -1214,7 +1221,7 @@ func TestR2_3_Coordinator_RejectsTwoAssertionsGutted(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -1266,7 +1273,7 @@ func TestR2_3_Coordinator_RejectsNoOpTRun(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -1318,7 +1325,7 @@ func TestR2_3_Coordinator_NonGo_WarningAnalyzerFindingDoesNotApproveTaboo(t *tes
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -1374,7 +1381,7 @@ func TestR3_5_EnterpriseMode_AuditFailureAbortsAndRollsBackCommit(t *testing.T) 
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -1514,7 +1521,7 @@ func TestR4_3_CoordinatorRun_HostileCorpus_AllRejected(t *testing.T) {
 
 			reg := persona.NewRegistry("")
 			coder, _ := NewDomainCoder("backend_engineer", reg)
-			rev := reviewer.NewAdversarialReviewer(reg)
+			rev := newTestReviewer(reg)
 			// Stub approving critic
 			rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 				return `{"approved":true,"blocking":[],"warnings":[]}`, nil
@@ -1560,7 +1567,7 @@ func TestR5_3_ModelCriticMandatoryForApproval(t *testing.T) {
 	coder, _ := NewDomainCoder("backend_engineer", reg)
 
 	// Reviewer with NO critic configured (nil critic)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	box := sandbox.NewSandbox(tempDir)
 	coord := NewCoordinator(coder, rev, driver, box)
 
@@ -1657,7 +1664,7 @@ func TestR7_3_CoordinatorRun_HostileCorpus_AllRejected(t *testing.T) {
 
 			reg := persona.NewRegistry("")
 			coder, _ := NewDomainCoder("backend_engineer", reg)
-			rev := reviewer.NewAdversarialReviewer(reg)
+			rev := newTestReviewer(reg)
 			// Stub approving critic
 			rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 				return `{"approved":true,"blocking":[],"warnings":[]}`, nil
@@ -1832,7 +1839,7 @@ func TestR8_TestCommandIndirection_ComprehensiveBuildAndScriptClosure(t *testing
 
 			reg := persona.NewRegistry("")
 			coder, _ := NewDomainCoder("backend_engineer", reg)
-			rev := reviewer.NewAdversarialReviewer(reg)
+			rev := newTestReviewer(reg)
 			rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 				return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 			})
@@ -1931,7 +1938,7 @@ func TestCoder_PostTestScan_RejectsCanaryInCommittedFiles(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})

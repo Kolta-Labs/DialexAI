@@ -857,6 +857,8 @@ func TestR8_4_Phase1_AwaitingApproval_ReportsSuccessFalse_StatusAwaitingApproval
 	reg := persona.NewRegistry("")
 	coderObj, _ := coder.NewDomainCoder("backend_engineer", reg)
 	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCoderFamily("anthropic")
+	rev.SetCriticFamily("openai")
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -1126,6 +1128,8 @@ func TestR13_5_Phase1_CandidateAuditRecord_StatusAwaitingApproval_NotFailed(t *t
 	reg := persona.NewRegistry("")
 	coderObj, _ := coder.NewDomainCoder("backend_engineer", reg)
 	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCoderFamily("anthropic")
+	rev.SetCriticFamily("openai")
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})

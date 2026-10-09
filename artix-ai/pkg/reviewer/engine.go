@@ -144,8 +144,12 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 	}
 
 	// 2bb. Deterministic Pre-Filter: Disjoint Model Families Enforcement
-	if pol.Reviewer.EnforceDisjointModelFamilies && r.critic != nil {
-		if r.coderFamily != "" && r.criticFamily != "" && strings.EqualFold(r.coderFamily, r.criticFamily) {
+	if pol.IsDisjointModelFamiliesEnforced() && r.critic != nil {
+		if r.coderFamily == "" || r.criticFamily == "" {
+			verdict.Approved = false
+			verdict.Status = StatusRejected
+			verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("reviewer policy violation: model families must be explicitly configured (coder=%q, critic=%q); disjoint model families required", r.coderFamily, r.criticFamily))
+		} else if strings.EqualFold(r.coderFamily, r.criticFamily) {
 			verdict.Approved = false
 			verdict.Status = StatusRejected
 			verdict.BlockingIssues = append(verdict.BlockingIssues, fmt.Sprintf("reviewer policy violation: critic model family %q matches coder family %q (disjoint model families required)", r.criticFamily, r.coderFamily))

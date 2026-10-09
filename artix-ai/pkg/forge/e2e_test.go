@@ -30,6 +30,13 @@ import (
 )
 
 
+func newTestReviewer(reg *persona.Registry) *reviewer.AdversarialReviewer {
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCoderFamily("anthropic")
+	rev.SetCriticFamily("openai")
+	return rev
+}
+
 func setupTestRepoForForge(t *testing.T) (string, *git.Driver) {
 	tempDir, err := os.MkdirTemp("", "artix_forge_e2e_test")
 	if err != nil {
@@ -96,7 +103,7 @@ func TestR3_2_MockedGitHub_CoordinatorRun_FullE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create domain coder: %v", err)
 	}
-	advReviewer := reviewer.NewAdversarialReviewer(reg)
+	advReviewer := newTestReviewer(reg)
 	advReviewer.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -287,7 +294,7 @@ func TestR3_2_MockedGitLab_CoordinatorRun_FullE2E(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coderEngine, _ := coder.NewDomainCoder("backend_engineer", reg)
-	advReviewer := reviewer.NewAdversarialReviewer(reg)
+	advReviewer := newTestReviewer(reg)
 	advReviewer.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -384,7 +391,7 @@ func TestR4_2_ApprovePRAtPreCommitHead_BotAddsCommit_RejectedUntilReapproved(t *
 
 	reg := persona.NewRegistry("")
 	coderObj, _ := coder.NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -480,7 +487,7 @@ func TestR5_2_AutonomousCandidatePushAndForgeApproval_E2E(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coderObj, _ := coder.NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -596,7 +603,7 @@ func TestR5_2_ResetHard_NeverResetsPreExistingUserCommit(t *testing.T) {
 	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
 	reg := persona.NewRegistry("")
 	coderObj, _ := coder.NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -701,7 +708,7 @@ func TestR6_2_TwoPhaseAutonomousPRFlow_RealBareRepo(t *testing.T) {
 
 	reg := persona.NewRegistry("")
 	coderObj, _ := coder.NewDomainCoder("backend_engineer", reg)
-	rev := reviewer.NewAdversarialReviewer(reg)
+	rev := newTestReviewer(reg)
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -1363,7 +1370,15 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 				"content": []map[string]any{
 					{"type": "text", "text": `{"approved": true, "blocking": [], "warnings": []}`},
 				},
-				"usage": map[string]any{"input_tokens": 10, "output_tokens": 10},
+				"choices": []map[string]any{
+					{
+						"message": map[string]any{
+							"role":    "assistant",
+							"content": `{"approved": true, "blocking": [], "warnings": []}`,
+						},
+					},
+				},
+				"usage": map[string]any{"input_tokens": 10, "output_tokens": 10, "prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20},
 			})
 			return
 		}
@@ -1374,7 +1389,15 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 			"content": []map[string]any{
 				{"type": "text", "text": "```diff\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+100\n```\n"},
 			},
-			"usage": map[string]any{"input_tokens": 20, "output_tokens": 20},
+			"choices": []map[string]any{
+				{
+					"message": map[string]any{
+						"role":    "assistant",
+						"content": "```diff\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+100\n```\n",
+					},
+				},
+			},
+			"usage": map[string]any{"input_tokens": 20, "output_tokens": 20, "prompt_tokens": 20, "completion_tokens": 20, "total_tokens": 40},
 		})
 	}))
 	defer llmServer.Close()
@@ -1416,6 +1439,8 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 		"--autonomy", "autonomous",
 		"--provider", "anthropic",
 		"--model", "claude-3-5-sonnet-20241022",
+		"--review-provider", "openai",
+		"--review-model", "gpt-4o",
 		"--forge", "github",
 		"--forge-pr", "77",
 		"--forge-url", ghServer.URL,
@@ -1433,6 +1458,7 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 		"ARTIX_PR_BRANCH=artix-pr-77",
 		"ARTIX_FORGE_REMOTE=origin",
 		"ANTHROPIC_API_KEY=mock-key",
+		"OPENAI_API_KEY=mock-key",
 		"ARTIX_POLICY_SIGNING_KEY="+policySignKey,
 		"ARTIX_POLICY_PATH="+policyFile,
 		"ARTIX_API_URL="+llmServer.URL,
@@ -1950,7 +1976,15 @@ func TestR14_8_FullEnterprise_Phase1_To_VerifyApproval_E2E(t *testing.T) {
 				"content": []map[string]any{
 					{"type": "text", "text": `{"approved": true, "blocking": [], "warnings": []}`},
 				},
-				"usage": map[string]any{"input_tokens": 10, "output_tokens": 10},
+				"choices": []map[string]any{
+					{
+						"message": map[string]any{
+							"role":    "assistant",
+							"content": `{"approved": true, "blocking": [], "warnings": []}`,
+						},
+					},
+				},
+				"usage": map[string]any{"input_tokens": 10, "output_tokens": 10, "prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20},
 			})
 			return
 		}
@@ -1961,7 +1995,15 @@ func TestR14_8_FullEnterprise_Phase1_To_VerifyApproval_E2E(t *testing.T) {
 			"content": []map[string]any{
 				{"type": "text", "text": "```diff\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+1\n```\n"},
 			},
-			"usage": map[string]any{"input_tokens": 20, "output_tokens": 20},
+			"choices": []map[string]any{
+				{
+					"message": map[string]any{
+						"role":    "assistant",
+						"content": "```diff\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+1\n```\n",
+					},
+				},
+			},
+			"usage": map[string]any{"input_tokens": 20, "output_tokens": 20, "prompt_tokens": 20, "completion_tokens": 20, "total_tokens": 40},
 		})
 	}))
 	defer llmServer.Close()
@@ -2119,6 +2161,7 @@ func TestR14_8_FullEnterprise_Phase1_To_VerifyApproval_E2E(t *testing.T) {
 		"ARTIX_PR_BRANCH=artix-pr-101",
 		"ARTIX_FORGE_REMOTE=origin",
 		"ANTHROPIC_API_KEY=mock-key",
+		"OPENAI_API_KEY=mock-key",
 		"ARTIX_API_URL=" + llmServer.URL,
 	}
 
@@ -2127,6 +2170,8 @@ func TestR14_8_FullEnterprise_Phase1_To_VerifyApproval_E2E(t *testing.T) {
 		"--confirm-tests",
 		"--provider", "anthropic",
 		"--model", "claude-3-5-sonnet-20241022",
+		"--review-provider", "openai",
+		"--review-model", "gpt-4o",
 		"--forge", "github",
 		"--forge-pr", "101",
 		"--forge-url", ghServer.URL,

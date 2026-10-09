@@ -620,6 +620,35 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 		opts.ReviewerModel = *modelFlag
 	}
 
+	coderFamily := strings.TrimSpace(*providerFlag)
+	criticFamily := strings.TrimSpace(*reviewProvider)
+	if criticFamily == "" {
+		criticFamily = coderFamily
+	}
+
+	advReviewer.SetCoderFamily(coderFamily)
+	advReviewer.SetCriticFamily(criticFamily)
+
+	pol := policy.Active()
+	if pol.IsDisjointModelFamiliesEnforced() && !*noModelReview {
+		if coderFamily == "" || criticFamily == "" {
+			errStr := fmt.Sprintf("Error: disjoint model families policy violation: coder (%q) and critic (%q) model families must both be configured", coderFamily, criticFamily)
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
+		if strings.EqualFold(coderFamily, criticFamily) {
+			errStr := fmt.Sprintf("Error: disjoint model families policy violation: critic model family %q matches coder family %q (disjoint model families required)", criticFamily, coderFamily)
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
+	}
+
 	var revUsageMu sync.Mutex
 	var lastRevUsage *coder.ProviderUsage
 	if !*noModelReview {

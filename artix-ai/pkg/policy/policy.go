@@ -202,6 +202,18 @@ type Policy struct {
 	IsVerified              bool                 `json:"-"`
 }
 
+// IsDisjointModelFamiliesEnforced returns true if disjoint coder and critic model families are mandated.
+// It defaults to true in enterprise mode.
+func (p *Policy) IsDisjointModelFamiliesEnforced() bool {
+	if p == nil {
+		return false
+	}
+	if p.EnterpriseMode || IsEnterprise() {
+		return true
+	}
+	return p.Reviewer.EnforceDisjointModelFamilies
+}
+
 var (
 	policyMu     sync.RWMutex
 	cachedPolicy *Policy

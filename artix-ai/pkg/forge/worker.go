@@ -26,6 +26,8 @@ type RemoteWorkerTask struct {
 	Auth         ForgeAuth                               `json:"auth"`
 	Prompt       string                                  `json:"prompt"`
 	Domain       string                                  `json:"domain"`
+	CoderFamily  string                                  `json:"coderFamily,omitempty"`
+	CriticFamily string                                  `json:"criticFamily,omitempty"`
 	Critic       reviewer.Critic                         `json:"-"`
 	MockPatchGen func(round int, feedback string) string // for tests
 }
@@ -171,6 +173,17 @@ func (w *RemoteWorker) Execute(ctx context.Context, task *RemoteWorkerTask) *Rem
 	}
 
 	rev := reviewer.NewAdversarialReviewer(w.registry)
+	coderFam := task.CoderFamily
+	if coderFam == "" {
+		coderFam = "anthropic"
+	}
+	criticFam := task.CriticFamily
+	if criticFam == "" {
+		criticFam = "openai"
+	}
+	rev.SetCoderFamily(coderFam)
+	rev.SetCriticFamily(criticFam)
+
 	if task.Critic != nil {
 		rev.SetCritic(task.Critic)
 	} else if task.MockPatchGen != nil {
