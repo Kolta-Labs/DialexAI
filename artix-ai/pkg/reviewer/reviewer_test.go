@@ -449,6 +449,39 @@ func TestDisjointModelFamiliesEnforcedInReviewer(t *testing.T) {
 	}
 }
 
+func TestResolveModelFamily_CanonicalTableAndUnknown(t *testing.T) {
+	cases := []struct {
+		provider string
+		modelID  string
+		expected string
+	}{
+		{"bedrock", "claude-3-5-sonnet-20241022", "anthropic"},
+		{"anthropic", "claude-3-opus", "anthropic"},
+		{"bedrock", "anthropic.claude-3-5-sonnet-20241022-v2:0", "anthropic"},
+		{"openai", "gpt-4o", "openai"},
+		{"azure", "openai/gpt-4o-mini", "openai"},
+		{"openai", "o1-preview", "openai"},
+		{"openai", "o3-mini", "openai"},
+		{"google", "gemini-1.5-pro", "google"},
+		{"vertex", "gemini-2.0-flash", "google"},
+		{"ollama", "llama3.3", "meta"},
+		{"ollama", "qwen2.5", "qwen"},
+		{"ollama", "deepseek-coder-v2", "deepseek"},
+		{"ollama", "codestral", "mistral"},
+		{"ollama", "mistral-large", "mistral"},
+		{"xai", "grok-beta", "xai"},
+		{"ollama", "my-custom-model-alpha", "my-custom-model-alpha"},
+		{"ollama", "my-custom-model-beta", "my-custom-model-beta"},
+	}
+
+	for _, tc := range cases {
+		got := ResolveModelFamily(tc.provider, tc.modelID)
+		if got != tc.expected {
+			t.Errorf("ResolveModelFamily(%q, %q) = %q, expected %q", tc.provider, tc.modelID, got, tc.expected)
+		}
+	}
+}
+
 func TestDeepSemanticASTTaboosNonStatementDiffs(t *testing.T) {
 	rev := NewAdversarialReviewer(persona.NewRegistry(""))
 	rev.SetGlobalTaboos(steering.GlobalTabooSpace{

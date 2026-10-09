@@ -341,6 +341,142 @@ func TestCLI_KnowledgeEval_Command(t *testing.T) {
 	}
 }
 
+func TestCLI_ModelFamilyResolution_BedrockClaudeVsAnthropicClaude_AndOllamaDifferentModels(t *testing.T) {
+	tmpDir := t.TempDir()
+	policy.ResetCache()
+	defer policy.ResetCache()
+
+	specDir := filepath.Join(tmpDir, "docs", "specs")
+	_ = os.MkdirAll(specDir, 0755)
+	specPath := filepath.Join(specDir, "STORY-R2-01.md")
+	_ = os.WriteFile(specPath, []byte(`---
+id: STORY-R2-01
+title: R2 Model Family Resolution
+---
+# User Story
+Test model family resolution from model IDs
+# Test Commands
+- echo ok
+`), 0644)
+
+	// Set up signed policy with EnforceDisjointModelFamilies
+	policyFile := filepath.Join(tmpDir, "policy.json")
+	pol := policy.Policy{
+		Reviewer: policy.ReviewerPolicyConfig{
+			EnforceDisjointModelFamilies: true,
+		},
+		AllowedTestCommands: []string{"echo ok"},
+	}
+	data, _ := json.Marshal(pol)
+	_ = os.WriteFile(policyFile, data, 0644)
+	key := "test-key-r2-12345"
+	policy.SetTrustedKey("corp-root", key)
+	_ = policy.SignPolicyFile(policyFile, key)
+	policy.SetDefaultPolicyPath(policyFile)
+	defer func() {
+		policy.SetDefaultPolicyPath("/etc/artix/policy.json")
+		policy.ResetCache()
+	}()
+
+	t.Setenv("ANTHROPIC_API_KEY", "mock-key")
+	t.Setenv("AWS_ACCESS_KEY_ID", "mock-key")
+
+	// Case 1: Bedrock Coder running Claude vs Anthropic Critic running Claude -> MUST BE REJECTED (same family)
+	var stdout1, stderr1 bytes.Buffer
+	code1 := RunCLI(tmpDir, nil, []string{
+		"code",
+		"--provider", "bedrock",
+		"--model", "claude-3-5-sonnet-20241022",
+		"--review-provider", "anthropic",
+		"--review-model", "claude-3-5-sonnet-20241022",
+		"--confirm-tests",
+		specPath,
+	}, &stdout1, &stderr1)
+
+	if code1 == 0 {
+		t.Fatalf("expected Bedrock Claude paired with Anthropic Claude to be REJECTED under disjoint model families")
+	}
+	if !strings.Contains(stderr1.String(), "disjoint model families") {
+		t.Errorf("expected error mentioning disjoint model families, got: %s", stderr1.String())
+	}
+
+	// Case 2: Ollama Coder running llama3.3 vs Ollama Critic running qwen2.5 -> MUST PASS disjoint gate (different families)
+	var stdout2, stderr2 bytes.Buffer
+	code2 := RunCLI(tmpDir, nil, []string{
+		"code",
+		"--provider", "ollama",
+		"--model", "llama3.3",
+		"--review-provider", "ollama",
+		"--review-model", "qwen2.5",
+		"--no-model-review", // skip live network request
+		"--confirm-tests",
+		specPath,
+	}, &stdout2, &stderr2)
+	_ = code2
+
+	// Since --no-model-review is passed or families are disjoint, it should not fail on disjoint model family check
+	if strings.Contains(stderr2.String(), "disjoint model families") {
+		t.Errorf("expected Ollama llama3.3 vs qwen2.5 to be accepted as disjoint families, got error: %s", stderr2.String())
+	}
+}
+
+func TestAudit_ResolvedModelFamilyPairInConvergenceEvent(t *testing.T) {
+	tmpDir := t.TempDir()
+	policy.ResetCache()
+	defer policy.ResetCache()
+
+	specDir := filepath.Join(tmpDir, "docs", "specs")
+	_ = os.MkdirAll(specDir, 0755)
+	specPath := filepath.Join(specDir, "STORY-R2-02.md")
+	_ = os.WriteFile(specPath, []byte(`---
+id: STORY-R2-02
+title: R2 Audit Model Family
+---
+# User Story
+Audit logging test
+# Test Commands
+- echo ok
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	_ = RunCLI(tmpDir, nil, []string{
+		"code",
+		"--provider", "ollama",
+		"--model", "llama3.3",
+		"--review-provider", "ollama",
+		"--review-model", "qwen2.5",
+		"--no-model-review",
+		"--confirm-tests",
+		specPath,
+	}, &stdout, &stderr)
+
+	// Check audit log for coderModel, coderFamily, criticModel, criticFamily
+	logPath := filepath.Join(tmpDir, ".artix", "audit", "events.jsonl")
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("expected audit log file at %s: %v", logPath, err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	found := false
+	for _, line := range lines {
+		if strings.Contains(line, "CODE_CONVERGENCE") {
+			var evt audit.AuditEvent
+			if json.Unmarshal([]byte(line), &evt) == nil && evt.Details != nil {
+				if evt.Details["coderModel"] == "llama3.3" && evt.Details["coderFamily"] == "meta" &&
+					evt.Details["criticModel"] == "qwen2.5" && evt.Details["criticFamily"] == "qwen" {
+					found = true
+					break
+				}
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected CODE_CONVERGENCE audit event to contain resolved model families (coderFamily=meta, criticFamily=qwen), log data:\n%s", string(data))
+	}
+}
+
+
+
 
 
 
