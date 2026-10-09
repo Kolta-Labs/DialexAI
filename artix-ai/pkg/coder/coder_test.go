@@ -2422,6 +2422,26 @@ func TestLoop_ConcurrentRunsOnSameRepo_CorrectSessionCount(t *testing.T) {
 	}
 }
 
+func TestIOSPersonaPrompt_NoticeOnUnsupportedHosts(t *testing.T) {
+	reg := persona.NewRegistry("")
+	dc, err := NewDomainCoder("ios_engineer", reg)
+	if err != nil {
+		t.Fatalf("failed to create ios domain coder: %v", err)
+	}
+
+	pCtx := &PromptContext{
+		Spec: &spec.StorySpec{
+			ID:    "IOS-1",
+			Title: "SwiftUI View Update",
+		},
+	}
+
+	sysPrompt, _ := dc.CompilePromptForHost("linux", pCtx)
+	if !strings.Contains(strings.ToLower(sysPrompt), "could not be compiled") {
+		t.Fatalf("expected iOS persona prompt on unsupported host to contain 'could not be compiled', got:\n%s", sysPrompt)
+	}
+}
+
 
 
 
