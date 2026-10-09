@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"artix/pkg/audit"
 	"artix/pkg/knowledge"
 	"artix/pkg/policy"
 )
@@ -451,7 +452,7 @@ Audit logging test
 	}, &stdout, &stderr)
 
 	// Check audit log for coderModel, coderFamily, criticModel, criticFamily
-	logPath := filepath.Join(tmpDir, ".artix", "audit", "events.jsonl")
+	logPath := audit.Default(tmpDir).LogPath()
 	data, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("expected audit log file at %s: %v", logPath, err)
@@ -459,14 +460,12 @@ Audit logging test
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	found := false
 	for _, line := range lines {
-		if strings.Contains(line, "CODE_CONVERGENCE") {
-			var evt audit.AuditEvent
-			if json.Unmarshal([]byte(line), &evt) == nil && evt.Details != nil {
-				if evt.Details["coderModel"] == "llama3.3" && evt.Details["coderFamily"] == "meta" &&
-					evt.Details["criticModel"] == "qwen2.5" && evt.Details["criticFamily"] == "qwen" {
-					found = true
-					break
-				}
+		var evt audit.AuditEvent
+		if json.Unmarshal([]byte(line), &evt) == nil && evt.EventType == audit.EventCodeConvergence && evt.Details != nil {
+			if evt.Details["coderModel"] == "llama3.3" && evt.Details["coderFamily"] == "meta" &&
+				evt.Details["criticModel"] == "qwen2.5" && evt.Details["criticFamily"] == "qwen" {
+				found = true
+				break
 			}
 		}
 	}
