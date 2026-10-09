@@ -43,6 +43,7 @@ type KnowledgeItem struct {
 	Author          string            `json:"author,omitempty"`
 	SourcePR        string            `json:"sourcePr,omitempty"`
 	SessionID       string            `json:"sessionId,omitempty"`
+	SessionCount    int               `json:"sessionCount,omitempty"`
 	PRCommentURL    string            `json:"prCommentUrl,omitempty"`
 	ModelID         string            `json:"modelId,omitempty"`
 	Confidence      float64           `json:"confidence"`
@@ -51,6 +52,8 @@ type KnowledgeItem struct {
 	ApprovedBy      string            `json:"approvedBy,omitempty"`
 	DemotedReason   string            `json:"demotedReason,omitempty"`
 	RatifiedAt      *time.Time        `json:"ratifiedAt,omitempty"`
+	LastEvaluatedAt *time.Time        `json:"lastEvaluatedAt,omitempty"`
+	LastEvalResult  *ABEvalResult     `json:"lastEvalResult,omitempty"`
 	TTL             time.Duration     `json:"ttl,omitempty"`
 	CreatedAt       time.Time         `json:"createdAt"`
 	ExpiresAt       *time.Time        `json:"expiresAt,omitempty"`

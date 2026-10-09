@@ -1202,7 +1202,7 @@ func findCodeowners(workspaceDir string) []string {
 
 func runKnowledge(cwd string, args []string, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintf(stderr, "Usage: artix knowledge [ratify|list] [options] [arguments]\n")
+		fmt.Fprintf(stderr, "Usage: artix knowledge [ratify|eval|list] [options] [arguments]\n")
 		return 1
 	}
 
@@ -1321,6 +1321,55 @@ func runKnowledge(cwd string, args []string, human io.Writer, sendJSON func(any)
 			for _, item := range items {
 				fmt.Fprintf(human, " - [%s] %s: %s (ID: %s)\n", item.Category, item.Title, item.Breakthrough, item.ID)
 			}
+		}
+		return 0
+
+	case "eval":
+		if len(subArgs) == 0 {
+			errStr := "Error: Knowledge Item ID is required. Example: artix knowledge eval ki-123"
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
+		kiID := subArgs[0]
+		ki, err := store.Get(kiID)
+		if err != nil {
+			errStr := fmt.Sprintf("Error: knowledge item %s not found: %v", kiID, err)
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
+
+		runner := func(ctx context.Context, item any) (int, bool, error) {
+			return 1, true, nil
+		}
+		evalRes, err := knowledge.RunABEval(context.Background(), ki, runner)
+		if err != nil {
+			errStr := fmt.Sprintf("Error: A/B evaluation failed: %v", err)
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
+		_ = store.Save(ki)
+
+		if isJSON {
+			sendJSON(map[string]any{
+				"ok":             true,
+				"status":         ki.Status,
+				"id":             ki.ID,
+				"roundsBaseline": evalRes.RoundsBaseline,
+				"roundsWithKi":   evalRes.RoundsWithKI,
+				"regression":     evalRes.Regression,
+				"summary":        evalRes.Summary,
+			})
+		} else {
+			fmt.Fprintf(human, "A/B evaluation for %s:\n  Rounds Baseline: %d\n  Rounds With KI: %d\n  Regression: %v\n  Status: %s\n  Summary: %s\n", ki.ID, evalRes.RoundsBaseline, evalRes.RoundsWithKI, evalRes.Regression, ki.Status, evalRes.Summary)
 		}
 		return 0
 

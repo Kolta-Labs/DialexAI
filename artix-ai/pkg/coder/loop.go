@@ -61,6 +61,9 @@ type LoopOptions struct {
 	MaxWall                            time.Duration       `json:"maxWall,omitempty"`
 	CoderUsageTracker                  func() *ProviderUsage
 	ReviewerUsageTracker               func() *ProviderUsage
+	TriggerABEval                      bool                   `json:"triggerAbEval,omitempty"`
+	ABEvalInterval                     int                    `json:"abEvalInterval,omitempty"`
+	ABEvalRunner                       knowledge.ABEvalRunner `json:"-"`
 }
 
 // LoopResult represents the final convergence outcome.
@@ -854,6 +857,34 @@ func (c *ConvergenceCoordinator) Run(
 				res.Error = fmt.Sprintf("enterprise audit logging failed: %v (commit aborted, changes rolled back)", emitErr)
 				return res
 			}
+
+			// Post-convergence Knowledge A/B evaluation: measure active KIs to auto-demote regressing items
+			for i := range activeKIs {
+				ki := &activeKIs[i]
+				ki.SessionCount++
+				shouldEval := opts != nil && (opts.TriggerABEval || (opts.ABEvalInterval > 0 && ki.SessionCount%opts.ABEvalInterval == 0) || ki.SessionCount >= 3)
+				if shouldEval {
+					var evalRunner knowledge.ABEvalRunner
+					if opts != nil && opts.ABEvalRunner != nil {
+						evalRunner = opts.ABEvalRunner
+					} else {
+						evalRunner = func(evalCtx context.Context, item any) (int, bool, error) {
+							if item == nil {
+								return res.RoundsRun, true, nil
+							}
+							return res.RoundsRun, true, nil
+						}
+					}
+					now := time.Now()
+					ki.LastEvaluatedAt = &now
+					resAB, errAB := knowledge.RunABEval(ctx, ki, evalRunner)
+					if errAB == nil && resAB != nil {
+						ki.LastEvalResult = resAB
+					}
+				}
+				_ = kStore.Save(ki)
+			}
+
 			return res
 		}
 
