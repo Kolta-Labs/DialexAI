@@ -2,6 +2,7 @@ package coder
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -163,3 +164,49 @@ func TestBoard3_Reviewer_TestDiff_Integrity(t *testing.T) {
 		t.Errorf("expected Reviewer to reject t.Skip addition in test diff, got verdict: %+v", v2)
 	}
 }
+
+func TestMaxUSD_CustomModelPrice_AbortsAtCalculatedDollarAmount(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	reg := persona.NewRegistry("")
+	dc, _ := NewDomainCoder("backend_engineer", reg)
+	rev := newTestReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	coord := NewCoordinator(dc, rev, driver, sandbox.NewSandbox(tempDir))
+	s := &spec.StorySpec{ID: "N6-USD", Title: "Custom model pricing test", TestCommands: []string{"grep '1' counter.txt"}}
+	rc := &repo.RepositoryContext{RootDir: tempDir}
+
+	// Non-default price: $0.075 per 1k tokens ($75/M tokens)
+	customBudget := &TokenBudget{
+		PriceTable: map[string]float64{
+			"claude-3-opus": 0.075,
+		},
+	}
+
+	opts := &LoopOptions{
+		MaxRounds: 5,
+		MaxUSD:    0.10, // Cap is $0.10
+		Model:     "claude-3-opus",
+		Budget:    customBudget,
+		MockPatchGen: func(round int, feedback string) string {
+			return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+1\n"
+		},
+		CoderUsageTracker: func() *ProviderUsage {
+			// 2,000 tokens @ $0.075/1k = $0.150 (> $0.10 cap)
+			// If using default $0.015/1k, 2,000 tokens = $0.030 (< $0.10 cap and would NOT abort)
+			return &ProviderUsage{PromptTokens: 1000, CompletionTokens: 1000, TotalTokens: 2000}
+		},
+	}
+
+	res := coord.Run(context.Background(), s, rc, nil, nil, opts)
+	if res.Success {
+		t.Fatalf("expected loop to abort when MaxUSD ($0.10) exceeded by custom model price ($0.15), got success")
+	}
+	if !strings.Contains(res.Error, "task budget limit exceeded") || !strings.Contains(res.Error, "USD cost limit $0.10 reached") {
+		t.Fatalf("expected task budget USD limit reached error with custom pricing ($0.15), got: %s", res.Error)
+	}
+}
+
