@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -445,6 +446,31 @@ func TestBoard1_SignedPolicyAutonomyGate_FailClosed(t *testing.T) {
 		t.Errorf("GetPolicyHash() mismatch: got %s, want %s", GetPolicyHash(), p.PolicyHash)
 	}
 }
+
+func TestRequireSignedPolicy_RejectsUnsignedFileEvenIfRootOwned(t *testing.T) {
+	tempDir := t.TempDir()
+	polFile := filepath.Join(tempDir, "unsigned_policy.json")
+	_ = os.WriteFile(polFile, []byte(`{"enterpriseMode": true, "allowAutonomous": true}`), 0644)
+
+	// Enable RequireSignedPolicyFlag
+	oldFlag := RequireSignedPolicyFlag
+	RequireSignedPolicyFlag = "true"
+	defer func() {
+		RequireSignedPolicyFlag = oldFlag
+		ResetCache()
+	}()
+
+	ResetCache()
+
+	p, err := LoadPolicy(polFile)
+	if err == nil {
+		t.Fatalf("expected LoadPolicy to FAIL for unsigned policy when RequireSignedPolicyFlag is enforced, got policy: %+v", p)
+	}
+	if !strings.Contains(err.Error(), "signed-policy enforcement active") {
+		t.Errorf("expected error to mention signed-policy enforcement active, got: %v", err)
+	}
+}
+
 
 
 

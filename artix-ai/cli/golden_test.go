@@ -1068,6 +1068,34 @@ As an enterprise user, verified compiled-key policies must allow enterprise oper
 	if res["ok"] != true {
 		t.Fatalf("expected ok:true, got: %+v", res)
 	}
+
+	// Subtest 1: Unsigned policy must be REJECTED under RequireSignedPolicyFlag
+	unsignedPolicyPath := filepath.Join(workDir, "unsigned_policy.json")
+	_ = os.WriteFile(unsignedPolicyPath, []byte(policyJSON), 0644)
+	cmdUnsigned := exec.Command(binPath, "code", "--print-test-commands", "--json", specPath)
+	cmdUnsigned.Dir = workDir
+	cmdUnsigned.Env = append(os.Environ(), "ARTIX_POLICY_PATH="+unsignedPolicyPath)
+	var outUnsigned, errUnsigned strings.Builder
+	cmdUnsigned.Stdout = &outUnsigned
+	cmdUnsigned.Stderr = &errUnsigned
+	if err := cmdUnsigned.Run(); err == nil {
+		t.Fatalf("SECURITY VIOLATION: release binary accepted unsigned policy under RequireSignedPolicyFlag! stdout=%s", outUnsigned.String())
+	}
+
+	// Subtest 2: Policy signed by a different (untrusted) key must be REJECTED
+	_, privWrong, _ := ed25519.GenerateKey(nil)
+	wrongKeyPolicyPath := filepath.Join(workDir, "wrong_key_policy.json")
+	_ = os.WriteFile(wrongKeyPolicyPath, []byte(policyJSON), 0644)
+	_ = policy.SignPolicyFileEd25519(wrongKeyPolicyPath, privWrong)
+	cmdWrong := exec.Command(binPath, "code", "--print-test-commands", "--json", specPath)
+	cmdWrong.Dir = workDir
+	cmdWrong.Env = append(os.Environ(), "ARTIX_POLICY_PATH="+wrongKeyPolicyPath)
+	var outWrong, errWrong strings.Builder
+	cmdWrong.Stdout = &outWrong
+	cmdWrong.Stderr = &errWrong
+	if err := cmdWrong.Run(); err == nil {
+		t.Fatalf("SECURITY VIOLATION: release binary accepted policy signed by untrusted key! stdout=%s", outWrong.String())
+	}
 }
 
 func TestR13_5_Phase1_CandidateAuditRecord_StatusAwaitingApproval_NotFailed(t *testing.T) {
