@@ -107,3 +107,15 @@ class ReviewAction : AnAction() {
         }
     }
 }
+
+class ShowDiffAction : AnAction() {
+    override fun actionPerformed(e: AnActionEvent) {
+        val p = e.project ?: return
+        val panel = ArtixPanelRegistry.get(p)
+        if (panel != null) {
+            panel.showLatestDiff()
+        } else {
+            notify(p, NotificationType.INFORMATION, "Open Artix Tool Window to view live candidate diffs.")
+        }
+    }
+}
