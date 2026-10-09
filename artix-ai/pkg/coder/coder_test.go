@@ -2059,6 +2059,70 @@ func TestKnowledgeItem_CoderPrompt_OnlyActiveIncluded(t *testing.T) {
 	}
 }
 
+func TestCoderLoop_UnratifiedProposedKI_NeverAppearsInCoderPrompt(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+	kStore := knowledge.NewStore(tempDir)
+
+	// Save an unratified proposed KI in the repo's knowledge store
+	proposedKI := &knowledge.KnowledgeItem{
+		ID:           "ki-unratified-99",
+		Title:        "Unratified Proposed Leak Pattern",
+		Category:     knowledge.CategoryArchitecture,
+		Breakthrough: "Never leak unapproved knowledge into prompt",
+		Status:       "proposed",
+	}
+	if err := kStore.Save(proposedKI); err != nil {
+		t.Fatalf("failed to save proposed KI: %v", err)
+	}
+
+	// Assert ListActive directly excludes it
+	activeKIs, err := kStore.ListActive()
+	if err != nil {
+		t.Fatalf("failed to list active KIs: %v", err)
+	}
+	for _, ki := range activeKIs {
+		if ki.ID == "ki-unratified-99" {
+			t.Fatalf("GOVERNANCE FAILURE: ListActive returned unratified proposed KI: %+v", ki)
+		}
+	}
+
+	reg := persona.NewRegistry("")
+	dc, _ := NewDomainCoder("backend_engineer", reg)
+	rev := newTestReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	coord := NewCoordinator(dc, rev, driver, sandbox.NewSandbox(tempDir))
+	s := &spec.StorySpec{ID: "SPEC-UNRATIFIED", Title: "Unratified prompt check", TestCommands: []string{"grep '1' counter.txt"}}
+
+	promptCaptured := false
+	opts := &LoopOptions{
+		MaxRounds: 1,
+		PatchGenerator: func(ctx context.Context, req PatchRequest) (string, error) {
+			promptCaptured = true
+			if req.PromptContext != nil {
+				for _, ki := range req.PromptContext.KnowledgeItems {
+					if ki.ID == "ki-unratified-99" {
+						t.Errorf("SECURITY VIOLATION: unratified KI passed in req.PromptContext.KnowledgeItems!")
+					}
+				}
+			}
+			return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+1\n", nil
+		},
+	}
+
+	res := coord.Run(context.Background(), s, repoCtx, nil, nil, opts)
+	if !res.Success {
+		t.Fatalf("expected loop to succeed, got: %+v", res)
+	}
+	if !promptCaptured {
+		t.Fatalf("expected patch generator to be invoked")
+	}
+}
+
 func TestAutonomyGate_ErrorStringDescribesSignedPolicy(t *testing.T) {
 	tempDir, driver := setupTestRepo(t)
 	defer os.RemoveAll(tempDir)

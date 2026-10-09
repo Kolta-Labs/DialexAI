@@ -205,3 +205,27 @@ Never use unbuffered channels in event loops.
 		t.Errorf("rule text contains unsanitized prompt injection: %q", rule.RuleText)
 	}
 }
+
+func TestStore_ListActive_ExcludesUnratifiedProposedItems(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(dir)
+
+	proposed := &KnowledgeItem{
+		ID:           "ki-prop-1",
+		Title:        "Unratified Proposed Learning",
+		Category:     CategoryDebugging,
+		Breakthrough: "Secret unapproved technique",
+		Status:       "proposed",
+	}
+	if err := store.Save(proposed); err != nil {
+		t.Fatal(err)
+	}
+
+	activeItems, err := store.ListActive()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(activeItems) != 0 {
+		t.Fatalf("expected 0 active items for un-ratified proposed KI, got %d (item: %+v)", len(activeItems), activeItems[0])
+	}
+}
