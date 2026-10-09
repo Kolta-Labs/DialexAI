@@ -80,12 +80,14 @@ type RemoteSinkConfig struct {
 
 // BudgetConfig defines financial and token caps.
 type BudgetConfig struct {
-	MaxStoryTokens int     `json:"maxStoryTokens,omitempty"`
-	MaxTeamTokens  int     `json:"maxTeamTokens,omitempty"`
-	MaxDayTokens   int     `json:"maxDayTokens,omitempty"`
-	MaxStoryCost   float64 `json:"maxStoryCost,omitempty"` // USD
-	MaxTeamCost    float64 `json:"maxTeamCost,omitempty"`  // USD
-	MaxDayCost     float64 `json:"maxDayCost,omitempty"`   // USD
+	MaxStoryTokens  int                `json:"maxStoryTokens,omitempty"`
+	MaxTeamTokens   int                `json:"maxTeamTokens,omitempty"`
+	MaxDayTokens    int                `json:"maxDayTokens,omitempty"`
+	MaxStoryCost    float64            `json:"maxStoryCost,omitempty"` // USD
+	MaxTeamCost     float64            `json:"maxTeamCost,omitempty"`  // USD
+	MaxDayCost      float64            `json:"maxDayCost,omitempty"`   // USD
+	PriceTable      map[string]float64 `json:"priceTable,omitempty"`   // model -> cost per 1k tokens
+	CostPer1kTokens float64            `json:"costPer1kTokens,omitempty"`
 }
 
 // ReviewerPolicyConfig defines constraints for adversarial reviewer models.

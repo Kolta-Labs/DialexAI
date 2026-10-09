@@ -11,6 +11,7 @@ import (
 
 	"artix/pkg/audit"
 	"artix/pkg/persona"
+	"artix/pkg/policy"
 	"artix/pkg/repo"
 	"artix/pkg/reviewer"
 	"artix/pkg/sandbox"
@@ -272,6 +273,55 @@ func TestMaxUSD_UnpricedModel_AbortsAndAudits(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected budget exhaustion audit event to record unpriced model details, got log:\n%s", string(data))
+	}
+}
+
+func TestMaxUSD_NonDefaultModelPrice_AbortsWithoutCustomBudgetPassed(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	reg := persona.NewRegistry("")
+	dc, _ := NewDomainCoder("backend_engineer", reg)
+	rev := newTestReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	coord := NewCoordinator(dc, rev, driver, sandbox.NewSandbox(tempDir))
+	s := &spec.StorySpec{ID: "N6-PRICING-ENV", Title: "Pricing derived from policy/model", TestCommands: []string{"grep '1' counter.txt"}}
+	rc := &repo.RepositoryContext{RootDir: tempDir}
+
+	// Active policy configured with model price: $0.080 per 1k tokens for "gpt-4-custom"
+	policy.SetActivePolicyForTest(&policy.Policy{
+		IsVerified: true,
+		Budget: policy.BudgetConfig{
+			PriceTable: map[string]float64{
+				"gpt-4-custom": 0.080,
+			},
+		},
+	})
+	defer policy.ResetTestPolicy()
+
+	opts := &LoopOptions{
+		MaxRounds: 5,
+		MaxUSD:    0.05, // Cap is $0.05
+		Model:     "gpt-4-custom",
+		Budget:    nil, // Budget is nil! Must be initialized and read pricing from active policy / TokenBudget.GetModelPrice
+		MockPatchGen: func(round int, feedback string) string {
+			return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+1\n"
+		},
+		CoderUsageTracker: func() *ProviderUsage {
+			// 1,000 tokens @ $0.080/1k = $0.080 (> $0.05 cap -> must abort!)
+			// If using hardcoded $0.015/1k, 1,000 tokens = $0.015 (< $0.05 cap and would NOT abort)
+			return &ProviderUsage{PromptTokens: 500, CompletionTokens: 500, TotalTokens: 1000}
+		},
+	}
+
+	res := coord.Run(context.Background(), s, rc, nil, nil, opts)
+	if res.Success {
+		t.Fatalf("expected loop to abort when MaxUSD ($0.05) exceeded by model price ($0.08), but succeeded (hardcoded 0.015 price bug)")
+	}
+	if !strings.Contains(res.Error, "task budget limit exceeded") || !strings.Contains(res.Error, "USD cost limit $0.05 reached") {
+		t.Fatalf("expected task budget USD limit reached error, got: %s", res.Error)
 	}
 }
 
