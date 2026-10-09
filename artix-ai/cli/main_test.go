@@ -2,8 +2,12 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"artix/pkg/knowledge"
 )
 
 func TestRunCLI_VersionAndHelp(t *testing.T) {
@@ -148,6 +152,61 @@ func TestR13_5_MergeCommand_Deprecated(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "deprecated") && !strings.Contains(stderr.String(), "deprecated") {
 		t.Errorf("expected JSON/stderr output to mention deprecation, got stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunCLI_KnowledgeRatify(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Setup CODEOWNERS file in tmpDir
+	codeownersContent := "* @alice @bob\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, "CODEOWNERS"), []byte(codeownersContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a proposed Knowledge Item in .artix/knowledge/
+	kStore := knowledge.NewStore(tmpDir)
+	ki := &knowledge.KnowledgeItem{
+		ID:           "ki-cli-01",
+		Title:        "Memory Safety Invariant",
+		Category:     knowledge.CategoryArchitecture,
+		Context:      "Handler pool allocation",
+		Breakthrough: "Use sync.Pool",
+		Status:       "proposed",
+	}
+	if err := kStore.Save(ki); err != nil {
+		t.Fatalf("failed to save proposed KI: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+
+	// 1. Unauthorized approver must fail
+	code := RunCLI(tmpDir, nil, []string{"knowledge", "ratify", "ki-cli-01", "--approver", "mallory"}, &stdout, &stderr)
+	if code == 0 {
+		t.Errorf("expected failure when non-CODEOWNER ratifies KI, got exit code 0")
+	}
+	if !strings.Contains(stderr.String(), "CODEOWNERS") && !strings.Contains(stderr.String(), "not authorized") {
+		t.Errorf("expected unauthorized error on stderr, got: %s", stderr.String())
+	}
+
+	// 2. Legitimate CODEOWNER ratifies KI -> success
+	stdout.Reset()
+	stderr.Reset()
+	code = RunCLI(tmpDir, nil, []string{"knowledge", "ratify", "ki-cli-01", "--approver", "alice"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for legitimate ratification, got %d: %s", code, stderr.String())
+	}
+
+	// Verify KI is now active in store
+	updated, err := kStore.Get("ki-cli-01")
+	if err != nil {
+		t.Fatalf("failed to retrieve updated KI: %v", err)
+	}
+	if !updated.IsActive() || updated.Status != "active" {
+		t.Errorf("expected updated KI to be active, got status=%q isActive=%v", updated.Status, updated.IsActive())
+	}
+	if updated.ApprovedBy != "alice" {
+		t.Errorf("expected ApprovedBy=alice, got %q", updated.ApprovedBy)
 	}
 }
 

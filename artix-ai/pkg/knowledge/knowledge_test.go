@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"artix/pkg/coder"
 	"artix/pkg/policy"
 	"artix/pkg/spec"
 )
@@ -72,12 +71,12 @@ func TestLearningExtractor_ExtractFromConvergence(t *testing.T) {
 		TestCommands: []string{"go test -v ./..."},
 	}
 
-	loopResult := &coder.LoopResult{
+	convInfo := ConvergenceInfo{
 		Success:   true,
 		RoundsRun: 3, // Multi-round convergence
 	}
 
-	ki, err := extractor.ExtractFromConvergence(storySpec, loopResult)
+	ki, err := extractor.ExtractFromConvergence(storySpec, convInfo)
 	if err != nil {
 		t.Fatalf("failed to extract knowledge item: %v", err)
 	}

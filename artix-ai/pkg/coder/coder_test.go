@@ -10,9 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"artix/pkg/audit"
 	"artix/pkg/git"
+	"artix/pkg/knowledge"
 	"artix/pkg/persona"
 	"artix/pkg/policy"
 	"artix/pkg/repo"
@@ -1967,6 +1969,88 @@ func TestCoder_PostTestScan_RejectsCanaryInCommittedFiles(t *testing.T) {
 		t.Fatalf("expected error mentioning canary/leak/security, got: %q", res.Error)
 	}
 }
+
+func TestKnowledgeItem_CoderPrompt_OnlyActiveIncluded(t *testing.T) {
+	reg := persona.NewRegistry("")
+	dc, err := NewDomainCoder("backend_engineer", reg)
+	if err != nil {
+		t.Fatalf("failed to create domain coder: %v", err)
+	}
+
+	future := time.Now().Add(24 * time.Hour)
+	past := time.Now().Add(-24 * time.Hour)
+
+	activeKI := knowledge.KnowledgeItem{
+		ID:           "ki-active-01",
+		Title:        "Active Concurrency Lock Invariant",
+		Category:     knowledge.CategoryArchitecture,
+		Context:      "Handler race prevention",
+		Breakthrough: "Use sync.RWMutex per entity",
+		Status:       "active",
+		ExpiresAt:    &future,
+	}
+
+	proposedKI := knowledge.KnowledgeItem{
+		ID:           "ki-proposed-02",
+		Title:        "Unratified Proposed Learning",
+		Category:     knowledge.CategoryDebugging,
+		Context:      "Experimental idea",
+		Breakthrough: "Forbidden unapproved pattern",
+		Status:       "proposed",
+		ExpiresAt:    &future,
+	}
+
+	demotedKI := knowledge.KnowledgeItem{
+		ID:           "ki-demoted-03",
+		Title:        "Demoted Regressed Learning",
+		Category:     knowledge.CategoryFlakyTest,
+		Context:      "Regression cause",
+		Breakthrough: "Harmful rule that causes loops",
+		Status:       "demoted",
+		ExpiresAt:    &future,
+	}
+
+	expiredKI := knowledge.KnowledgeItem{
+		ID:           "ki-expired-04",
+		Title:        "Expired Learning",
+		Category:     knowledge.CategoryBuildManifest,
+		Context:      "Old build flag",
+		Breakthrough: "Legacy build option",
+		Status:       "active",
+		ExpiresAt:    &past,
+	}
+
+	promptCtx := PromptContext{
+		Spec: &spec.StorySpec{
+			ID:        "S-KNOWLEDGE-01",
+			Title:     "Knowledge Wiring Test",
+			UserStory: "As an engineer I want active knowledge in prompt",
+		},
+		KnowledgeItems: []knowledge.KnowledgeItem{activeKI, proposedKI, demotedKI, expiredKI},
+	}
+
+	sysPrompt, _ := dc.CompilePrompt(&promptCtx)
+
+	// Active ratified KI must appear in system prompt
+	if !strings.Contains(sysPrompt, "Active Concurrency Lock Invariant") {
+		t.Errorf("expected active KI to appear in system prompt, got:\n%s", sysPrompt)
+	}
+	if !strings.Contains(sysPrompt, "Use sync.RWMutex per entity") {
+		t.Errorf("expected active breakthrough in prompt, got:\n%s", sysPrompt)
+	}
+
+	// Proposed, demoted, and expired KIs must NEVER appear
+	if strings.Contains(sysPrompt, "Unratified Proposed Learning") || strings.Contains(sysPrompt, "Forbidden unapproved pattern") {
+		t.Errorf("SECURITY/GOVERNANCE VIOLATION: unratified proposed KI leaked into prompt:\n%s", sysPrompt)
+	}
+	if strings.Contains(sysPrompt, "Demoted Regressed Learning") || strings.Contains(sysPrompt, "Harmful rule that causes loops") {
+		t.Errorf("SECURITY/GOVERNANCE VIOLATION: demoted KI leaked into prompt:\n%s", sysPrompt)
+	}
+	if strings.Contains(sysPrompt, "Expired Learning") || strings.Contains(sysPrompt, "Legacy build option") {
+		t.Errorf("SECURITY/GOVERNANCE VIOLATION: expired KI leaked into prompt:\n%s", sysPrompt)
+	}
+}
+
 
 
 

@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -135,8 +136,13 @@ func TestKnowledgeLifecycle_ABEval_AutoDemoteOnRegression(t *testing.T) {
 		ExpiresAt: &expires,
 	}
 
-	// Case 1: Improvement (rounds with KI = 2, baseline = 3) -> No regression
-	result, err := RunABEval(ki, 3, 2)
+	// Case 1: Improvement (runner returns 3 rounds without KI, 2 rounds with KI) -> No regression
+	result, err := RunABEval(t.Context(), ki, func(ctx context.Context, item any) (int, bool, error) {
+		if item == nil {
+			return 3, true, nil // baseline run without KI
+		}
+		return 2, true, nil // test run with KI
+	})
 	if err != nil {
 		t.Fatalf("RunABEval failed: %v", err)
 	}
@@ -147,8 +153,13 @@ func TestKnowledgeLifecycle_ABEval_AutoDemoteOnRegression(t *testing.T) {
 		t.Errorf("KI should remain active when performing well")
 	}
 
-	// Case 2: Regression (rounds with KI = 5, baseline = 2) -> Auto-demote
-	resReg, err := RunABEval(ki, 2, 5)
+	// Case 2: Regression (runner returns 2 rounds baseline, 5 rounds with KI) -> Auto-demote
+	resReg, err := RunABEval(t.Context(), ki, func(ctx context.Context, item any) (int, bool, error) {
+		if item == nil {
+			return 2, true, nil // baseline
+		}
+		return 5, true, nil // with KI took 5 rounds
+	})
 	if err != nil {
 		t.Fatalf("RunABEval regression test failed: %v", err)
 	}
