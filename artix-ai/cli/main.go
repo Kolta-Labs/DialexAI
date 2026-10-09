@@ -21,6 +21,7 @@ import (
 	"artix/pkg/coder"
 	"artix/pkg/forge"
 	"artix/pkg/git"
+	"artix/pkg/knowledge"
 	"artix/pkg/lsp"
 	"artix/pkg/persona"
 	"artix/pkg/policy"
@@ -48,6 +49,7 @@ Commands:
   verify-approval Verify forge approval for candidate commit (Phase 2)
   review        Run Adversarial Reviewer against current git diff and tests
   audit         Audit log management and tamper verification (audit verify)
+  knowledge     Inspect and ratify institutional knowledge items (ratify, list)
   steering      Manage dynamic steering rules (list, sync, bind)
   persona       Inspect and manage SWE Personas
   gc            Clean up stale and orphaned shadow worktrees
@@ -167,6 +169,9 @@ func RunCLIWithIO(cwd string, reg *persona.Registry, rawArgs []string, stdin io.
 
 	case "audit":
 		return runAudit(cwd, cmdArgs, humanOut, sendJSON, isJSON, stderr)
+
+	case "knowledge":
+		return runKnowledge(cwd, cmdArgs, humanOut, sendJSON, isJSON, stderr)
 
 	case "steering":
 		handleSteering(cwd, cmdArgs)
@@ -1126,5 +1131,172 @@ func handleDaemon(cwd string, reg *persona.Registry, args []string) {
 	if err := http.ListenAndServe(*addr, server.Handler()); err != nil {
 		fmt.Fprintf(os.Stderr, "Daemon server error: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+func findCodeowners(workspaceDir string) []string {
+	var candidates []string
+	if workspaceDir != "" {
+		candidates = append(candidates,
+			filepath.Join(workspaceDir, "CODEOWNERS"),
+			filepath.Join(workspaceDir, ".github", "CODEOWNERS"),
+			filepath.Join(workspaceDir, "docs", "CODEOWNERS"),
+		)
+	}
+	for _, p := range candidates {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var owners []string
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			parts := strings.Fields(trimmed)
+			for _, part := range parts {
+				if strings.HasPrefix(part, "@") {
+					owners = append(owners, strings.TrimPrefix(part, "@"))
+				} else if strings.Contains(part, "@") {
+					owners = append(owners, part)
+				}
+			}
+		}
+		if len(owners) > 0 {
+			return owners
+		}
+	}
+	return nil
+}
+
+func runKnowledge(cwd string, args []string, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintf(stderr, "Usage: artix knowledge [ratify|list] [options] [arguments]\n")
+		return 1
+	}
+
+	sub := args[0]
+	subArgs := args[1:]
+	store := knowledge.NewStore(cwd)
+
+	switch sub {
+	case "ratify":
+		fs := flag.NewFlagSet("knowledge ratify", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		approverFlag := fs.String("approver", "", "Approver identity (must be in CODEOWNERS)")
+
+		var flagArgs []string
+		var posArgs []string
+		for i := 0; i < len(subArgs); i++ {
+			a := subArgs[i]
+			if a == "--approver" || a == "-approver" {
+				if i+1 < len(subArgs) {
+					flagArgs = append(flagArgs, a, subArgs[i+1])
+					i++
+				}
+			} else if strings.HasPrefix(a, "--approver=") || strings.HasPrefix(a, "-approver=") {
+				flagArgs = append(flagArgs, a)
+			} else if strings.HasPrefix(a, "-") {
+				flagArgs = append(flagArgs, a)
+			} else {
+				posArgs = append(posArgs, a)
+			}
+		}
+		if err := fs.Parse(flagArgs); err != nil {
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
+			}
+			return 1
+		}
+
+		if len(posArgs) == 0 {
+			errStr := "Error: Knowledge Item ID is required. Example: artix knowledge ratify ki-123 --approver alice"
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
+		kiID := posArgs[0]
+
+		ki, err := store.Get(kiID)
+		if err != nil {
+			errStr := fmt.Sprintf("Error: knowledge item %s not found: %v", kiID, err)
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
+
+		approver := *approverFlag
+		if approver == "" {
+			approver = os.Getenv("USER")
+		}
+		if approver == "" {
+			errStr := "Error: approver identity is required. Specify via --approver"
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
+
+		codeowners := findCodeowners(cwd)
+		if err := ki.Ratify(approver, codeowners); err != nil {
+			errStr := fmt.Sprintf("Error: ratification failed: %v", err)
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
+
+		if err := store.Save(ki); err != nil {
+			errStr := fmt.Sprintf("Error saving ratified knowledge item: %v", err)
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
+
+		if isJSON {
+			sendJSON(map[string]any{
+				"ok":         true,
+				"status":     "ratified",
+				"id":         ki.ID,
+				"approvedBy": ki.ApprovedBy,
+			})
+		} else {
+			fmt.Fprintf(human, "Successfully ratified Knowledge Item %s (approver: %s)\n", ki.ID, ki.ApprovedBy)
+		}
+		return 0
+
+	case "list":
+		items, err := store.ListActive()
+		if err != nil {
+			errStr := fmt.Sprintf("Error listing knowledge items: %v", err)
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+			}
+			fmt.Fprintf(stderr, "%s\n", errStr)
+			return 1
+		}
+		if isJSON {
+			sendJSON(map[string]any{"ok": true, "items": items})
+		} else {
+			fmt.Fprintf(human, "Active Knowledge Items (%d):\n", len(items))
+			for _, item := range items {
+				fmt.Fprintf(human, " - [%s] %s: %s (ID: %s)\n", item.Category, item.Title, item.Breakthrough, item.ID)
+			}
+		}
+		return 0
+
+	default:
+		fmt.Fprintf(stderr, "Unknown knowledge subcommand: %s\n", sub)
+		return 1
 	}
 }

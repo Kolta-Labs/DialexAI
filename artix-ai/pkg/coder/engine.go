@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"artix/pkg/knowledge"
 	"artix/pkg/persona"
 	"artix/pkg/repo"
 	"artix/pkg/spec"
@@ -41,6 +42,7 @@ type PromptContext struct {
 	SteeringContext  *steering.PersonaSteeringContext
 	ReviewerFeedback string
 	PriorFailures    []string
+	KnowledgeItems   []knowledge.KnowledgeItem
 }
 
 // CompilePrompt builds the comprehensive system and task instructions for the coder.
@@ -78,6 +80,22 @@ func (c *DomainCoder) CompilePromptForTask(ctx *PromptContext, task TaskType) (s
 			sys.WriteString("\nPROJECT CODING INVARIANTS & STANDARDS:\n")
 			for _, h := range ctx.SteeringContext.Heuristics {
 				fmt.Fprintf(&sys, "- %s\n", h.FormulaOrMaxime)
+			}
+		}
+	}
+
+	// Injected active institutional knowledge items (governed memory)
+	if len(ctx.KnowledgeItems) > 0 {
+		var activeKIs []knowledge.KnowledgeItem
+		for _, ki := range ctx.KnowledgeItems {
+			if ki.IsActive() {
+				activeKIs = append(activeKIs, ki)
+			}
+		}
+		if len(activeKIs) > 0 {
+			sys.WriteString("\nINSTITUTIONAL KNOWLEDGE & ACTIVE LEARNINGS:\n")
+			for _, ki := range activeKIs {
+				fmt.Fprintf(&sys, "- [%s] %s: %s (Context: %s)\n", ki.Category, ki.Title, ki.Breakthrough, ki.Context)
 			}
 		}
 	}

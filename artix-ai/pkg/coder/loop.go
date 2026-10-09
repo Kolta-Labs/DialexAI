@@ -14,6 +14,7 @@ import (
 
 	"artix/pkg/audit"
 	"artix/pkg/git"
+	"artix/pkg/knowledge"
 	"artix/pkg/policy"
 	"artix/pkg/repo"
 	"artix/pkg/reviewer"
@@ -226,12 +227,16 @@ func (c *ConvergenceCoordinator) Run(
 
 		// 1. Coder generates patch
 		var patch string
+		kStore := knowledge.NewStore(repoCtx.RootDir)
+		activeKIs, _ := kStore.ListActive()
+
 		promptCtx := PromptContext{
 			Spec:             s,
 			RepoContext:      repoCtx,
 			SteeringContext:  coderSteering,
 			ReviewerFeedback: lastFeedback,
 			PriorFailures:    priorFailures,
+			KnowledgeItems:   activeKIs,
 		}
 		sysPrompt, userPrompt := c.coder.CompilePrompt(&promptCtx)
 		coderPromptTokens := EstimateTokens(sysPrompt) + EstimateTokens(userPrompt)

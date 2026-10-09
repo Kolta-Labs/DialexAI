@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"context"
 	"fmt"
 )
 
@@ -13,14 +14,44 @@ type ABEvalResult struct {
 	Summary        string `json:"summary"`
 }
 
-// RunABEval compares rounds-to-converge with and without a knowledge item or rule.
-// If the knowledge item causes a regression (roundsWithKI > roundsBaseline), it is automatically demoted.
-func RunABEval(target any, roundsBaseline, roundsWithKI int) (*ABEvalResult, error) {
-	if roundsBaseline <= 0 || roundsWithKI <= 0 {
-		return nil, fmt.Errorf("rounds must be greater than zero")
+// ABEvalRunner is a function that executes the convergence loop under a specific knowledge configuration
+// and returns the rounds taken to converge, whether it succeeded, and any error.
+// When item is nil, it runs the baseline configuration without the candidate item.
+type ABEvalRunner func(ctx context.Context, item any) (rounds int, success bool, err error)
+
+// RunABEval executes an A/B evaluation harness comparing convergence rounds without vs with the target knowledge item/rule.
+// It runs the loop twice:
+//  1. Baseline run without the target item (item = nil)
+//  2. Test run with the target item
+//
+// If the knowledge item causes a regression (roundsWithKI > roundsBaseline or convergence failure), it is automatically demoted.
+func RunABEval(ctx context.Context, target any, runner ABEvalRunner) (*ABEvalResult, error) {
+	if target == nil {
+		return nil, fmt.Errorf("target is nil")
+	}
+	if runner == nil {
+		return nil, fmt.Errorf("loop runner harness is required")
 	}
 
-	regression := roundsWithKI > roundsBaseline
+	// 1. Run baseline loop without the candidate item
+	roundsBaseline, successBaseline, errBase := runner(ctx, nil)
+	if errBase != nil {
+		return nil, fmt.Errorf("baseline loop run failed: %w", errBase)
+	}
+	if roundsBaseline <= 0 {
+		roundsBaseline = 1
+	}
+
+	// 2. Run loop with the candidate item
+	roundsWithKI, successWithKI, errKI := runner(ctx, target)
+	if errKI != nil {
+		return nil, fmt.Errorf("loop run with target failed: %w", errKI)
+	}
+	if roundsWithKI <= 0 {
+		roundsWithKI = 1
+	}
+
+	regression := !successWithKI || (successBaseline && roundsWithKI > roundsBaseline)
 	var targetID string
 	var summary string
 
@@ -59,3 +90,4 @@ func RunABEval(target any, roundsBaseline, roundsWithKI int) (*ABEvalResult, err
 		Summary:        summary,
 	}, nil
 }
+
