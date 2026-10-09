@@ -376,7 +376,7 @@ func (s *Store) ListActive() ([]KnowledgeItem, error) {
 	}
 	var active []KnowledgeItem
 	for _, ki := range all {
-		if !ki.IsExpired() {
+		if ki.IsActive() {
 			active = append(active, ki)
 		}
 	}
