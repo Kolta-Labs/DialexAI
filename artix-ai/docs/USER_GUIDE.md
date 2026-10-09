@@ -562,7 +562,7 @@ Options for 'plan':
 
 Options for 'code':
   --domain <domain>        Target SWE persona (default: backend_engineer, android_engineer)
-  --autonomy <gate>        supervised (confirm diff), interactive (pause per round), autonomous (auto-commit)
+  --autonomy <gate>        supervised (confirm diff), interactive (pause per round), autonomous (auto-commit; requires verified, cryptographically signed policy with allowAutonomous=true)
   --rounds <n>             Maximum convergence rounds (default: 3)
 ```
 
