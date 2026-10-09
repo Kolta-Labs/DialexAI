@@ -355,3 +355,20 @@ func TestKotlinAndSwift_BypassCorpus_AndHeuristicScanModeReporting(t *testing.T)
 	}
 }
 
+func TestPublicDocs_DocumentScanModeHeuristicForKotlinAndSwift(t *testing.T) {
+	guidePath := filepath.Join("..", "..", "docs", "USER_GUIDE.md")
+	data, err := os.ReadFile(guidePath)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", guidePath, err)
+	}
+	content := string(data)
+
+	if !strings.Contains(content, "scan mode: heuristic") && !strings.Contains(content, "scan mode: `heuristic`") {
+		t.Errorf("USER_GUIDE.md must disclose that non-Go languages (Kotlin, Swift) use heuristic scan mode")
+	}
+	if !strings.Contains(strings.ToLower(content), "kotlin") || !strings.Contains(strings.ToLower(content), "swift") {
+		t.Errorf("USER_GUIDE.md must mention Kotlin and Swift in scan mode documentation")
+	}
+}
+
+
