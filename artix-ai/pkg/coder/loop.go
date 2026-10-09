@@ -958,11 +958,15 @@ func scanWorkspaceForSecretLeaks(rootDir string) error {
 			continue
 		}
 		kUpper := strings.ToUpper(k)
+		if strings.Contains(kUpper, "PUBLIC") {
+			continue
+		}
 		isSensitive := strings.Contains(kUpper, "SECRET") || strings.Contains(kUpper, "TOKEN") ||
-			strings.Contains(kUpper, "KEY") || strings.Contains(kUpper, "PASSWORD") ||
-			strings.Contains(kUpper, "AUTH") || strings.Contains(kUpper, "CREDENTIAL") ||
-			strings.Contains(kUpper, "CANARY") || strings.Contains(kUpper, "FORGE") ||
-			strings.Contains(kUpper, "SIGN") || strings.Contains(kUpper, "BEARER")
+			strings.Contains(kUpper, "PRIVATE_KEY") || strings.Contains(kUpper, "PRIVKEY") ||
+			strings.Contains(kUpper, "PASSWORD") || strings.Contains(kUpper, "AUTH") ||
+			strings.Contains(kUpper, "CREDENTIAL") || strings.Contains(kUpper, "CANARY") ||
+			strings.Contains(kUpper, "BEARER") || strings.Contains(kUpper, "API_KEY") ||
+			(strings.Contains(kUpper, "KEY") && !strings.Contains(kUpper, "PUBLIC"))
 		if isSensitive {
 			sensitiveValues[valTrim] = k
 		}

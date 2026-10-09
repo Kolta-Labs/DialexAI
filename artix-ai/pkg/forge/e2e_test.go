@@ -1868,6 +1868,381 @@ func TestR2_Phase2_RemoteBranchCleanup_OnlyAuthorizedReviewer(t *testing.T) {
 	}
 }
 
+// TestR14_8_FullEnterprise_Phase1_To_VerifyApproval_E2E verifies the complete enterprise flow:
+// - Master trust key compiled into binary via ldflags
+// - Root policy signed by master trust key
+// - NO ARTIX_ENTERPRISE environment variable passed
+// - Fixed-state mock forge server
+// - Negative cases: stale head, self-approval, bot approver, dismissed review, 5xx forge error
+// - Positive case: verified approval and merge
+func TestR14_8_FullEnterprise_Phase1_To_VerifyApproval_E2E(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// 1. Generate master trust key and audit keypair
+	pubMaster, privMaster, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	masterPubKeyHex := hex.EncodeToString(pubMaster)
+
+	pubAudit, privAudit, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	auditPubHex := hex.EncodeToString(pubAudit)
+	auditPrivHex := hex.EncodeToString(privAudit)
+
+	secDir := filepath.Join(tempDir, ".artix")
+	_ = os.MkdirAll(secDir, 0700)
+	auditKeyPath := filepath.Join(secDir, "audit_ed25519.key")
+	if err := os.WriteFile(auditKeyPath, []byte(auditPrivHex), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Create and sign root policy
+	pol := &policy.Policy{
+		EnterpriseMode:          true,
+		AllowAutonomous:         true,
+		RequireSignedPolicy:     true,
+		RequireSeparateApprover: true,
+		AllowedApprovers:        []string{"alice", "security-lead"},
+		AuditPublicKey:          auditPubHex,
+		AuditPrivateKeyPath:     auditKeyPath,
+		AllowedTestCommands:     []string{"grep '1' counter.txt"},
+		RequireForgeApproval:    true,
+	}
+	polBytes, err := json.Marshal(pol)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig := ed25519.Sign(privMaster, polBytes)
+	sigHex := hex.EncodeToString(sig)
+
+	policyFile := filepath.Join(tempDir, "enterprise-root-policy.json")
+	if err := os.WriteFile(policyFile, polBytes, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(policyFile+".sig", []byte(sigHex), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 3. Compile artix binary with compiled master key
+	binPath := filepath.Join(tempDir, "artix")
+	ldflags := fmt.Sprintf("-X artix/pkg/policy.CompiledTrustedPublicKeyHex=%s", masterPubKeyHex)
+	buildCmd := exec.Command("go", "build", "-ldflags", ldflags, "-o", binPath, "artix/cli")
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build artix binary with compiled master key: %v (%s)", err, string(out))
+	}
+
+	// 4. Set up mock LLM server for Phase 1 code generation & reviewer
+	llmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		bodyBytes, _ := io.ReadAll(r.Body)
+		bodyStr := string(bodyBytes)
+		if strings.Contains(bodyStr, "adversarial_code_reviewer") || strings.Contains(bodyStr, "rubric") || strings.Contains(bodyStr, "Evaluation Rubric") || strings.Contains(bodyStr, "Reviewer") || strings.Contains(bodyStr, "Adversarial") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id":   "msg_critic",
+				"type": "message",
+				"role": "assistant",
+				"content": []map[string]any{
+					{"type": "text", "text": `{"approved": true, "blocking": [], "warnings": []}`},
+				},
+				"usage": map[string]any{"input_tokens": 10, "output_tokens": 10},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":   "msg_coder",
+			"type": "message",
+			"role": "assistant",
+			"content": []map[string]any{
+				{"type": "text", "text": "```diff\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+1\n```\n"},
+			},
+			"usage": map[string]any{"input_tokens": 20, "output_tokens": 20},
+		})
+	}))
+	defer llmServer.Close()
+
+	// 5. Set up mock forge server with independent fixed PR head SHA and configurable review states
+	var forgeMu sync.Mutex
+	forgeMode := "valid"
+	fixedPRHeadSHA := "1111222233334444555566667777888899990000"
+
+	ghServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		forgeMu.Lock()
+		mode := forgeMode
+		prHead := fixedPRHeadSHA
+		forgeMu.Unlock()
+
+		if mode == "5xx" {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"message":"500 Internal Server Error"}`))
+			return
+		}
+
+		// GET /repos/acme/core/pulls/101
+		if r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/pulls/101") {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"number": 101,
+				"state":  "open",
+				"user": map[string]any{
+					"login": "artix-agent",
+					"type":  "User",
+				},
+				"head": map[string]any{
+					"sha": prHead,
+					"ref": "artix-pr-101",
+				},
+				"base": map[string]any{
+					"ref": "main",
+				},
+			})
+			return
+		}
+
+		// GET /repos/acme/core/pulls/101/reviews
+		if r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/pulls/101/reviews") {
+			w.Header().Set("Content-Type", "application/json")
+			switch mode {
+			case "valid":
+				_ = json.NewEncoder(w).Encode([]map[string]any{
+					{
+						"id":        1001,
+						"state":     "APPROVED",
+						"commit_id": prHead,
+						"user": map[string]any{
+							"login": "alice",
+							"type":  "User",
+						},
+						"submitted_at": "2026-10-09T00:00:00Z",
+					},
+				})
+			case "self_approval":
+				_ = json.NewEncoder(w).Encode([]map[string]any{
+					{
+						"id":        1002,
+						"state":     "APPROVED",
+						"commit_id": prHead,
+						"user": map[string]any{
+							"login": "artix-agent",
+							"type":  "User",
+						},
+						"submitted_at": "2026-10-09T00:00:00Z",
+					},
+				})
+			case "bot":
+				_ = json.NewEncoder(w).Encode([]map[string]any{
+					{
+						"id":        1003,
+						"state":     "APPROVED",
+						"commit_id": prHead,
+						"user": map[string]any{
+							"login": "dependabot[bot]",
+							"type":  "Bot",
+						},
+						"submitted_at": "2026-10-09T00:00:00Z",
+					},
+				})
+			case "dismissed":
+				_ = json.NewEncoder(w).Encode([]map[string]any{
+					{
+						"id":        1004,
+						"state":     "DISMISSED",
+						"commit_id": prHead,
+						"user": map[string]any{
+							"login": "alice",
+							"type":  "User",
+						},
+						"submitted_at": "2026-10-09T00:00:00Z",
+					},
+				})
+			default:
+				_ = json.NewEncoder(w).Encode([]map[string]any{})
+			}
+			return
+		}
+
+		// PUT /repos/acme/core/pulls/101/merge
+		if r.Method == "PUT" && strings.HasSuffix(r.URL.Path, "/pulls/101/merge") {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"sha":     "merged-commit-sha-9999",
+				"merged":  true,
+				"message": "Pull Request successfully merged",
+			})
+			return
+		}
+
+		http.NotFound(w, r)
+	}))
+	defer ghServer.Close()
+
+	// 6. Initialize git workspace and remote bare origin
+	workDir := filepath.Join(tempDir, "work")
+	bareDir := filepath.Join(tempDir, "bare.git")
+	_ = os.MkdirAll(workDir, 0755)
+	_ = os.MkdirAll(bareDir, 0755)
+
+	_ = exec.Command("git", "init", "--bare", bareDir).Run()
+	_ = exec.Command("git", "init", workDir).Run()
+	_ = exec.Command("git", "-C", workDir, "config", "user.email", "agent@artix.ai").Run()
+	_ = exec.Command("git", "-C", workDir, "config", "user.name", "Artix Agent").Run()
+	_ = exec.Command("git", "-C", workDir, "remote", "add", "origin", bareDir).Run()
+
+	initialFile := filepath.Join(workDir, "counter.txt")
+	_ = os.WriteFile(initialFile, []byte("0\n"), 0644)
+	_ = exec.Command("git", "-C", workDir, "add", ".").Run()
+	_ = exec.Command("git", "-C", workDir, "commit", "-m", "init").Run()
+	_ = exec.Command("git", "-C", workDir, "branch", "-M", "main").Run()
+	_ = exec.Command("git", "-C", workDir, "push", "-u", "origin", "main").Run()
+
+	specsDir := filepath.Join(workDir, "docs", "specs")
+	_ = os.MkdirAll(specsDir, 0755)
+	specFile := filepath.Join(specsDir, "STORY-SPEC-E2E-01.md")
+	specContent := "# Story Spec: Enterprise E2E\n\n**Spec ID:** `SPEC-E2E-01`\n\n## 2. Acceptance Criteria\n\n### Scenario 1: counter updated\n* **Given** a counter file\n* **When** it updates\n* **Then** it contains 1\n\n## 5. Verification Test Suite\n\n```bash\ngrep '1' counter.txt\n```\n"
+	_ = os.WriteFile(specFile, []byte(specContent), 0644)
+
+	// 7. Execute Phase 1 with compiled binary (WITHOUT ARTIX_ENTERPRISE)
+	// Base environment: strictly NO ARTIX_ENTERPRISE env variable
+	baseEnv := []string{
+		"PATH=" + os.Getenv("PATH"),
+		"HOME=" + tempDir,
+		"ARTIX_POLICY_PATH=" + policyFile,
+		"ARTIX_AUDIT_PRIVATE_KEY=" + auditPrivHex,
+		"ARTIX_AUDIT_PRIVATE_KEY_PATH=" + auditKeyPath,
+		"ARTIX_AUDIT_PUBLIC_KEY=" + auditPubHex,
+		"ARTIX_ALLOW_AUTONOMOUS=1",
+		"ARTIX_PR_BRANCH=artix-pr-101",
+		"ARTIX_FORGE_REMOTE=origin",
+		"ANTHROPIC_API_KEY=mock-key",
+		"ARTIX_API_URL=" + llmServer.URL,
+	}
+
+	cmdPhase1 := exec.Command(binPath, "code", "--json",
+		"--autonomy", "autonomous",
+		"--confirm-tests",
+		"--provider", "anthropic",
+		"--model", "claude-3-5-sonnet-20241022",
+		"--forge", "github",
+		"--forge-pr", "101",
+		"--forge-url", ghServer.URL,
+		"--forge-owner", "acme",
+		"--forge-repo", "core",
+		specFile,
+	)
+	cmdPhase1.Dir = workDir
+	cmdPhase1.Env = baseEnv
+
+	var stdoutPhase1, stderrPhase1 strings.Builder
+	cmdPhase1.Stdout = &stdoutPhase1
+	cmdPhase1.Stderr = &stderrPhase1
+	errPhase1 := cmdPhase1.Run()
+	if errPhase1 != nil {
+		t.Fatalf("Phase 1 execution failed: %v (stdout: %s, stderr: %s)", errPhase1, stdoutPhase1.String(), stderrPhase1.String())
+	}
+
+	var jsonPhase1 struct {
+		Status           string `json:"status"`
+		AwaitingApproval bool   `json:"awaitingApproval"`
+		CommitHash       string `json:"commitHash"`
+		VerdictHash      string `json:"verdictHash"`
+	}
+	stdoutStr := strings.TrimSpace(stdoutPhase1.String())
+	if jsonIdx := strings.Index(stdoutStr, "{"); jsonIdx >= 0 {
+		stdoutStr = stdoutStr[jsonIdx:]
+	}
+	if err := json.Unmarshal([]byte(stdoutStr), &jsonPhase1); err != nil {
+		t.Fatalf("failed to parse Phase 1 JSON output: %v (stdout: %s, stderr: %s)", err, stdoutStr, stderrPhase1.String())
+	}
+
+	if jsonPhase1.Status != "awaiting_approval" || !jsonPhase1.AwaitingApproval {
+		t.Fatalf("expected Phase 1 to return awaiting_approval, got: %+v", jsonPhase1)
+	}
+	if jsonPhase1.CommitHash == "" || jsonPhase1.VerdictHash == "" {
+		t.Fatalf("expected non-empty commitHash and verdictHash in Phase 1 output: %+v", jsonPhase1)
+	}
+
+	candidateSHA := jsonPhase1.CommitHash
+	verdictHash := jsonPhase1.VerdictHash
+
+	runVerifyApproval := func(mode string, forgeHead string) (int, string, string) {
+		forgeMu.Lock()
+		forgeMode = mode
+		fixedPRHeadSHA = forgeHead
+		forgeMu.Unlock()
+
+		cmd := exec.Command(binPath, "verify-approval", "--json",
+			"--pr", "101",
+			"--sha", candidateSHA,
+			"--spec", "SPEC-E2E-01",
+			"--verdict-hash", verdictHash,
+			"--forge", "github",
+			"--forge-url", ghServer.URL,
+			"--forge-owner", "acme",
+			"--forge-repo", "core",
+			"--remote", "origin",
+			"--branch", "artix-pr-101",
+		)
+		cmd.Dir = workDir
+		cmd.Env = baseEnv
+
+		var stdout, stderr strings.Builder
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		exitCode := 0
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+			} else {
+				exitCode = 1
+			}
+		}
+		return exitCode, stdout.String(), stderr.String()
+	}
+
+	// 7. Negative Case 1: Stale Head (PR head on forge differs from candidate commit SHA)
+	exitStale, outStale, _ := runVerifyApproval("valid", "deadbeef00000000000000000000000000000000")
+	if exitStale == 0 || strings.Contains(outStale, `"status":"approval_verified"`) {
+		t.Fatalf("SECURITY VIOLATION (R14-8): verify-approval succeeded with STALE HEAD! Output: %s", outStale)
+	}
+
+	// 8. Negative Case 2: Self-Approval (Approver is author/agent)
+	exitSelf, outSelf, _ := runVerifyApproval("self_approval", candidateSHA)
+	if exitSelf == 0 || strings.Contains(outSelf, `"status":"approval_verified"`) {
+		t.Fatalf("SECURITY VIOLATION (R14-8): verify-approval succeeded with SELF-APPROVAL! Output: %s", outSelf)
+	}
+
+	// 9. Negative Case 3: Bot Approval (Approver is bot account)
+	exitBot, outBot, _ := runVerifyApproval("bot", candidateSHA)
+	if exitBot == 0 || strings.Contains(outBot, `"status":"approval_verified"`) {
+		t.Fatalf("SECURITY VIOLATION (R14-8): verify-approval succeeded with BOT APPROVAL! Output: %s", outBot)
+	}
+
+	// 10. Negative Case 4: Dismissed Review (Review state is DISMISSED)
+	exitDismissed, outDismissed, _ := runVerifyApproval("dismissed", candidateSHA)
+	if exitDismissed == 0 || strings.Contains(outDismissed, `"status":"approval_verified"`) {
+		t.Fatalf("SECURITY VIOLATION (R14-8): verify-approval succeeded with DISMISSED REVIEW! Output: %s", outDismissed)
+	}
+
+	// 11. Negative Case 5: 5xx Forge Error (Forge returns 500 server error)
+	exit5xx, out5xx, _ := runVerifyApproval("5xx", candidateSHA)
+	if exit5xx == 0 || strings.Contains(out5xx, `"status":"approval_verified"`) {
+		t.Fatalf("SECURITY VIOLATION (R14-8): verify-approval succeeded with 5XX FORGE ERROR! Output: %s", out5xx)
+	}
+
+	// 12. Positive Case: Valid Flow (Authorized human approval on exact candidate SHA)
+	exitValid, outValid, errValid := runVerifyApproval("valid", candidateSHA)
+	if exitValid != 0 {
+		t.Fatalf("expected valid verify-approval to succeed with exit 0, got exit %d: %s (err: %s)", exitValid, outValid, errValid)
+	}
+	if !strings.Contains(outValid, `"status":"approval_verified"`) || !strings.Contains(outValid, `"ok":true`) {
+		t.Fatalf("expected verify-approval output to have status approval_verified and ok:true, got: %s", outValid)
+	}
+}
+
+
 
 
 
