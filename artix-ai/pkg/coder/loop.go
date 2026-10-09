@@ -611,6 +611,25 @@ func (c *ConvergenceCoordinator) Run(
 				tRes := c.sandbox.Run(ctx, cmdStr, tOpts)
 				testResults = append(testResults, tRes)
 				if !tRes.Success() {
+					if tRes.TimedOut {
+						if activeSession != nil {
+							_ = activeSession.Rollback()
+						}
+						res.Error = fmt.Sprintf("TIMEOUT: test phase timed out after %s", tOpts.Timeout)
+						_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+							EventType:   audit.EventCodeConvergence,
+							Status:      "TIMEOUT",
+							StorySpecID: s.ID,
+							Details: map[string]any{
+								"phase":     "TEST",
+								"elapsed":   (time.Duration(tRes.DurationMs) * time.Millisecond).String(),
+								"elapsedMs": tRes.DurationMs,
+								"timeout":   tOpts.Timeout.String(),
+								"command":   cmdStr,
+							},
+						})
+						return res
+					}
 					combinedErr := tRes.Stderr + "\n" + tRes.Stdout
 					if artifact, ok := plugins.DetectOfflineCacheMiss(combinedErr); ok {
 						res.Error = fmt.Sprintf("OFFLINE_CACHE_MISS: %s", artifact)

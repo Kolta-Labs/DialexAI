@@ -314,6 +314,35 @@ func (l *Logger) initLastHash() {
 	}
 }
 
+// ReadEvents reads and parses all recorded audit events from the log file.
+func (l *Logger) ReadEvents() ([]AuditEvent, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.logPath == "" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(l.logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var events []AuditEvent
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var evt AuditEvent
+		if err := json.Unmarshal([]byte(line), &evt); err == nil {
+			events = append(events, evt)
+		}
+	}
+	return events, nil
+}
+
 // SetSigningKey configures an HMAC key for cryptographic record signatures.
 func (l *Logger) SetSigningKey(key string) {
 	l.mu.Lock()

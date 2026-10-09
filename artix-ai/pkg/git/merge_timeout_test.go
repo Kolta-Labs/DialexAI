@@ -23,6 +23,8 @@ func TestMergeInto_CancelledContext_LeavesRepoClean(t *testing.T) {
 	runCmd(repoDir, "git", "init", "-b", "main")
 	runCmd(repoDir, "git", "config", "user.name", "Tester")
 	runCmd(repoDir, "git", "config", "user.email", "tester@example.com")
+	_ = os.WriteFile(filepath.Join(repoDir, ".gitignore"), []byte(".artix/\n"), 0644)
+	runCmd(repoDir, "git", "add", ".gitignore")
 	_ = os.WriteFile(filepath.Join(repoDir, "file.txt"), []byte("initial\n"), 0644)
 	runCmd(repoDir, "git", "add", "file.txt")
 	runCmd(repoDir, "git", "commit", "-m", "init")
