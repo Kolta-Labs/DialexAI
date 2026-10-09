@@ -1479,5 +1479,38 @@ func TestR6_5_IssueCommentAuthorizesOnCommentAuthorWithoutSenderAssociation(t *t
 	}
 }
 
+func TestWebhookServer_TasksEndpoint(t *testing.T) {
+	cfg := WebhookServerConfig{
+		DefaultDomain: "backend_engineer",
+	}
+	server := NewWebhookServer(cfg)
+	handler := server.Handler()
 
+	// 1. Submit task
+	payload := []byte(`{"prompt":"Add OAuth2 authentication","domain":"backend_engineer"}`)
+	req := httptest.NewRequest(http.MethodPost, "/tasks", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
 
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 Accepted for /tasks POST, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to unmarshal /tasks response: %v", err)
+	}
+	if res["taskId"] == nil || res["status"] != "queued" {
+		t.Errorf("unexpected /tasks response: %+v", res)
+	}
+
+	// 2. Query tasks
+	getReq := httptest.NewRequest(http.MethodGet, "/tasks", nil)
+	getRec := httptest.NewRecorder()
+	handler.ServeHTTP(getRec, getReq)
+
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for /tasks GET, got %d", getRec.Code)
+	}
+}

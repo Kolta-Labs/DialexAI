@@ -132,6 +132,7 @@ func (s *WebhookServer) Handler() http.Handler {
 	mux.HandleFunc("/webhook/github", s.handleGitHubWebhook)
 	mux.HandleFunc("/webhook/gitlab", s.handleGitLabWebhook)
 	mux.HandleFunc("/jobs", s.handleJobs)
+	mux.HandleFunc("/tasks", s.handleTasks)
 	return mux
 }
 
@@ -793,6 +794,85 @@ func (s *WebhookServer) handleJobs(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(filtered)
+}
+
+func (s *WebhookServer) handleTasks(w http.ResponseWriter, r *http.Request) {
+	// Authentication gate for /tasks endpoint
+	if s.cfg.JobsAuthToken != "" || policy.IsEnterprise() {
+		authHeader := r.Header.Get("Authorization")
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if token == "" || (s.cfg.JobsAuthToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.cfg.JobsAuthToken)) != 1) {
+			http.Error(w, "unauthorized: valid authorization token required", http.StatusUnauthorized)
+			return
+		}
+	}
+
+	if r.Method == http.MethodGet {
+		s.handleJobs(w, r)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		if !s.canAcceptJob() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error":  "concurrency cap or queue limit exceeded",
+				"status": "rate_limited",
+			})
+			return
+		}
+
+		var sub struct {
+			Prompt   string `json:"prompt"`
+			Domain   string `json:"domain,omitempty"`
+			RootDir  string `json:"rootDir,omitempty"`
+			Tenant   string `json:"tenant,omitempty"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&sub); err != nil {
+			http.Error(w, "invalid json payload", http.StatusBadRequest)
+			return
+		}
+
+		if strings.TrimSpace(sub.Prompt) == "" {
+			http.Error(w, "prompt is required", http.StatusBadRequest)
+			return
+		}
+
+		domain := sub.Domain
+		if domain == "" {
+			domain = s.cfg.DefaultDomain
+		}
+
+		tenant := sub.Tenant
+		if tenant == "" {
+			tenant = "local"
+		}
+
+		taskID := fmt.Sprintf("task-%d", time.Now().UnixNano())
+		task := &RemoteWorkerTask{
+			Target: RemoteRepoTarget{
+				CloneURL: sub.RootDir,
+				Branch:   "HEAD",
+				Owner:    tenant,
+				Repo:     "workspace",
+			},
+			Prompt: sub.Prompt,
+			Domain: domain,
+		}
+
+		s.startJob(taskID, "task_api", tenant, task)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"taskId": taskID,
+			"status": "queued",
+		})
+		return
+	}
+
+	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
 func (s *WebhookServer) startJob(id, source, tenant string, task *RemoteWorkerTask) {
