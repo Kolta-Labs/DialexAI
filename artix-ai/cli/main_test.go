@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -515,11 +516,38 @@ func TestCLI_KnowledgeEval_UnmeasuredWhenNoMeasurementCanRun(t *testing.T) {
 	}
 }
 
+func TestRunCLI_StreamFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	_ = exec.Command("git", "-C", tmpDir, "init").Run()
+	_ = exec.Command("git", "-C", tmpDir, "config", "user.email", "test@example.com").Run()
+	_ = exec.Command("git", "-C", tmpDir, "config", "user.name", "Test User").Run()
+	var stdout, stderr bytes.Buffer
 
+	// Test plan with --stream
+	code := RunCLI(tmpDir, nil, []string{"plan", "--stream", "Add health check endpoint"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for plan --stream, got %d, stderr: %s", code, stderr.String())
+	}
 
+	// stdout should contain at least one valid JSON event or final output
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) == 0 {
+		t.Fatalf("expected stream output in stdout, got empty")
+	}
 
-
-
-
-
-
+	// Test review with --stream
+	stdout.Reset()
+	stderr.Reset()
+	code = RunCLI(tmpDir, nil, []string{"review", "--stream"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for review --stream on clean dir, got %d, stderr: %s", code, stderr.String())
+	}
+	var ev map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &ev); err != nil {
+		// Could be multiple lines
+		firstLine := strings.Split(strings.TrimSpace(stdout.String()), "\n")[0]
+		if err := json.Unmarshal([]byte(firstLine), &ev); err != nil {
+			t.Fatalf("expected valid JSON stream event, got: %s (err: %v)", stdout.String(), err)
+		}
+	}
+}

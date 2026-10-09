@@ -70,6 +70,8 @@ type LoopOptions struct {
 	ABEvalInterval                     int                                   `json:"abEvalInterval,omitempty"`
 	ABEvalRunner                       knowledge.ABEvalRunner                `json:"-"`
 	KnowledgeFilter                    func(ki knowledge.KnowledgeItem) bool `json:"-"`
+	StreamEmitter                      *StreamEmitter                        `json:"-"`
+	TaskID                             string                                `json:"taskId,omitempty"`
 }
 
 // LoopResult represents the final convergence outcome.
@@ -134,6 +136,39 @@ func (c *ConvergenceCoordinator) Run(
 		Success:   false,
 		RoundsRun: 0,
 	}
+
+	defer func() {
+		if opts != nil && opts.StreamEmitter != nil {
+			if res.AwaitingApproval {
+				opts.StreamEmitter.Emit(StreamEvent{
+					Type:      EventAwaitingApproval,
+					TaskID:    opts.TaskID,
+					Phase:     "APPROVAL",
+					Status:    "awaiting_approval",
+					Message:   "Candidate commit staged/pushed; awaiting approval",
+					Payload:   map[string]any{"commitHash": res.CommitHash},
+				})
+			} else if res.Success {
+				opts.StreamEmitter.Emit(StreamEvent{
+					Type:      EventConverged,
+					TaskID:    opts.TaskID,
+					Phase:     "CONVERGED",
+					Status:    "success",
+					Round:     res.RoundsRun,
+					Message:   fmt.Sprintf("Converged in %d round(s)", res.RoundsRun),
+					Payload:   map[string]any{"commitHash": res.CommitHash},
+				})
+			} else if res.Error != "" {
+				opts.StreamEmitter.Emit(StreamEvent{
+					Type:      EventError,
+					TaskID:    opts.TaskID,
+					Phase:     "ERROR",
+					Status:    "failed",
+					Message:   res.Error,
+				})
+			}
+		}
+	}()
 
 	var budget *TokenBudget
 	if opts != nil && opts.Budget != nil {
@@ -230,8 +265,29 @@ func (c *ConvergenceCoordinator) Run(
 		}
 	}
 
+	if opts != nil && opts.StreamEmitter != nil {
+		opts.StreamEmitter.Emit(StreamEvent{
+			Type:      EventWorktreeProvisioned,
+			TaskID:    opts.TaskID,
+			Phase:     "PROVISIONING",
+			Message:   fmt.Sprintf("Initialized execution context for spec %s", s.ID),
+			Payload:   map[string]any{"specId": s.ID, "title": s.Title, "testCommands": effectiveTestCommands},
+		})
+	}
+
 	for round := 1; round <= maxRounds; round++ {
 		res.RoundsRun = round
+
+		if opts != nil && opts.StreamEmitter != nil {
+			opts.StreamEmitter.Emit(StreamEvent{
+				Type:      EventPatchGenStart,
+				TaskID:    opts.TaskID,
+				Phase:     "PATCH_GENERATION",
+				Round:     round,
+				MaxRounds: maxRounds,
+				Message:   fmt.Sprintf("Generating patch for round %d", round),
+			})
+		}
 
 		// 1. Coder generates patch
 		var patch string
@@ -284,6 +340,17 @@ func (c *ConvergenceCoordinator) Run(
 		if patch == "" {
 			res.Error = fmt.Sprintf("no patch generated in round %d", round)
 			break
+		}
+
+		if opts != nil && opts.StreamEmitter != nil {
+			opts.StreamEmitter.Emit(StreamEvent{
+				Type:      EventPatchGenDone,
+				TaskID:    opts.TaskID,
+				Phase:     "PATCH_GENERATION",
+				Round:     round,
+				MaxRounds: maxRounds,
+				Message:   fmt.Sprintf("Generated patch (%d bytes) for round %d", len(patch), round),
+			})
 		}
 
 		coderPatchTokens := EstimateTokens(patch)
@@ -489,6 +556,18 @@ func (c *ConvergenceCoordinator) Run(
 		var testResults []*sandbox.ExecResult
 		priorFailures = nil // only the latest round's failures are relevant to the next attempt
 
+		if opts != nil && opts.StreamEmitter != nil {
+			opts.StreamEmitter.Emit(StreamEvent{
+				Type:      EventSandboxRunStart,
+				TaskID:    opts.TaskID,
+				Phase:     "SANDBOX_EXECUTION",
+				Round:     round,
+				MaxRounds: maxRounds,
+				Message:   fmt.Sprintf("Running %d test command(s) in sandbox", len(effectiveTestCommands)),
+				Payload:   map[string]any{"commands": effectiveTestCommands},
+			})
+		}
+
 		// Script/Makefile indirection check: refuse commands referencing or executing modified scripts/Makefiles/build configs
 		touchedByPatch := extractTouchedFilesFromDiff(diff)
 		var indirectionViolations []string
@@ -522,6 +601,20 @@ func (c *ConvergenceCoordinator) Run(
 					priorFailures = append(priorFailures, fmt.Sprintf("%s: exit %d\n%s", cmdStr, tRes.ExitCode, tRes.Stderr))
 				}
 			}
+		}
+
+		if opts != nil && opts.StreamEmitter != nil {
+			allPassed := len(priorFailures) == 0
+			opts.StreamEmitter.Emit(StreamEvent{
+				Type:      EventSandboxRunDone,
+				TaskID:    opts.TaskID,
+				Phase:     "SANDBOX_EXECUTION",
+				Round:     round,
+				MaxRounds: maxRounds,
+				Status:    func() string { if allPassed { return "passed" } else { return "failed" } }(),
+				Message:   fmt.Sprintf("Sandbox test execution finished in round %d: passed=%v", round, allPassed),
+				Payload:   map[string]any{"passed": allPassed, "failureCount": len(priorFailures)},
+			})
 		}
 
 		// 4b. Run configured static analyzers (Konsist, Detekt, Semgrep, SwiftLint, go vet) in sandbox
@@ -563,6 +656,17 @@ func (c *ConvergenceCoordinator) Run(
 			initialCoverage = currentCoverage
 		}
 
+		if opts != nil && opts.StreamEmitter != nil {
+			opts.StreamEmitter.Emit(StreamEvent{
+				Type:      EventReviewStart,
+				TaskID:    opts.TaskID,
+				Phase:     "REVIEW",
+				Round:     round,
+				MaxRounds: maxRounds,
+				Message:   fmt.Sprintf("Reviewing patch and test results for round %d", round),
+			})
+		}
+
 		// 5. Reviewer evaluates diff + tests + analyzers + steering
 		rCtx := &reviewer.ReviewContext{
 			Diff:                     diff,
@@ -582,6 +686,19 @@ func (c *ConvergenceCoordinator) Run(
 		}
 		verdict := c.reviewer.Evaluate(rCtx)
 		res.FinalVerdict = verdict
+
+		if opts != nil && opts.StreamEmitter != nil {
+			opts.StreamEmitter.Emit(StreamEvent{
+				Type:      EventReviewVerdict,
+				TaskID:    opts.TaskID,
+				Phase:     "REVIEW",
+				Round:     round,
+				MaxRounds: maxRounds,
+				Status:    string(verdict.Status),
+				Message:   fmt.Sprintf("Review verdict for round %d: %s", round, verdict.Status),
+				Payload:   map[string]any{"status": verdict.Status, "approved": verdict.Approved, "feedback": verdict.ActionableFeedback},
+			})
+		}
 
 		// Track reviewer tokens and round cost
 		reviewerPromptTokens := EstimateTokens(diff)

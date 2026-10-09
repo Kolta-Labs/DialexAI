@@ -89,12 +89,15 @@ func RunCLIWithIO(cwd string, reg *persona.Registry, rawArgs []string, stdin io.
 		return 0
 	}
 
-	// Filter out --json globally
+	// Filter out --json and --stream globally
 	args := make([]string, 0, len(rawArgs))
 	isJSON := false
+	isStream := false
 	for _, a := range rawArgs {
 		if a == "--json" {
 			isJSON = true
+		} else if a == "--stream" {
+			isStream = true
 		} else {
 			args = append(args, a)
 		}
@@ -109,7 +112,7 @@ func RunCLIWithIO(cwd string, reg *persona.Registry, rawArgs []string, stdin io.
 	cmdArgs := args[1:]
 
 	humanOut := stdout
-	if isJSON {
+	if isJSON || isStream {
 		humanOut = stderr
 	}
 
@@ -148,10 +151,10 @@ func RunCLIWithIO(cwd string, reg *persona.Registry, rawArgs []string, stdin io.
 		return 0
 
 	case "plan", "spec":
-		return runPlan(cwd, reg, cmdArgs, humanOut, sendJSON, isJSON, stderr)
+		return runPlan(cwd, reg, cmdArgs, humanOut, sendJSON, isJSON, isStream, stdout, stderr)
 
 	case "code":
-		return runCode(cwd, reg, cmdArgs, stdin, humanOut, sendJSON, isJSON, stderr)
+		return runCode(cwd, reg, cmdArgs, stdin, humanOut, sendJSON, isJSON, isStream, stdout, stderr)
 
 	case "verify-approval":
 		return runVerifyApproval(cwd, cmdArgs, humanOut, sendJSON, isJSON, stderr)
@@ -165,7 +168,7 @@ func RunCLIWithIO(cwd string, reg *persona.Registry, rawArgs []string, stdin io.
 		return 1
 
 	case "review":
-		return runReview(cwd, reg, cmdArgs, humanOut, sendJSON, isJSON, stderr)
+		return runReview(cwd, reg, cmdArgs, humanOut, sendJSON, isJSON, isStream, stdout, stderr)
 
 	case "audit":
 		return runAudit(cwd, cmdArgs, humanOut, sendJSON, isJSON, stderr)
@@ -227,7 +230,7 @@ func main() {
 	os.Exit(RunCLI(cwd, registry, os.Args[1:], os.Stdout, os.Stderr))
 }
 
-func runPlan(cwd string, reg *persona.Registry, args []string, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
+func runPlan(cwd string, reg *persona.Registry, args []string, human io.Writer, sendJSON func(any), isJSON bool, isStream bool, stdout io.Writer, stderr io.Writer) int {
 	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	styleFlag := fs.String("style", "standard", "Spec style vector: standard, ponytail (executive), or caveman (terse)")
@@ -258,6 +261,24 @@ func runPlan(cwd string, reg *persona.Registry, args []string, human io.Writer, 
 	council := spec.NewCouncil(reg)
 	method := "deterministic_template"
 	rounds := 1
+
+	if isStream {
+		emitter := coder.NewStreamEmitter(stdout)
+		council.SetStreamHandler(func(ev spec.CouncilStreamEvent) {
+			emitter.Emit(coder.StreamEvent{
+				Type:      coder.StreamEventType(ev.Type),
+				Timestamp: ev.Timestamp,
+				TaskID:    ev.SpecID,
+				Phase:     "COUNCIL_DELIBERATION",
+				Round:     ev.Round,
+				MaxRounds: ev.TotalRounds,
+				Role:      ev.Role,
+				Status:    ev.Status,
+				Message:   ev.Message,
+				Payload:   ev.Payload,
+			})
+		})
+	}
 
 	if *providerFlag != "" {
 		mRunner, agent, rerr := coder.NewAPIRunnerFromEnv(*providerFlag, *modelFlag, os.Getenv)
@@ -335,7 +356,7 @@ func runPlan(cwd string, reg *persona.Registry, args []string, human io.Writer, 
 	return 0
 }
 
-func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
+func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, human io.Writer, sendJSON func(any), isJSON bool, isStream bool, stdout io.Writer, stderr io.Writer) int {
 	fs := flag.NewFlagSet("code", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	domainFlag := fs.String("domain", "backend_engineer", "Target SWE domain persona (e.g. backend_engineer, android_engineer)")
@@ -496,6 +517,10 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 		MaxRounds: *maxRoundsFlag,
 		Autonomy:  coder.AutonomyLevel(*autonomyFlag),
 		Approver:  *approverFlag,
+	}
+	if isStream {
+		opts.StreamEmitter = coder.NewStreamEmitter(stdout)
+		opts.TaskID = storySpec.ID
 	}
 
 	prNum := *forgePRFlag
@@ -834,7 +859,7 @@ func runVerifyApproval(cwd string, args []string, human io.Writer, sendJSON func
 	return 0
 }
 
-func runReview(cwd string, reg *persona.Registry, args []string, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
+func runReview(cwd string, reg *persona.Registry, args []string, human io.Writer, sendJSON func(any), isJSON bool, isStream bool, stdout io.Writer, stderr io.Writer) int {
 	fs := flag.NewFlagSet("review", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	providerFlag := fs.String("provider", "", "Model provider for the Critic (omit for rule-based pre-filter only, which yields 'unreviewed')")
@@ -846,11 +871,29 @@ func runReview(cwd string, reg *persona.Registry, args []string, human io.Writer
 		return 1
 	}
 
+	if isStream {
+		emitter := coder.NewStreamEmitter(stdout)
+		emitter.Emit(coder.StreamEvent{
+			Type:    coder.EventReviewStart,
+			Phase:   "REVIEW",
+			Message: "Reviewing working directory diff against taboo patterns and critic rules",
+		})
+	}
+
 	driver := git.NewDriver(cwd)
 	diff, err := driver.Diff(false)
 	if err != nil {
 		if isJSON {
 			sendJSON(map[string]any{"ok": false, "status": "error", "error": fmt.Sprintf("Error reading git diff: %v", err)})
+		}
+		if isStream {
+			emitter := coder.NewStreamEmitter(stdout)
+			emitter.Emit(coder.StreamEvent{
+				Type:    coder.EventError,
+				Phase:   "REVIEW",
+				Status:  "error",
+				Message: fmt.Sprintf("Error reading git diff: %v", err),
+			})
 		}
 		fmt.Fprintf(stderr, "Error reading git diff: %v\n", err)
 		return 1
@@ -859,6 +902,16 @@ func runReview(cwd string, reg *persona.Registry, args []string, human io.Writer
 	if strings.TrimSpace(diff) == "" {
 		if isJSON {
 			sendJSON(map[string]any{"ok": true, "status": "approved", "approved": true, "summary": "Working tree clean; nothing to review."})
+		}
+		if isStream {
+			emitter := coder.NewStreamEmitter(stdout)
+			emitter.Emit(coder.StreamEvent{
+				Type:    coder.EventReviewVerdict,
+				Phase:   "REVIEW",
+				Status:  "approved",
+				Message: "Working tree clean; nothing to review.",
+				Payload: map[string]any{"approved": true},
+			})
 		}
 		fmt.Fprintln(human, "Working tree clean; nothing to review.")
 		return 0
@@ -870,6 +923,15 @@ func runReview(cwd string, reg *persona.Registry, args []string, human io.Writer
 		if rerr != nil {
 			if isJSON {
 				sendJSON(map[string]any{"ok": false, "status": "error", "error": fmt.Sprintf("reviewer: %v", rerr)})
+			}
+			if isStream {
+				emitter := coder.NewStreamEmitter(stdout)
+				emitter.Emit(coder.StreamEvent{
+					Type:    coder.EventError,
+					Phase:   "REVIEW",
+					Status:  "error",
+					Message: fmt.Sprintf("reviewer: %v", rerr),
+				})
 			}
 			fmt.Fprintf(stderr, "Error: reviewer: %v\n", rerr)
 			return 1
@@ -899,6 +961,22 @@ func runReview(cwd string, reg *persona.Registry, args []string, human io.Writer
 			"warnings":       verdict.Warnings,
 		},
 	})
+
+	if isStream {
+		emitter := coder.NewStreamEmitter(stdout)
+		emitter.Emit(coder.StreamEvent{
+			Type:    coder.EventReviewVerdict,
+			Phase:   "REVIEW",
+			Status:  string(verdict.Status),
+			Message: verdict.Summary,
+			Payload: map[string]any{
+				"status":         verdict.Status,
+				"approved":       verdict.Approved,
+				"blockingIssues": verdict.BlockingIssues,
+				"warnings":       verdict.Warnings,
+			},
+		})
+	}
 
 	if isJSON {
 		reviewStatus := "approved"
