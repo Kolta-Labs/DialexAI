@@ -57,8 +57,10 @@ type LoopOptions struct {
 	ConfirmTestCommands                func(commands []string) bool
 	Model                              string              `json:"model,omitempty"`
 	CoderFamily                        string              `json:"coderFamily,omitempty"`
+	CoderFamilyResolution              string              `json:"coderFamilyResolution,omitempty"`
 	ReviewerModel                      string              `json:"reviewerModel,omitempty"`
 	ReviewerFamily                     string              `json:"reviewerFamily,omitempty"`
+	ReviewerFamilyResolution           string              `json:"reviewerFamilyResolution,omitempty"`
 	MaxTokens                          int                 `json:"maxTokens,omitempty"`
 	MaxUSD                             float64             `json:"maxUsd,omitempty"`
 	MaxWall                            time.Duration       `json:"maxWall,omitempty"`
@@ -898,22 +900,30 @@ func (c *ConvergenceCoordinator) Run(
 						return res
 					}
 				}
-
-				// In enterprise mode, verify audit emission succeeds
 				if policy.IsEnterprise() {
+					coderRes := opts.CoderFamilyResolution
+					if coderRes == "" && opts.Model != "" {
+						_, coderRes = reviewer.ResolveModelFamilyWithDetails("", opts.Model)
+					}
+					criticRes := opts.ReviewerFamilyResolution
+					if criticRes == "" && opts.ReviewerModel != "" {
+						_, criticRes = reviewer.ResolveModelFamilyWithDetails("", opts.ReviewerModel)
+					}
 					preCommitAuditErr := auditLogger.Emit(audit.AuditEvent{
 						EventType: audit.EventCodeConvergence,
 						Status:    "PENDING_COMMIT",
 						Approver:  approverIdentity,
 						Details: map[string]any{
-							"storyId":          s.ID,
-							"roundsRun":        res.RoundsRun,
-							"commitHash":       newCommitSHA,
-							"testCommandsHash": testCommandsHash,
-							"coderModel":       opts.Model,
-							"coderFamily":      opts.CoderFamily,
-							"criticModel":      opts.ReviewerModel,
-							"criticFamily":     opts.ReviewerFamily,
+							"storyId":                s.ID,
+							"roundsRun":              res.RoundsRun,
+							"commitHash":             newCommitSHA,
+							"testCommandsHash":       testCommandsHash,
+							"coderModel":             opts.Model,
+							"coderFamily":            opts.CoderFamily,
+							"coderFamilyResolution":  coderRes,
+							"criticModel":            opts.ReviewerModel,
+							"criticFamily":           opts.ReviewerFamily,
+							"criticFamilyResolution": criticRes,
 						},
 					})
 					if preCommitAuditErr != nil {
@@ -935,10 +945,20 @@ func (c *ConvergenceCoordinator) Run(
 				"testCommandsHash": testCommandsHash,
 			}
 			if opts != nil {
+				coderRes := opts.CoderFamilyResolution
+				if coderRes == "" && opts.Model != "" {
+					_, coderRes = reviewer.ResolveModelFamilyWithDetails("", opts.Model)
+				}
+				criticRes := opts.ReviewerFamilyResolution
+				if criticRes == "" && opts.ReviewerModel != "" {
+					_, criticRes = reviewer.ResolveModelFamilyWithDetails("", opts.ReviewerModel)
+				}
 				convergenceDetails["coderModel"] = opts.Model
 				convergenceDetails["coderFamily"] = opts.CoderFamily
+				convergenceDetails["coderFamilyResolution"] = coderRes
 				convergenceDetails["criticModel"] = opts.ReviewerModel
 				convergenceDetails["criticFamily"] = opts.ReviewerFamily
+				convergenceDetails["criticFamilyResolution"] = criticRes
 			}
 
 			emitErr := auditLogger.Emit(audit.AuditEvent{
@@ -1060,10 +1080,20 @@ func (c *ConvergenceCoordinator) Run(
 		"error":            res.Error,
 	}
 	if opts != nil {
+		coderRes := opts.CoderFamilyResolution
+		if coderRes == "" && opts.Model != "" {
+			_, coderRes = reviewer.ResolveModelFamilyWithDetails("", opts.Model)
+		}
+		criticRes := opts.ReviewerFamilyResolution
+		if criticRes == "" && opts.ReviewerModel != "" {
+			_, criticRes = reviewer.ResolveModelFamilyWithDetails("", opts.ReviewerModel)
+		}
 		failedDetails["coderModel"] = opts.Model
 		failedDetails["coderFamily"] = opts.CoderFamily
+		failedDetails["coderFamilyResolution"] = coderRes
 		failedDetails["criticModel"] = opts.ReviewerModel
 		failedDetails["criticFamily"] = opts.ReviewerFamily
+		failedDetails["criticFamilyResolution"] = criticRes
 	}
 
 	emitErr := audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{

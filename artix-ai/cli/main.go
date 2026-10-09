@@ -612,14 +612,17 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 		opts.ReviewerModel = *modelFlag
 	}
 
-	coderFamily := reviewer.ResolveModelFamily(*providerFlag, *modelFlag)
-	criticFamily := reviewer.ResolveModelFamily(*reviewProvider, opts.ReviewerModel)
+	coderFamily, coderRes := reviewer.ResolveModelFamilyWithDetails(*providerFlag, *modelFlag)
+	criticFamily, criticRes := reviewer.ResolveModelFamilyWithDetails(*reviewProvider, opts.ReviewerModel)
 	if criticFamily == "" {
 		criticFamily = coderFamily
+		criticRes = coderRes
 	}
 
 	opts.CoderFamily = coderFamily
+	opts.CoderFamilyResolution = coderRes
 	opts.ReviewerFamily = criticFamily
+	opts.ReviewerFamilyResolution = criticRes
 
 	advReviewer.SetCoderFamily(coderFamily)
 	advReviewer.SetCriticFamily(criticFamily)

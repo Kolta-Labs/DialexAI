@@ -48,79 +48,155 @@ func RunnerCriticWithTracker(r runner.AgentRunner, agent model.Agent, onUsage fu
 // SetCritic adds a model-backed review pass on top of the rule-based checks.
 func (r *AdversarialReviewer) SetCritic(c Critic) { r.critic = c }
 
-// ResolveModelFamily derives the canonical model family from the resolved model ID
-// via a model-to-family table. If the model is unknown, it treats the model as its own family.
-// If model ID is empty, it falls back to the provider name.
-func ResolveModelFamily(provider, modelID string) string {
-	rawModel := strings.ToLower(strings.TrimSpace(modelID))
-	rawProvider := strings.ToLower(strings.TrimSpace(provider))
+// ModelFamilyRule defines an exact prefix match rule to canonical family.
+type ModelFamilyRule struct {
+	Prefix string
+	Family string
+}
 
-	// Model ID -> Family lookup
-	if strings.Contains(rawModel, "claude") || strings.Contains(rawModel, "anthropic") {
-		return "anthropic"
-	}
-	if strings.Contains(rawModel, "gpt") || strings.Contains(rawModel, "o1") || strings.Contains(rawModel, "o3") || strings.Contains(rawModel, "o4") || strings.Contains(rawModel, "chatgpt") {
-		return "openai"
-	}
-	if strings.Contains(rawModel, "gemini") || strings.Contains(rawModel, "gemma") || strings.Contains(rawModel, "palm") {
-		return "google"
-	}
-	if strings.Contains(rawModel, "llama") || strings.Contains(rawModel, "codellama") {
-		return "meta"
-	}
-	if strings.Contains(rawModel, "qwen") || strings.Contains(rawModel, "qwq") {
-		return "qwen"
-	}
-	if strings.Contains(rawModel, "deepseek") {
-		return "deepseek"
-	}
-	if strings.Contains(rawModel, "mistral") || strings.Contains(rawModel, "codestral") || strings.Contains(rawModel, "mixtral") || strings.Contains(rawModel, "pixtral") || strings.Contains(rawModel, "ministral") {
-		return "mistral"
-	}
-	if strings.Contains(rawModel, "grok") {
-		return "xai"
-	}
-	if strings.Contains(rawModel, "command") || strings.Contains(rawModel, "cohere") {
-		return "cohere"
-	}
-	if strings.Contains(rawModel, "phi") {
-		return "microsoft"
-	}
-
-	// If a specific model ID was provided but not matched above, treat it as its own family
-	if rawModel != "" {
-		return rawModel
-	}
-
-	// Fall back to provider if model ID is not specified
-	if rawProvider != "" {
-		if strings.Contains(rawProvider, "anthropic") {
-			return "anthropic"
-		}
-		if strings.Contains(rawProvider, "openai") {
-			return "openai"
-		}
-		if strings.Contains(rawProvider, "google") || strings.Contains(rawProvider, "gemini") {
-			return "google"
-		}
-		if strings.Contains(rawProvider, "deepseek") {
-			return "deepseek"
-		}
-		if strings.Contains(rawProvider, "mistral") {
-			return "mistral"
-		}
-		if strings.Contains(rawProvider, "grok") || strings.Contains(rawProvider, "xai") {
-			return "xai"
-		}
-		return rawProvider
-	}
-
-	return ""
+// CanonicalOrderedModelFamilyRules defines the documented ordered rules for model family resolution.
+// When multiple family tokens match, the first rule in this ordered list wins.
+var CanonicalOrderedModelFamilyRules = []ModelFamilyRule{
+	{Prefix: "claude", Family: "anthropic"},
+	{Prefix: "anthropic", Family: "anthropic"},
+	{Prefix: "gpt", Family: "openai"},
+	{Prefix: "o1", Family: "openai"},
+	{Prefix: "o3", Family: "openai"},
+	{Prefix: "o4", Family: "openai"},
+	{Prefix: "chatgpt", Family: "openai"},
+	{Prefix: "gemini", Family: "google"},
+	{Prefix: "gemma", Family: "google"},
+	{Prefix: "palm", Family: "google"},
+	{Prefix: "codellama", Family: "meta"},
+	{Prefix: "llama", Family: "meta"},
+	{Prefix: "qwen", Family: "qwen"},
+	{Prefix: "qwq", Family: "qwen"},
+	{Prefix: "deepseek", Family: "deepseek"},
+	{Prefix: "codestral", Family: "mistral"},
+	{Prefix: "mixtral", Family: "mistral"},
+	{Prefix: "pixtral", Family: "mistral"},
+	{Prefix: "ministral", Family: "mistral"},
+	{Prefix: "mistral", Family: "mistral"},
+	{Prefix: "grok", Family: "xai"},
+	{Prefix: "command", Family: "cohere"},
+	{Prefix: "cohere", Family: "cohere"},
+	{Prefix: "phi", Family: "microsoft"},
 }
 
 // ResolveModelFamilyWithDetails returns the resolved family and the method used to resolve it.
 func ResolveModelFamilyWithDetails(provider, modelID string) (family string, resolution string) {
-	return ResolveModelFamily(provider, modelID), "unknown"
+	rawModel := strings.ToLower(strings.TrimSpace(modelID))
+	rawProvider := strings.ToLower(strings.TrimSpace(provider))
+
+	pol := policy.Active()
+
+	// 1. Check Policy ModelDerivations and ModelFamilies (exact and prefix match)
+	if pol != nil && rawModel != "" {
+		derivations := make(map[string]string)
+		for k, v := range pol.ModelDerivations {
+			derivations[strings.ToLower(strings.TrimSpace(k))] = strings.ToLower(strings.TrimSpace(v))
+		}
+		for k, v := range pol.Reviewer.ModelDerivations {
+			derivations[strings.ToLower(strings.TrimSpace(k))] = strings.ToLower(strings.TrimSpace(v))
+		}
+
+		if base, ok := derivations[rawModel]; ok {
+			baseFam, _ := resolveBaseFamilyOnly(base)
+			if baseFam == "" {
+				baseFam = base
+			}
+			return baseFam, fmt.Sprintf("policy-derivation:%s->%s", rawModel, baseFam)
+		}
+
+		families := make(map[string]string)
+		for k, v := range pol.ModelFamilies {
+			families[strings.ToLower(strings.TrimSpace(k))] = strings.ToLower(strings.TrimSpace(v))
+		}
+		for k, v := range pol.Reviewer.ModelFamilies {
+			families[strings.ToLower(strings.TrimSpace(k))] = strings.ToLower(strings.TrimSpace(v))
+		}
+
+		if fam, ok := families[rawModel]; ok {
+			baseFam, _ := resolveBaseFamilyOnly(fam)
+			if baseFam == "" {
+				baseFam = fam
+			}
+			return baseFam, fmt.Sprintf("policy-override:%s->%s", rawModel, baseFam)
+		}
+
+		// Check prefix match in policy families
+		for pfx, fam := range families {
+			if strings.HasPrefix(rawModel, pfx) {
+				baseFam, _ := resolveBaseFamilyOnly(fam)
+				if baseFam == "" {
+					baseFam = fam
+				}
+				return baseFam, fmt.Sprintf("policy-override-prefix:%s->%s", pfx, baseFam)
+			}
+		}
+	}
+
+	// 2. Data-driven ordered prefix matching
+	if rawModel != "" {
+		candidates := []string{rawModel}
+		// Also support stripped vendor prefixes (e.g., "anthropic.claude" -> "claude", "meta-llama/llama" -> "llama")
+		if slashIdx := strings.LastIndex(rawModel, "/"); slashIdx != -1 && slashIdx < len(rawModel)-1 {
+			candidates = append(candidates, rawModel[slashIdx+1:])
+		}
+		if dotIdx := strings.Index(rawModel, "."); dotIdx != -1 && dotIdx < len(rawModel)-1 {
+			candidates = append(candidates, rawModel[dotIdx+1:])
+		}
+
+		// Exact prefix matching against ordered rules
+		for _, rule := range CanonicalOrderedModelFamilyRules {
+			for _, cand := range candidates {
+				if strings.HasPrefix(cand, rule.Prefix) {
+					return rule.Family, fmt.Sprintf("prefix:%s", rule.Prefix)
+				}
+			}
+		}
+
+		// Substring token match against ordered rules (first rule in list wins when multiple tokens exist)
+		for _, rule := range CanonicalOrderedModelFamilyRules {
+			for _, cand := range candidates {
+				if strings.Contains(cand, rule.Prefix) {
+					return rule.Family, fmt.Sprintf("ordered-rule:%s", rule.Prefix)
+				}
+			}
+		}
+
+		// Unknown model treated as its own family
+		return rawModel, "unknown-model-fallback"
+	}
+
+	// 3. Fall back to provider if model ID is empty
+	if rawProvider != "" {
+		for _, rule := range CanonicalOrderedModelFamilyRules {
+			if strings.HasPrefix(rawProvider, rule.Prefix) || strings.Contains(rawProvider, rule.Prefix) {
+				return rule.Family, fmt.Sprintf("provider-fallback:%s", rule.Family)
+			}
+		}
+		return rawProvider, "provider-fallback"
+	}
+
+	return "", "empty"
+}
+
+func resolveBaseFamilyOnly(name string) (string, string) {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	for _, rule := range CanonicalOrderedModelFamilyRules {
+		if strings.HasPrefix(lower, rule.Prefix) || strings.Contains(lower, rule.Prefix) {
+			return rule.Family, fmt.Sprintf("prefix:%s", rule.Prefix)
+		}
+	}
+	return lower, "unknown"
+}
+
+// ResolveModelFamily derives the canonical model family from the resolved model ID
+// via data-driven ordered rules and policy configuration.
+func ResolveModelFamily(provider, modelID string) string {
+	family, _ := ResolveModelFamilyWithDetails(provider, modelID)
+	return family
 }
 
 // NormalizeModelFamily extracts the canonical model/provider family.

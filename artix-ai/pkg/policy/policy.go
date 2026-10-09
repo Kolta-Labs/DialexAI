@@ -418,6 +418,9 @@ func ResetCachedPolicy() {
 func SetActivePolicyForTest(p *Policy) {
 	policyMu.Lock()
 	defer policyMu.Unlock()
+	if p != nil {
+		p.IsVerified = true
+	}
 	cachedPolicy = p
 }
 
