@@ -253,7 +253,12 @@ func (c *ConvergenceCoordinator) Run(
 			patch = opts.MockPatchGen(round, lastFeedback)
 		} else if opts != nil && opts.PatchGenerator != nil {
 			var genErr error
-			patch, genErr = opts.PatchGenerator(ctx, PatchRequest{Round: round, Feedback: lastFeedback, PriorFailures: priorFailures})
+			patch, genErr = opts.PatchGenerator(ctx, PatchRequest{
+				Round:         round,
+				Feedback:      lastFeedback,
+				PriorFailures: priorFailures,
+				PromptContext: &promptCtx,
+			})
 			if genErr != nil {
 				res.Error = fmt.Sprintf("patch generation failed in round %d: %v", round, genErr)
 				break

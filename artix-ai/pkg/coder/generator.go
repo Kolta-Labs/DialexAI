@@ -15,6 +15,7 @@ type PatchRequest struct {
 	Round         int
 	Feedback      string   // reviewer feedback from the previous round
 	PriorFailures []string // compiler/test output from the previous round
+	PromptContext *PromptContext
 }
 
 // PatchGenerator produces a unified diff for one round of the convergence loop.

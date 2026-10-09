@@ -11,6 +11,7 @@ type ABEvalResult struct {
 	RoundsBaseline int    `json:"roundsBaseline"`
 	RoundsWithKI   int    `json:"roundsWithKi"`
 	Regression     bool   `json:"regression"`
+	Status         string `json:"status,omitempty"` // "pass", "regression", "unmeasured"
 	Summary        string `json:"summary"`
 }
 

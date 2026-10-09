@@ -2164,6 +2164,98 @@ func TestLoop_TriggersABEval_AutoDemotesRegressedKI(t *testing.T) {
 	}
 }
 
+func TestLoop_RealABEvalHarness_AutoDemotesHarmfulKI_WithoutSuppliedRunner(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+	kStore := knowledge.NewStore(tempDir)
+
+	// Seed a ratified active KI that will cause a regression if present
+	harmfulKI := &knowledge.KnowledgeItem{
+		ID:           "ki-harmful-regression-01",
+		Title:        "Harmful Rule Requiring Extra Sync",
+		Category:     knowledge.CategoryArchitecture,
+		Breakthrough: "Add extra retry synchronization loop",
+		Status:       "active",
+		ApprovedBy:   "alice-codeowner",
+	}
+	if err := kStore.Save(harmfulKI); err != nil {
+		t.Fatalf("failed to save seed KI: %v", err)
+	}
+
+	reg := persona.NewRegistry("")
+	coderObj, _ := NewDomainCoder("backend_engineer", reg)
+	rev := newTestReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coderObj, rev, driver, box)
+
+	storySpec := &spec.StorySpec{
+		ID:           "SPEC-REAL-AB-01",
+		Title:        "Real A/B Eval Harness Test",
+		TestCommands: []string{"grep 'TARGET_CONVERGED' output.txt"},
+	}
+
+	// The PatchGenerator checks PromptContext.KnowledgeItems:
+	// - If harmfulKI is present, it takes 2 rounds: round 1 writes STILL_WAITING (tests fail), round 2 writes TARGET_CONVERGED.
+	// - If harmfulKI is absent (baseline), it takes 1 round: round 1 writes TARGET_CONVERGED directly.
+	opts := &LoopOptions{
+		MaxRounds:      5,
+		TriggerABEval:  true,
+		ABEvalInterval: 1,
+		ABEvalRunner:   nil, // NO test-supplied runner! Must use artix's built-in real harness!
+		PatchGenerator: func(ctx context.Context, req PatchRequest) (string, error) {
+			hasHarmfulKI := false
+			if req.PromptContext != nil {
+				for _, ki := range req.PromptContext.KnowledgeItems {
+					if ki.ID == "ki-harmful-regression-01" {
+						hasHarmfulKI = true
+						break
+					}
+				}
+			}
+
+			if hasHarmfulKI {
+				if req.Round == 1 {
+					return "diff --git a/output.txt b/output.txt\n--- a/output.txt\n+++ b/output.txt\n@@ -1 +1 @@\n-0\n+STILL_WAITING\n", nil
+				}
+				return "diff --git a/output.txt b/output.txt\n--- a/output.txt\n+++ b/output.txt\n@@ -1 +1 @@\n-STILL_WAITING\n+TARGET_CONVERGED\n", nil
+			}
+
+			// Baseline without harmful KI converges immediately in round 1
+			return "diff --git a/output.txt b/output.txt\n--- a/output.txt\n+++ b/output.txt\n@@ -1 +1 @@\n-0\n+TARGET_CONVERGED\n", nil
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if !res.Success {
+		t.Fatalf("expected main loop to succeed, got: %+v", res)
+	}
+
+	// Verify that the harmful KI was demoted by the real harness
+	updatedKI, err := kStore.Get("ki-harmful-regression-01")
+	if err != nil {
+		t.Fatalf("failed to retrieve KI: %v", err)
+	}
+	if updatedKI.Status != "demoted" {
+		t.Fatalf("expected KI to be auto-demoted by real harness, got status %q", updatedKI.Status)
+	}
+	if updatedKI.LastEvalResult == nil {
+		t.Fatalf("expected LastEvalResult to be recorded")
+	}
+	if !updatedKI.LastEvalResult.Regression {
+		t.Errorf("expected LastEvalResult.Regression to be true, got false")
+	}
+	if updatedKI.LastEvalResult.RoundsBaseline != 1 || updatedKI.LastEvalResult.RoundsWithKI != 2 {
+		t.Errorf("expected 1 baseline round vs 2 rounds with KI, got baseline=%d withKI=%d",
+			updatedKI.LastEvalResult.RoundsBaseline, updatedKI.LastEvalResult.RoundsWithKI)
+	}
+}
+
+
 
 
 

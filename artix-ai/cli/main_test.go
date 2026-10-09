@@ -474,6 +474,48 @@ Audit logging test
 	}
 }
 
+func TestCLI_KnowledgeEval_UnmeasuredWhenNoMeasurementCanRun(t *testing.T) {
+	tmpDir := t.TempDir()
+	store := knowledge.NewStore(tmpDir)
+
+	ki := &knowledge.KnowledgeItem{
+		ID:           "ki-unmeasured-01",
+		Title:        "Unmeasured Test Item",
+		Category:     knowledge.CategoryArchitecture,
+		Breakthrough: "Item with no measurement possible",
+		Status:       "active",
+		ApprovedBy:   "alice-codeowner",
+	}
+	if err := store.Save(ki); err != nil {
+		t.Fatalf("failed to save seed KI: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := RunCLI(tmpDir, nil, []string{
+		"knowledge",
+		"eval",
+		"ki-unmeasured-01",
+	}, &stdout, &stderr)
+
+	if code == 0 {
+		t.Fatalf("expected artix knowledge eval to fail/exit non-zero when no measurement can run, got exit 0")
+	}
+
+	outCombined := stdout.String() + stderr.String()
+	if !strings.Contains(strings.ToLower(outCombined), "unmeasured") {
+		t.Errorf("expected output to mention 'unmeasured', got: %s", outCombined)
+	}
+
+	reloaded, err := store.Get("ki-unmeasured-01")
+	if err != nil {
+		t.Fatalf("failed to reload KI: %v", err)
+	}
+	if reloaded.LastEvalResult == nil || reloaded.LastEvalResult.Status != "unmeasured" {
+		t.Errorf("expected LastEvalResult status to be 'unmeasured', got: %+v", reloaded.LastEvalResult)
+	}
+}
+
+
 
 
 
