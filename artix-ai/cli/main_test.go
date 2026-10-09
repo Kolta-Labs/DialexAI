@@ -309,6 +309,39 @@ func TestAutonomyGateErrorText_SignedPolicyRequirement(t *testing.T) {
 	}
 }
 
+func TestCLI_KnowledgeEval_Command(t *testing.T) {
+	tmpDir := t.TempDir()
+	store := knowledge.NewStore(tmpDir)
+
+	ki := &knowledge.KnowledgeItem{
+		ID:           "ki-eval-01",
+		Title:        "Eval CLI Test",
+		Category:     knowledge.CategoryArchitecture,
+		Breakthrough: "Test item for eval command",
+		Status:       "active",
+		ApprovedBy:   "alice-codeowner",
+	}
+	if err := store.Save(ki); err != nil {
+		t.Fatalf("failed to save seed KI: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := RunCLI(tmpDir, nil, []string{
+		"knowledge",
+		"eval",
+		"ki-eval-01",
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected artix knowledge eval to succeed, got exit %d, stderr: %s", code, stderr.String())
+	}
+	outStr := stdout.String()
+	if !strings.Contains(outStr, "ki-eval-01") || !strings.Contains(outStr, "A/B evaluation") {
+		t.Errorf("expected eval output to contain KI ID and eval result, got: %s", outStr)
+	}
+}
+
+
 
 
 

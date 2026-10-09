@@ -2093,6 +2093,78 @@ func TestAutonomyGate_ErrorStringDescribesSignedPolicy(t *testing.T) {
 	}
 }
 
+func TestLoop_TriggersABEval_AutoDemotesRegressedKI(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+	kStore := knowledge.NewStore(tempDir)
+
+	// Seed a ratified active KI
+	ki := &knowledge.KnowledgeItem{
+		ID:           "ki-regression-test-01",
+		Title:        "Harmful Rule That Increases Rounds",
+		Category:     knowledge.CategoryArchitecture,
+		Breakthrough: "Force excessive sync roundtrips",
+		Status:       "active",
+		ApprovedBy:   "alice-codeowner",
+	}
+	if err := kStore.Save(ki); err != nil {
+		t.Fatalf("failed to save seed KI: %v", err)
+	}
+
+	reg := persona.NewRegistry("")
+	coderObj, _ := NewDomainCoder("backend_engineer", reg)
+	rev := newTestReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coderObj, rev, driver, box)
+
+	storySpec := &spec.StorySpec{
+		ID:           "SPEC-AB-EVAL-01",
+		Title:        "A/B Eval Loop Test",
+		TestCommands: []string{"grep '1' counter.txt"},
+	}
+
+	// Harness runner that simulates 1 round baseline vs 3 rounds with the candidate KI
+	opts := &LoopOptions{
+		MaxRounds:      5,
+		TriggerABEval:  true,
+		ABEvalInterval: 1, // trigger after 1 converged run
+		MockPatchGen: func(round int, feedback string) string {
+			return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+1\n"
+		},
+		ABEvalRunner: func(ctx context.Context, item any) (int, bool, error) {
+			if item == nil {
+				// Baseline run without KI: converges in 1 round
+				return 1, true, nil
+			}
+			// Run with KI: regressed, takes 3 rounds
+			return 3, true, nil
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if !res.Success {
+		t.Fatalf("expected main loop to succeed, got: %+v", res)
+	}
+
+	// Verify the KI in kStore was auto-demoted due to regression detected by RunABEval
+	updatedKI, err := kStore.Get("ki-regression-test-01")
+	if err != nil {
+		t.Fatalf("failed to retrieve KI after loop: %v", err)
+	}
+	if updatedKI.Status != "demoted" {
+		t.Errorf("expected KI to be auto-demoted after A/B regression, got status %q", updatedKI.Status)
+	}
+	if !strings.Contains(updatedKI.DemotedReason, "A/B evaluation regression") {
+		t.Errorf("expected DemotedReason to mention A/B evaluation regression, got %q", updatedKI.DemotedReason)
+	}
+}
+
+
 
 
 
