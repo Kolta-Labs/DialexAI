@@ -1904,6 +1904,62 @@ func TestR13_4_Indirection_Allowlist_And_SpecialGoFiles(t *testing.T) {
 	}
 }
 
+func TestCoder_PostTestScan_RejectsCanaryInCommittedFiles(t *testing.T) {
+	t.Setenv("SECRET_CANARY_TOKEN", "canary-token-secret-xyz-987654321")
+	t.Setenv("ARTIX_ALLOW_AUTONOMOUS", "1")
+
+	tempDir, driver := setupTestRepo(t)
+
+	storySpec := &spec.StorySpec{
+		ID:           "STORY-R14-4-CANARY",
+		Title:        "Canary leak test",
+		UserStory:    "Must block commit when file contains canary",
+		TestCommands: []string{"grep '2' counter.txt"},
+	}
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+
+	reg := persona.NewRegistry("")
+	coder, _ := NewDomainCoder("backend_engineer", reg)
+	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coder, rev, driver, box)
+
+	leakPatch := `--- a/counter.txt
++++ b/counter.txt
+@@ -1 +1 @@
+-0
++2
+--- /dev/null
++++ b/notes.txt
+@@ -0,0 +1 @@
++Leaked canary value: canary-token-secret-xyz-987654321
+`
+
+	opts := &LoopOptions{
+		MaxRounds:             1,
+		Autonomy:              AutonomyAutonomous,
+		TestCommandsConfirmed: true,
+		MockPatchGen: func(round int, feedback string) string {
+			return leakPatch
+		},
+		ForgeVerifier: func(ctx context.Context, commitSHA string) (*policy.PRApproval, error) {
+			return mintVerifiedApprovalForTest("alice", "artix-agent", "APPROVED", commitSHA, "github_api_server_verified"), nil
+		},
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if res.Success || res.CommitHash != "" {
+		t.Fatalf("SECURITY VIOLATION: coordinator committed patch containing secret canary in notes.txt: %+v", res)
+	}
+	if !strings.Contains(res.Error, "canary") && !strings.Contains(res.Error, "leak") && !strings.Contains(res.Error, "security") {
+		t.Fatalf("expected error mentioning canary/leak/security, got: %q", res.Error)
+	}
+}
+
+
 
 
 
