@@ -362,4 +362,89 @@ func TestValidateTestCommands_RejectsUnsignedCommandsInEnterprise(t *testing.T) 
 	}
 }
 
+func TestBoard1_SignedPolicyAutonomyGate_FailClosed(t *testing.T) {
+	ResetCache()
+	defer ResetCache()
+
+	tempDir := t.TempDir()
+	signingKey := "board1-test-signing-key-32bytes!!"
+	SetTrustedKey("corp-board1", signingKey)
+
+	// 1. Absent signature -> VerifyAutonomyGate must fail closed
+	unsignedFile := filepath.Join(tempDir, "unsigned_policy.json")
+	_ = os.WriteFile(unsignedFile, []byte(`{"allowAutonomous": true, "enterpriseMode": true}`), 0644)
+	SetDefaultPolicyPath(unsignedFile)
+	ResetCache()
+
+	if IsAutonomousAllowed() {
+		t.Errorf("IsAutonomousAllowed must return false for unsigned policy file")
+	}
+	if err := VerifyAutonomyGate(); err == nil {
+		t.Errorf("VerifyAutonomyGate must fail closed for unsigned policy file, got nil")
+	}
+
+	// 2. Env var alone cannot grant autonomy without signed policy (env vars demoted to path only)
+	t.Setenv("ARTIX_ALLOW_AUTONOMOUS", "1")
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+	ResetCache()
+	if IsAutonomousAllowed() {
+		t.Errorf("ARTIX_ALLOW_AUTONOMOUS=1 must not bypass missing signed policy")
+	}
+	if err := VerifyAutonomyGate(); err == nil {
+		t.Errorf("VerifyAutonomyGate must fail closed despite ARTIX_ALLOW_AUTONOMOUS=1 when policy unsigned")
+	}
+
+	// 3. Expired signed policy -> must fail closed
+	expiredFile := filepath.Join(tempDir, "expired_policy.json")
+	_ = os.WriteFile(expiredFile, []byte(`{
+		"allowAutonomous": true,
+		"enterpriseMode": true,
+		"approverIdentity": "security-council@corp.internal",
+		"expiresAt": "2020-01-01T00:00:00Z"
+	}`), 0644)
+	if err := SignPolicyFile(expiredFile, signingKey); err != nil {
+		t.Fatalf("failed to sign expired policy: %v", err)
+	}
+	SetDefaultPolicyPath(expiredFile)
+	ResetCache()
+
+	if IsAutonomousAllowed() {
+		t.Errorf("IsAutonomousAllowed must return false for expired signed policy")
+	}
+	if err := VerifyAutonomyGate(); err == nil {
+		t.Errorf("VerifyAutonomyGate must fail for expired signed policy")
+	}
+
+	// 4. Valid signed non-expired policy allowing autonomy -> must pass
+	validFile := filepath.Join(tempDir, "valid_policy.json")
+	_ = os.WriteFile(validFile, []byte(`{
+		"allowAutonomous": true,
+		"enterpriseMode": true,
+		"approverIdentity": "security-council@corp.internal",
+		"expiresAt": "2039-12-31T23:59:59Z"
+	}`), 0644)
+	if err := SignPolicyFile(validFile, signingKey); err != nil {
+		t.Fatalf("failed to sign valid policy: %v", err)
+	}
+	SetDefaultPolicyPath(validFile)
+	ResetCache()
+
+	if !IsAutonomousAllowed() {
+		t.Errorf("IsAutonomousAllowed must return true for valid signed policy")
+	}
+	if err := VerifyAutonomyGate(); err != nil {
+		t.Errorf("VerifyAutonomyGate must succeed for valid signed policy, got: %v", err)
+	}
+
+	// 5. PolicyHash must be populated and non-empty
+	p := Active()
+	if p.PolicyHash == "" {
+		t.Errorf("expected non-empty PolicyHash on verified policy")
+	}
+	if GetPolicyHash() != p.PolicyHash {
+		t.Errorf("GetPolicyHash() mismatch: got %s, want %s", GetPolicyHash(), p.PolicyHash)
+	}
+}
+
+
 
