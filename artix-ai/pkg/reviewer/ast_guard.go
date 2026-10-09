@@ -1547,7 +1547,8 @@ func evalConstExpr(expr ast.Expr, vars map[string]constResult, unsignedVars map[
 			if idY, okY := e.Y.(*ast.Ident); okY {
 				nameX := resolveAlias(idX.Name, vars)
 				nameY := resolveAlias(idY.Name, vars)
-				if nameX == nameY && nameX != "nil" && nameX != "nan" && nameX != "f" && nameX != "err" && nameX != "v" {
+				if nameX == nameY && nameX != "nil" && nameX != "nan" && nameX != "f" && nameX != "err" && nameX != "v" &&
+					nameX != "x" && nameX != "y" && nameX != "val" && nameX != "flt" && nameX != "fl" && nameX != "d" && nameX != "f32" && nameX != "f64" && nameX != "float" {
 					if e.Op == token.EQL {
 						return constResult{kind: kindBool, bVal: true}, true
 					}
@@ -1632,6 +1633,43 @@ func isTautologicalAssertion(call *ast.CallExpr) bool {
 					return true
 				}
 			}
+		case "Empty", "Emptyf":
+			if len(call.Args) >= 2 {
+				arg := call.Args[1]
+				if id, ok := arg.(*ast.Ident); ok && id.Name == "nil" {
+					return true
+				}
+				if lit, ok := arg.(*ast.BasicLit); ok && (lit.Value == `""` || lit.Value == "``") {
+					return true
+				}
+				if cl, ok := arg.(*ast.CompositeLit); ok && len(cl.Elts) == 0 {
+					return true
+				}
+			}
+		case "Len", "Lenf":
+			if len(call.Args) >= 3 {
+				argObj := call.Args[1]
+				argLen := call.Args[2]
+				lenIsZero := false
+				if lit, ok := argLen.(*ast.BasicLit); ok && lit.Kind == token.INT && lit.Value == "0" {
+					lenIsZero = true
+				}
+				if lenIsZero {
+					if lit, ok := argObj.(*ast.BasicLit); ok && (lit.Value == `""` || lit.Value == "``") {
+						return true
+					}
+					if cl, ok := argObj.(*ast.CompositeLit); ok && len(cl.Elts) == 0 {
+						return true
+					}
+				}
+			}
+		case "Contains", "Containsf":
+			if len(call.Args) >= 3 {
+				subArg := call.Args[2]
+				if lit, ok := subArg.(*ast.BasicLit); ok && (lit.Value == `""` || lit.Value == "``") {
+					return true
+				}
+			}
 		}
 	}
 	return false
@@ -1643,7 +1681,7 @@ func isNonWorkTestCall(call *ast.CallExpr) bool {
 	}
 	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 		name := sel.Sel.Name
-		if name == "Parallel" || name == "Setenv" || name == "Helper" {
+		if name == "Parallel" || name == "Setenv" || name == "Helper" || name == "Skip" || name == "Skipf" || name == "SkipNow" {
 			return true
 		}
 	}
@@ -1740,7 +1778,8 @@ func isRealAssertionCall(call *ast.CallExpr) bool {
 			strings.HasPrefix(name, "close") || strings.HasPrefix(name, "parse") || strings.HasPrefix(name, "execute") ||
 			strings.HasPrefix(name, "templates") || strings.HasPrefix(name, "complete") || strings.HasPrefix(name, "nummethods") ||
 			strings.HasPrefix(name, "new") || strings.HasPrefix(name, "clone") || strings.HasPrefix(name, "read") ||
-			strings.HasPrefix(name, "write") || strings.HasPrefix(name, "lookup") {
+			strings.HasPrefix(name, "write") || strings.HasPrefix(name, "lookup") ||
+			strings.HasPrefix(name, "nan") || strings.HasPrefix(name, "isnan") {
 			return true
 		}
 	}
@@ -1753,7 +1792,8 @@ func isRealAssertionCall(call *ast.CallExpr) bool {
 			strings.HasPrefix(name, "test") || strings.HasPrefix(name, "check") || strings.HasPrefix(name, "verify") ||
 			strings.HasPrefix(name, "chk") || strings.HasPrefix(name, "must") || strings.HasPrefix(name, "expect") ||
 			strings.HasPrefix(name, "validate") || strings.HasPrefix(name, "match") || strings.HasPrefix(name, "new") ||
-			strings.HasPrefix(name, "parse") || strings.HasPrefix(name, "read") || strings.HasPrefix(name, "write") {
+			strings.HasPrefix(name, "parse") || strings.HasPrefix(name, "read") || strings.HasPrefix(name, "write") ||
+			strings.HasPrefix(name, "nan") || strings.HasPrefix(name, "isnan") {
 			return true
 		}
 	}
@@ -1792,6 +1832,7 @@ func helperCanReachAssertions(helper *ast.FuncDecl, visited ...map[string]bool) 
 type syncJoinInfo struct {
 	goroutineCount              int
 	goroutineWithAssertionCount int
+	errgroupGoCount             int
 	hasWaitCall                 bool
 	hasChanRecv                 bool
 }
@@ -1830,6 +1871,85 @@ func checkASTBlock(stmts []ast.Stmt, active bool, vars map[string]constResult, u
 		if isControlFlowTerminator(stmt) {
 			terminated = true
 			active = false
+			continue
+		}
+
+		if exprStmt, ok := stmt.(*ast.ExprStmt); ok {
+			if call, ok := exprStmt.X.(*ast.CallExpr); ok {
+				if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+					name := sel.Sel.Name
+					if name == "Skip" || name == "Skipf" || name == "SkipNow" {
+						if !foundAssertion {
+							terminated = true
+							active = false
+							continue
+						}
+					}
+				}
+			}
+		}
+
+		if selStmt, ok := stmt.(*ast.SelectStmt); ok {
+			if selStmt.Body != nil {
+				for _, commStmt := range selStmt.Body.List {
+					if cc, ok := commStmt.(*ast.CommClause); ok {
+						if cc.Comm == nil {
+							// default: clause
+							fAss, _, v := checkASTBlock(cc.Body, active, cloneVars(vars), unsignedVars, helpers, closures, calledClosures, outerJoins)
+							if fAss {
+								foundAssertion = true
+							}
+							violations = append(violations, v...)
+							continue
+						}
+						isNilChan := false
+						var chanExpr ast.Expr
+						if exprStmt, ok := cc.Comm.(*ast.ExprStmt); ok {
+							if unary, ok := exprStmt.X.(*ast.UnaryExpr); ok && unary.Op == token.ARROW {
+								chanExpr = unary.X
+							}
+						} else if assign, ok := cc.Comm.(*ast.AssignStmt); ok && len(assign.Rhs) > 0 {
+							if unary, ok := assign.Rhs[0].(*ast.UnaryExpr); ok && unary.Op == token.ARROW {
+								chanExpr = unary.X
+							}
+						} else if send, ok := cc.Comm.(*ast.SendStmt); ok {
+							chanExpr = send.Chan
+						}
+
+						if chanExpr != nil {
+							exprToCheck := chanExpr
+							if paren, ok := exprToCheck.(*ast.ParenExpr); ok {
+								exprToCheck = paren.X
+							}
+							if call, ok := exprToCheck.(*ast.CallExpr); ok {
+								funExpr := call.Fun
+								if paren, ok := funExpr.(*ast.ParenExpr); ok {
+									funExpr = paren.X
+								}
+								if _, isChan := funExpr.(*ast.ChanType); isChan && len(call.Args) == 1 {
+									if id, ok := call.Args[0].(*ast.Ident); ok && id.Name == "nil" {
+										isNilChan = true
+									}
+								}
+							}
+							if id, ok := exprToCheck.(*ast.Ident); ok && id.Name == "nil" {
+								isNilChan = true
+							}
+						}
+
+						if isNilChan {
+							violations = append(violations, "test integrity violation: dead nil-channel select case detected")
+						} else {
+							foundAssertion = true
+							fAss, _, v := checkASTBlock(cc.Body, active, cloneVars(vars), unsignedVars, helpers, closures, calledClosures, outerJoins)
+							if fAss {
+								foundAssertion = true
+							}
+							violations = append(violations, v...)
+						}
+					}
+				}
+			}
 			continue
 		}
 
@@ -1968,10 +2088,6 @@ func checkASTBlock(stmts []ast.Stmt, active bool, vars map[string]constResult, u
 				violations = append(violations, v...)
 			}
 			if swStmt.Tag == nil {
-				// Tagless switch: each case is a boolean expression evaluated at runtime.
-				// A case is dead ONLY IF all expressions in its case list evaluate to constant false.
-				// If any expression is dynamic (!okExpr) or constant true, the case is active.
-				// If case list is empty (default: clause), it is active.
 				if swStmt.Body != nil {
 					for _, clause := range swStmt.Body.List {
 						if cc, ok := clause.(*ast.CaseClause); ok {
@@ -2136,6 +2252,9 @@ func checkASTBlock(stmts []ast.Stmt, active bool, vars map[string]constResult, u
 					}
 					if sel.Sel.Name == "Cleanup" {
 						return false
+					}
+					if sel.Sel.Name == "Go" && outerJoins != nil {
+						outerJoins.errgroupGoCount++
 					}
 					if sel.Sel.Name == "Wait" && outerJoins != nil {
 						outerJoins.hasWaitCall = true
@@ -2306,6 +2425,9 @@ func inspectTestASTIntegrity(node *ast.File) []string {
 		outerJoins := &syncJoinInfo{}
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
 			if sel, ok := n.(*ast.SelectorExpr); ok {
+				if sel.Sel.Name == "Go" {
+					outerJoins.errgroupGoCount++
+				}
 				if sel.Sel.Name == "Wait" {
 					outerJoins.hasWaitCall = true
 				}
@@ -2318,6 +2440,10 @@ func inspectTestASTIntegrity(node *ast.File) []string {
 
 		foundAssertion, _, blockViolations := checkASTBlock(fn.Body.List, true, localConsts, unsignedVars, helpers, closures, calledClosures, outerJoins)
 		violations = append(violations, blockViolations...)
+
+		if outerJoins.errgroupGoCount > 0 && !outerJoins.hasWaitCall {
+			violations = append(violations, fmt.Sprintf("test integrity violation: errgroup.Go without Wait() uncoordinated execution detected in test %s", fn.Name.Name))
+		}
 
 		if !foundAssertion {
 			if outerJoins.goroutineWithAssertionCount > 0 && (outerJoins.hasWaitCall || outerJoins.hasChanRecv) {
