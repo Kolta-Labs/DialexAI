@@ -663,12 +663,19 @@ func ValidateTestCommands(commands []string) ([]string, error) {
 }
 
 // EffectiveAuditLogPath returns the audit log destination.
-// When Enterprise Mode is on, ARTIX_AUDIT_LOG env var is strictly ignored to prevent tampering.
+// In Enterprise Mode, ARTIX_AUDIT_LOG may redirect the log path but may NOT disable it (e.g. /dev/null or empty/none).
 func EffectiveAuditLogPath(workspaceDir string) string {
 	pol := Active()
 	if IsEnterprise() {
 		if pol.IsVerified && pol.AuditLogPath != "" {
 			return pol.AuditLogPath
+		}
+		if env := os.Getenv("ARTIX_AUDIT_LOG"); env != "" {
+			trimmed := strings.TrimSpace(env)
+			lower := strings.ToLower(trimmed)
+			if lower != "/dev/null" && lower != "none" && lower != "off" && lower != "disabled" && lower != "false" && lower != "0" {
+				return trimmed
+			}
 		}
 		if workspaceDir != "" {
 			return filepath.Join(workspaceDir, ".artix", "audit.jsonl")

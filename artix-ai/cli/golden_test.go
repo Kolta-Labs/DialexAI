@@ -807,6 +807,7 @@ func TestR8_4_Phase1_AwaitingApproval_ReportsSuccessFalse_StatusAwaitingApproval
 		AllowAutonomous:      true,
 		RequireForgeApproval: true,
 		AuditPublicKey:       hex.EncodeToString(pub),
+		AuditRemoteSinks:     []policy.RemoteSinkConfig{{Type: "syslog", Endpoint: "127.0.0.1:514"}},
 		AllowedTestCommands:  []string{`test -f counter.txt`},
 		IsVerified:           true,
 	})
@@ -1035,6 +1036,7 @@ As an enterprise user, verified compiled-key policies must allow enterprise oper
 		"allowAutonomous": true,
 		"requireSignedPolicy": true,
 		"auditPrivateKeyPath": %q,
+		"auditRemoteSinks": [{"type": "syslog", "endpoint": "127.0.0.1:514"}],
 		"allowedTestCommands": ["echo ok"]
 	}`, auditKeyPath)
 	_ = os.WriteFile(policyPath, []byte(policyJSON), 0644)
@@ -1085,6 +1087,7 @@ func TestR13_5_Phase1_CandidateAuditRecord_StatusAwaitingApproval_NotFailed(t *t
 		RequireSeparateApprover: true,
 		AllowedTestCommands:     []string{"test -f counter.txt"},
 		AuditPrivateKeyPath:     keyPath,
+		AuditRemoteSinks:        []policy.RemoteSinkConfig{{Type: "syslog", Endpoint: "127.0.0.1:514"}},
 		IsVerified:              true,
 	})
 	defer policy.ResetTestPolicy()

@@ -78,6 +78,7 @@ func setupTestRepo(t *testing.T) (string, *git.Driver) {
 		_ = os.WriteFile(keyPath, []byte(hex.EncodeToString(priv)), 0600)
 		t.Setenv("ARTIX_AUDIT_PRIVATE_KEY_PATH", keyPath)
 		t.Setenv("ARTIX_AUDIT_PUBLIC_KEY", hex.EncodeToString(pub))
+		t.Setenv("ARTIX_AUDIT_SYSLOG_ENDPOINT", "127.0.0.1:514")
 	}
 
 	_ = exec.Command("git", "init", tempDir).Run()

@@ -261,6 +261,22 @@ func NewLogger(workspaceDir string) *Logger {
 				l.initError = fmt.Errorf("enterprise audit policy violation: %w", err)
 			}
 		}
+
+		// Mandatory external sink under ARTIX_ENTERPRISE
+		if len(l.remoteSinks) == 0 {
+			if ep := os.Getenv("ARTIX_AUDIT_REMOTE_SINK"); ep != "" {
+				l.remoteSinks = append(l.remoteSinks, policy.RemoteSinkConfig{Type: "http", Endpoint: ep})
+			} else if ep := os.Getenv("ARTIX_AUDIT_HTTP_ENDPOINT"); ep != "" {
+				l.remoteSinks = append(l.remoteSinks, policy.RemoteSinkConfig{Type: "http", Endpoint: ep})
+			} else if ep := os.Getenv("ARTIX_AUDIT_OTEL_ENDPOINT"); ep != "" {
+				l.remoteSinks = append(l.remoteSinks, policy.RemoteSinkConfig{Type: "http", Endpoint: ep})
+			} else if ep := os.Getenv("ARTIX_AUDIT_SYSLOG_ENDPOINT"); ep != "" {
+				l.remoteSinks = append(l.remoteSinks, policy.RemoteSinkConfig{Type: "syslog", Endpoint: ep})
+			}
+		}
+		if len(l.remoteSinks) == 0 && l.initError == nil {
+			l.initError = fmt.Errorf("enterprise audit policy violation: external sink (syslog/OTel/S3) is mandatory under ARTIX_ENTERPRISE")
+		}
 	}
 
 	// Initialize lastHash from existing log file if available
@@ -317,6 +333,9 @@ func (l *Logger) AddRemoteSink(sink policy.RemoteSinkConfig) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.remoteSinks = append(l.remoteSinks, sink)
+	if l.initError != nil && strings.Contains(l.initError.Error(), "external sink") {
+		l.initError = nil
+	}
 }
 
 // LogPath returns the path to the active audit log file.
@@ -375,6 +394,9 @@ func (l *Logger) Emit(event AuditEvent) error {
 	}
 	if policy.IsEnterprise() && l.asymSigningKey == nil {
 		return fmt.Errorf("audit logging refused: ed25519 asymmetric signing key is required in enterprise mode")
+	}
+	if policy.IsEnterprise() && len(l.remoteSinks) == 0 {
+		return fmt.Errorf("enterprise audit policy violation: external sink (syslog/OTel/S3) is mandatory under ARTIX_ENTERPRISE")
 	}
 
 	// Hash Chaining

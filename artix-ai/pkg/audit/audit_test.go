@@ -126,15 +126,15 @@ func TestTamperDetectionBrokenChain(t *testing.T) {
 	}
 }
 
-func TestAuditLogIgnoresEnvOverrideInEnterpriseMode(t *testing.T) {
+func TestAuditLogCannotBeDisabledInEnterpriseMode(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("ARTIX_ENTERPRISE", "1")
-	t.Setenv("ARTIX_AUDIT_LOG", "/tmp/untrusted_audit.log")
+	t.Setenv("ARTIX_AUDIT_LOG", "/dev/null")
 
 	logger := NewLogger(tempDir)
 	expected := filepath.Join(tempDir, ".artix", "audit.jsonl")
 	if logger.LogPath() != expected {
-		t.Errorf("expected audit log to ignore ARTIX_AUDIT_LOG in enterprise mode; expected %s, got %s", expected, logger.LogPath())
+		t.Errorf("expected audit log to ignore /dev/null in enterprise mode; expected %s, got %s", expected, logger.LogPath())
 	}
 }
 
@@ -540,6 +540,7 @@ func TestR2_6_EnterpriseMode_RequiresExternalEd25519KeyAndRefusesOtherwise(t *te
 		EnterpriseMode:      true,
 		RequireSignedPolicy: true,
 		IsVerified:          true,
+		AuditRemoteSinks:    []policy.RemoteSinkConfig{{Type: "syslog", Endpoint: "127.0.0.1:514"}},
 	}
 	policy.SetActivePolicyForTest(entPol)
 	defer policy.ResetTestPolicy()

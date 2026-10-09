@@ -46,6 +46,7 @@ func setupTestRepoForForge(t *testing.T) (string, *git.Driver) {
 		_ = os.WriteFile(keyPath, []byte(hex.EncodeToString(priv)), 0600)
 		t.Setenv("ARTIX_AUDIT_PRIVATE_KEY_PATH", keyPath)
 		t.Setenv("ARTIX_AUDIT_PUBLIC_KEY", hex.EncodeToString(pub))
+		t.Setenv("ARTIX_AUDIT_SYSLOG_ENDPOINT", "127.0.0.1:514")
 	}
 
 	_ = exec.Command("git", "init", tempDir).Run()
@@ -1342,6 +1343,7 @@ func TestR10_2_BuiltBinary_Phase1ToPhase2_EndToEndWithVerdictHash(t *testing.T) 
 		"requireSignedPolicy": true,
 		"requireForgeApproval": true,
 		"allowedTestCommands": ["test -f counter.txt"],
+		"auditRemoteSinks": [{"type": "syslog", "endpoint": "127.0.0.1:514"}],
 		"auditPublicKey": "%s"
 	}`, pubHex)
 	_ = os.WriteFile(policyFile, []byte(policyJSON), 0644)
@@ -1908,6 +1910,7 @@ func TestR14_8_FullEnterprise_Phase1_To_VerifyApproval_E2E(t *testing.T) {
 		AllowedApprovers:        []string{"alice", "security-lead"},
 		AuditPublicKey:          auditPubHex,
 		AuditPrivateKeyPath:     auditKeyPath,
+		AuditRemoteSinks:        []policy.RemoteSinkConfig{{Type: "syslog", Endpoint: "127.0.0.1:514"}},
 		AllowedTestCommands:     []string{"grep '1' counter.txt"},
 		RequireForgeApproval:    true,
 	}
