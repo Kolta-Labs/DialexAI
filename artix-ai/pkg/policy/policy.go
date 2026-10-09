@@ -90,10 +90,12 @@ type BudgetConfig struct {
 
 // ReviewerPolicyConfig defines constraints for adversarial reviewer models.
 type ReviewerPolicyConfig struct {
-	EnforceDisjointModelFamilies bool     `json:"enforceDisjointModelFamilies"`
-	AllowedCriticFamilies        []string `json:"allowedCriticFamilies,omitempty"`
-	AllowedSemanticRunners       []string `json:"allowedSemanticRunners,omitempty"`
-	RestrictedPaths              []string `json:"restrictedPaths,omitempty"`
+	EnforceDisjointModelFamilies bool              `json:"enforceDisjointModelFamilies"`
+	AllowedCriticFamilies        []string          `json:"allowedCriticFamilies,omitempty"`
+	AllowedSemanticRunners       []string          `json:"allowedSemanticRunners,omitempty"`
+	RestrictedPaths              []string          `json:"restrictedPaths,omitempty"`
+	ModelFamilies                map[string]string `json:"modelFamilies,omitempty"`
+	ModelDerivations             map[string]string `json:"modelDerivations,omitempty"`
 }
 
 var defaultAllowedSemanticRunners = []string{
@@ -192,6 +194,8 @@ type Policy struct {
 	AuditRemoteSinks        []RemoteSinkConfig   `json:"auditRemoteSinks,omitempty"`
 	Budget                  BudgetConfig         `json:"budget,omitempty"`
 	Reviewer                ReviewerPolicyConfig `json:"reviewer,omitempty"`
+	ModelFamilies           map[string]string    `json:"modelFamilies,omitempty"`
+	ModelDerivations        map[string]string    `json:"modelDerivations,omitempty"`
 	AllowedTestCommands     []string             `json:"allowedTestCommands,omitempty"`
 	RequireSignedTestCommands bool               `json:"requireSignedTestCommands,omitempty"`
 	RequireForgeApproval    bool                 `json:"requireForgeApproval,omitempty"`

@@ -482,6 +482,60 @@ func TestResolveModelFamily_CanonicalTableAndUnknown(t *testing.T) {
 	}
 }
 
+func TestResolveModelFamily_PolicyDerivations_OrderedRules_AndRejection(t *testing.T) {
+	policy.ResetCache()
+	defer policy.ResetCache()
+
+	// 1. Policy with custom model derivation: acme-coder-7b is Llama-derived
+	pol := &policy.Policy{
+		EnterpriseMode: true,
+		Reviewer: policy.ReviewerPolicyConfig{
+			EnforceDisjointModelFamilies: true,
+			ModelDerivations: map[string]string{
+				"acme-coder-7b": "llama",
+			},
+			ModelFamilies: map[string]string{
+				"custom-qwen-preview": "qwen",
+			},
+		},
+	}
+	policy.SetActivePolicyForTest(pol)
+	defer policy.ResetTestPolicy()
+
+	// acme-coder-7b declared as Llama-derived resolves to meta
+	gotFamily, resolution := ResolveModelFamilyWithDetails("", "acme-coder-7b")
+	if gotFamily != "meta" {
+		t.Fatalf("expected acme-coder-7b to resolve to 'meta', got %q", gotFamily)
+	}
+	if !strings.Contains(resolution, "policy") {
+		t.Errorf("expected resolution to record policy derivation, got: %s", resolution)
+	}
+
+	// Pairing acme-coder-7b Coder with a Llama Critic must be rejected under enterprise mode
+	reg := persona.NewRegistry("")
+	rev := NewAdversarialReviewer(reg)
+	rev.SetCoderFamily(gotFamily) // "meta"
+	err := rev.SetCriticWithFamily(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true}`, nil
+	}, "llama3.3")
+	if err == nil {
+		t.Fatalf("expected pairing acme-coder-7b (meta) with llama3.3 critic to be rejected under enterprise mode, but succeeded")
+	}
+
+	// 2. Ordered prefix rules: a model ID containing two family tokens resolves per documented ordering
+	// "claude-llama-hybrid" contains both "claude" and "llama". Since "claude" precedes "llama", it resolves to "anthropic".
+	orderedFamily1, res1 := ResolveModelFamilyWithDetails("", "claude-llama-hybrid")
+	if orderedFamily1 != "anthropic" {
+		t.Errorf("expected claude-llama-hybrid to resolve to 'anthropic' per ordered rules, got %q (res: %s)", orderedFamily1, res1)
+	}
+
+	// "llama-claude-hybrid" has prefix "llama", so it resolves to "meta"
+	orderedFamily2, res2 := ResolveModelFamilyWithDetails("", "llama-claude-hybrid")
+	if orderedFamily2 != "meta" {
+		t.Errorf("expected llama-claude-hybrid to resolve to 'meta' per ordered rules, got %q (res: %s)", orderedFamily2, res2)
+	}
+}
+
 func TestDeepSemanticASTTaboosNonStatementDiffs(t *testing.T) {
 	rev := NewAdversarialReviewer(persona.NewRegistry(""))
 	rev.SetGlobalTaboos(steering.GlobalTabooSpace{

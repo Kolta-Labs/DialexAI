@@ -118,6 +118,11 @@ func ResolveModelFamily(provider, modelID string) string {
 	return ""
 }
 
+// ResolveModelFamilyWithDetails returns the resolved family and the method used to resolve it.
+func ResolveModelFamilyWithDetails(provider, modelID string) (family string, resolution string) {
+	return ResolveModelFamily(provider, modelID), "unknown"
+}
+
 // NormalizeModelFamily extracts the canonical model/provider family.
 func NormalizeModelFamily(name string) string {
 	return ResolveModelFamily("", name)
