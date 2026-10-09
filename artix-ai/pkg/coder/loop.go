@@ -281,6 +281,19 @@ func (c *ConvergenceCoordinator) Run(
 			if err != nil {
 				res.Error = err.Error()
 				res.CostReport = costReport
+				_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+					EventType:   audit.EventBudgetExhausted,
+					Status:      "FAILED",
+					StorySpecID: s.ID,
+					Details: map[string]any{
+						"storyId":       s.ID,
+						"limitType":     "max_usd",
+						"unpricedModel": modelKey,
+						"model":         modelKey,
+						"error":         err.Error(),
+						"limit":         opts.MaxUSD,
+					},
+				})
 				return res
 			}
 			coderCostUSD := (float64(totalCoderTokens) / 1000.0) * costPer1k
@@ -343,9 +356,46 @@ func (c *ConvergenceCoordinator) Run(
 					}
 					var costPer1k float64
 					if budget != nil {
-						costPer1k, _ = budget.GetModelPrice(modelKey)
+						var err error
+						costPer1k, err = budget.GetModelPrice(modelKey)
+						if err != nil && opts.MaxUSD > 0 {
+							res.CostReport = costReport
+							res.Error = err.Error()
+							_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+								EventType:   audit.EventBudgetExhausted,
+								Status:      "FAILED",
+								StorySpecID: s.ID,
+								Details: map[string]any{
+									"storyId":       s.ID,
+									"limitType":     "max_usd",
+									"unpricedModel": modelKey,
+									"model":         modelKey,
+									"error":         err.Error(),
+									"limit":         opts.MaxUSD,
+								},
+							})
+							return res
+						}
 					}
 					if costPer1k <= 0 {
+						if opts.MaxUSD > 0 {
+							res.CostReport = costReport
+							res.Error = fmt.Sprintf("budget error: model %q has no configured price under active MaxUSD limit $%.2f", modelKey, opts.MaxUSD)
+							_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+								EventType:   audit.EventBudgetExhausted,
+								Status:      "FAILED",
+								StorySpecID: s.ID,
+								Details: map[string]any{
+									"storyId":       s.ID,
+									"limitType":     "max_usd",
+									"unpricedModel": modelKey,
+									"model":         modelKey,
+									"error":         res.Error,
+									"limit":         opts.MaxUSD,
+								},
+							})
+							return res
+						}
 						costPer1k = 0.015
 					}
 					currentTotalUSD += (float64(u.TotalTokens) / 1000.0) * costPer1k
@@ -563,6 +613,22 @@ func (c *ConvergenceCoordinator) Run(
 			if err != nil {
 				res.Error = err.Error()
 				res.CostReport = costReport
+				if activeSession != nil {
+					_ = activeSession.Rollback()
+				}
+				_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+					EventType:   audit.EventBudgetExhausted,
+					Status:      "FAILED",
+					StorySpecID: s.ID,
+					Details: map[string]any{
+						"storyId":       s.ID,
+						"limitType":     "max_usd",
+						"unpricedModel": revModelKey,
+						"model":         revModelKey,
+						"error":         err.Error(),
+						"limit":         opts.MaxUSD,
+					},
+				})
 				return res
 			}
 			reviewerCostUSD := (float64(totalReviewerTokens) / 1000.0) * costPer1k
