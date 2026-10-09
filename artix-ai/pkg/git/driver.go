@@ -167,14 +167,25 @@ func (d *Driver) DeleteRemoteBranch(remote, branch string) (string, error) {
 }
 
 func (d *Driver) runGit(args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", d.repoDir}, args...)...)
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	var err error
+	for attempt := 0; attempt < 10; attempt++ {
+		stdout.Reset()
+		stderr.Reset()
+		cmd := exec.Command("git", append([]string{"-C", d.repoDir}, args...)...)
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
 
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("git %s failed: %w (stderr: %s)", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		err = cmd.Run()
+		if err == nil {
+			return stdout.String(), nil
+		}
+		if strings.Contains(stderr.String(), "index.lock") {
+			time.Sleep(25 * time.Millisecond)
+			continue
+		}
+		break
 	}
 
-	return stdout.String(), nil
+	return "", fmt.Errorf("git %s failed: %w (stderr: %s)", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 }

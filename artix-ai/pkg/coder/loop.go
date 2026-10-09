@@ -977,7 +977,12 @@ func (c *ConvergenceCoordinator) Run(
 			// Post-convergence Knowledge A/B evaluation: measure active KIs to auto-demote regressing items
 			for i := range activeKIs {
 				ki := &activeKIs[i]
-				ki.SessionCount++
+				newCount, err := kStore.IncrementSessionCount(ki.ID)
+				if err == nil && newCount > 0 {
+					ki.SessionCount = newCount
+				} else {
+					ki.SessionCount++
+				}
 				shouldEval := opts != nil && (opts.TriggerABEval || (opts.ABEvalInterval > 0 && ki.SessionCount%opts.ABEvalInterval == 0))
 				if shouldEval {
 					var evalRunner knowledge.ABEvalRunner
