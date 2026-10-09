@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"artix/pkg/policy"
 	"artix/pkg/sandbox"
@@ -61,6 +62,8 @@ func NewRegistry() *Registry {
 	r.Register(&GradleDriver{})
 	r.Register(&CargoDriver{})
 	r.Register(&NpmDriver{})
+	r.Register(&SwiftPMDriver{})
+	r.Register(&XcodeDriver{})
 	return r
 }
 
@@ -655,4 +658,240 @@ func DetectOfflineCacheMiss(output string) (string, bool) {
 	}
 
 	return "", false
+}
+
+// SwiftPMDriver supports Swift Package Manager projects.
+type SwiftPMDriver struct{}
+
+func (s *SwiftPMDriver) Name() string { return "swiftpm" }
+
+func (s *SwiftPMDriver) Detect(rootDir string) bool {
+	_, err := os.Stat(filepath.Join(rootDir, "Package.swift"))
+	return err == nil
+}
+
+func (s *SwiftPMDriver) CompileCmd(rootDir string) string {
+	return "swift build"
+}
+
+func (s *SwiftPMDriver) TestCmd(rootDir string) string {
+	return "swift test"
+}
+
+func (s *SwiftPMDriver) LintCmd(rootDir string) string {
+	return "swiftlint"
+}
+
+func (s *SwiftPMDriver) Warm(ctx context.Context, rootDir string) error {
+	cmd := exec.CommandContext(ctx, "swift", "package", "resolve")
+	cmd.Dir = rootDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("swift package resolve failed: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func (s *SwiftPMDriver) ExecuteOnHost(hostOS string, ctx context.Context, rootDir, phase string) *sandbox.ExecResult {
+	if strings.ToLower(hostOS) != "darwin" {
+		return &sandbox.ExecResult{
+			Command:  "swift " + phase,
+			ExitCode: 0,
+			Stdout:   "SKIPPED_HOST_UNSUPPORTED: Swift toolchains require macOS host (current: " + hostOS + ")",
+			Error:    "SKIPPED_HOST_UNSUPPORTED",
+		}
+	}
+	box := sandbox.NewSandbox(rootDir)
+	var cmd string
+	var timeout time.Duration
+	switch phase {
+	case "compile":
+		cmd = s.CompileCmd(rootDir)
+		timeout = policy.GetTimeout("swiftpm", "compile")
+	case "test":
+		cmd = s.TestCmd(rootDir)
+		timeout = policy.GetTimeout("swiftpm", "test")
+	case "lint":
+		cmd = s.LintCmd(rootDir)
+		timeout = policy.GetTimeout("swiftpm", "lint")
+	default:
+		cmd = s.TestCmd(rootDir)
+		timeout = policy.GetTimeout("swiftpm", "test")
+	}
+	return box.Run(ctx, cmd, &sandbox.ExecOptions{
+		Cwd:     rootDir,
+		Timeout: timeout,
+	})
+}
+
+func (s *SwiftPMDriver) Compile(ctx context.Context, rootDir string) *sandbox.ExecResult {
+	return s.ExecuteOnHost(runtime.GOOS, ctx, rootDir, "compile")
+}
+
+func (s *SwiftPMDriver) Test(ctx context.Context, rootDir string) *sandbox.ExecResult {
+	return s.ExecuteOnHost(runtime.GOOS, ctx, rootDir, "test")
+}
+
+func (s *SwiftPMDriver) Lint(ctx context.Context, rootDir string) *sandbox.ExecResult {
+	return s.ExecuteOnHost(runtime.GOOS, ctx, rootDir, "lint")
+}
+
+var swiftErrRegex = regexp.MustCompile(`(?m)^([^\s:]+\.swift):(\d+):(?:(\d+):)?\s*(error|warning):\s*(.*)$`)
+
+func (s *SwiftPMDriver) ParseErrorTrace(output string) []BuildDiagnostic {
+	var diags []BuildDiagnostic
+	matches := swiftErrRegex.FindAllStringSubmatch(output, -1)
+	for _, m := range matches {
+		line, _ := strconv.Atoi(m[2])
+		col := 0
+		if m[3] != "" {
+			col, _ = strconv.Atoi(m[3])
+		}
+		sev := SeverityError
+		if m[4] == "warning" {
+			sev = SeverityWarning
+		}
+		diags = append(diags, BuildDiagnostic{
+			File:     m[1],
+			Line:     line,
+			Column:   col,
+			Severity: sev,
+			Message:  strings.TrimSpace(m[5]),
+		})
+	}
+	return diags
+}
+
+// XcodeDriver supports native Xcode projects and workspaces.
+type XcodeDriver struct {
+	Destination string
+}
+
+func (x *XcodeDriver) Name() string { return "xcode" }
+
+func (x *XcodeDriver) Detect(rootDir string) bool {
+	matchesProj, _ := filepath.Glob(filepath.Join(rootDir, "*.xcodeproj"))
+	matchesWs, _ := filepath.Glob(filepath.Join(rootDir, "*.xcworkspace"))
+	return len(matchesProj) > 0 || len(matchesWs) > 0
+}
+
+func (x *XcodeDriver) DetectScheme(rootDir string) string {
+	matchesProj, _ := filepath.Glob(filepath.Join(rootDir, "*.xcodeproj"))
+	if len(matchesProj) > 0 {
+		base := filepath.Base(matchesProj[0])
+		return strings.TrimSuffix(base, ".xcodeproj")
+	}
+	matchesWs, _ := filepath.Glob(filepath.Join(rootDir, "*.xcworkspace"))
+	if len(matchesWs) > 0 {
+		base := filepath.Base(matchesWs[0])
+		return strings.TrimSuffix(base, ".xcworkspace")
+	}
+	return "App"
+}
+
+func (x *XcodeDriver) getDestination() string {
+	if x.Destination != "" {
+		return x.Destination
+	}
+	return "platform=iOS Simulator,name=iPhone 16"
+}
+
+func (x *XcodeDriver) derivedDataPath(rootDir string) string {
+	return filepath.Join(rootDir, ".derivedData")
+}
+
+func (x *XcodeDriver) CompileCmd(rootDir string) string {
+	scheme := x.DetectScheme(rootDir)
+	return fmt.Sprintf("xcodebuild build -scheme %s -destination '%s' -derivedDataPath %s",
+		scheme, x.getDestination(), x.derivedDataPath(rootDir))
+}
+
+func (x *XcodeDriver) TestCmd(rootDir string) string {
+	scheme := x.DetectScheme(rootDir)
+	return fmt.Sprintf("xcodebuild test -scheme %s -destination '%s' -derivedDataPath %s",
+		scheme, x.getDestination(), x.derivedDataPath(rootDir))
+}
+
+func (x *XcodeDriver) LintCmd(rootDir string) string {
+	scheme := x.DetectScheme(rootDir)
+	return fmt.Sprintf("xcodebuild analyze -scheme %s -destination '%s' -derivedDataPath %s",
+		scheme, x.getDestination(), x.derivedDataPath(rootDir))
+}
+
+func (x *XcodeDriver) Warm(ctx context.Context, rootDir string) error {
+	cmd := exec.CommandContext(ctx, "xcodebuild", "-resolvePackageDependencies")
+	cmd.Dir = rootDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("xcode dependency resolve failed: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func (x *XcodeDriver) ExecuteOnHost(hostOS string, ctx context.Context, rootDir, phase string) *sandbox.ExecResult {
+	if strings.ToLower(hostOS) != "darwin" {
+		return &sandbox.ExecResult{
+			Command:  "xcodebuild " + phase,
+			ExitCode: 0,
+			Stdout:   "SKIPPED_HOST_UNSUPPORTED: Xcode and iOS Simulators require macOS host (current: " + hostOS + ")",
+			Error:    "SKIPPED_HOST_UNSUPPORTED",
+		}
+	}
+	box := sandbox.NewSandbox(rootDir)
+	var cmd string
+	var timeout time.Duration
+	switch phase {
+	case "compile":
+		cmd = x.CompileCmd(rootDir)
+		timeout = policy.GetTimeout("xcode", "compile")
+	case "test":
+		cmd = x.TestCmd(rootDir)
+		timeout = policy.GetTimeout("xcode", "test")
+	case "lint":
+		cmd = x.LintCmd(rootDir)
+		timeout = policy.GetTimeout("xcode", "lint")
+	default:
+		cmd = x.TestCmd(rootDir)
+		timeout = policy.GetTimeout("xcode", "test")
+	}
+	return box.Run(ctx, cmd, &sandbox.ExecOptions{
+		Cwd:     rootDir,
+		Timeout: timeout,
+	})
+}
+
+func (x *XcodeDriver) Compile(ctx context.Context, rootDir string) *sandbox.ExecResult {
+	return x.ExecuteOnHost(runtime.GOOS, ctx, rootDir, "compile")
+}
+
+func (x *XcodeDriver) Test(ctx context.Context, rootDir string) *sandbox.ExecResult {
+	return x.ExecuteOnHost(runtime.GOOS, ctx, rootDir, "test")
+}
+
+func (x *XcodeDriver) Lint(ctx context.Context, rootDir string) *sandbox.ExecResult {
+	return x.ExecuteOnHost(runtime.GOOS, ctx, rootDir, "lint")
+}
+
+func (x *XcodeDriver) ParseErrorTrace(output string) []BuildDiagnostic {
+	var diags []BuildDiagnostic
+	matches := swiftErrRegex.FindAllStringSubmatch(output, -1)
+	for _, m := range matches {
+		line, _ := strconv.Atoi(m[2])
+		col := 0
+		if m[3] != "" {
+			col, _ = strconv.Atoi(m[3])
+		}
+		sev := SeverityError
+		if m[4] == "warning" {
+			sev = SeverityWarning
+		}
+		diags = append(diags, BuildDiagnostic{
+			File:     m[1],
+			Line:     line,
+			Column:   col,
+			Severity: sev,
+			Message:  strings.TrimSpace(m[5]),
+		})
+	}
+	return diags
 }
