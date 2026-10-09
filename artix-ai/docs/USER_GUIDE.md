@@ -359,7 +359,14 @@ artix steering bind backend_engineer taboo-storage
 artix steering sync
 ```
 
-### 6.3 PR-to-Rule Synthesizer (Learning from Human Reviews)
+### 6.3 Reviewer Scan Modes & Multi-Language Coverage
+The Adversarial Reviewer applies deterministic pre-filtering and taboo verification before invoking model critics:
+- **Go diffs:** Native Go AST parsing (`scan mode: diff-literal | AST`), identifying syntax structures, call graphs, import graphs, and package aliases deterministically.
+- **Non-Go languages (Kotlin, Swift, Python, TypeScript/JavaScript):** Semantic alias, reflection, and de-concatenation pattern scanning (`scan mode: heuristic`). Because native compilers for these languages are not embedded in the engine, Taboo enforcement for Kotlin and Swift runs in heuristic mode, scrutinizing import aliases (`import java.lang.Runtime as EvilRuntime`), type aliases (`typealias TaskRunner = Process`), dynamic reflection (`Class.forName(...)`), and string concatenations (`"NS" + "Task"`).
+
+---
+
+### 6.4 PR-to-Rule Synthesizer (Learning from Human Reviews)
 Artix includes an automatic synthesizer in `artixd` that ingests human PR review comments and synthesizes structured rules:
 - A reviewer comments on a pull request:  
   `"Never use GlobalScope.launch in our viewmodels, always use viewModelScope!"`
