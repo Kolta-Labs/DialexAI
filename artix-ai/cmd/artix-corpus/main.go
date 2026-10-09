@@ -64,6 +64,10 @@ func main() {
 	outCSV := flag.String("output", "docs/pilot/benign_corpus_results.csv", "Output CSV file path")
 	baselineCSV := flag.String("baseline", "docs/pilot/benign_corpus_results.csv", "Baseline CSV file path for regression detection")
 	updateBaseline := flag.Bool("update", false, "Update baseline CSV without failing on regressions")
+	gorootTarget := flag.Float64("goroot-target", 5.0, "Absolute FPR target percentage for GOROOT")
+	pinnedTarget := flag.Float64("pinned-target", 5.0, "Absolute FPR target percentage for each pinned module")
+	testifyTarget := flag.Float64("testify-target", 10.0, "Absolute FPR target percentage for testify")
+	secondSetTarget := flag.Float64("second-set-target", 15.0, "Absolute FPR target percentage for second fixed set")
 	flag.Parse()
 
 	// Load existing committed CSV baseline for regression comparison
@@ -234,6 +238,77 @@ func main() {
 	fmt.Printf("  Rejected (False Positives): %d (Overall FPR: %.2f%%)\n", grandRejected, grandFPR)
 	fmt.Printf("  Results CSV saved to: %s\n", *outCSV)
 
+	// Target and Gap Evaluation (R14-9)
+	type targetCheck struct {
+		name   string
+		target float64
+		actual float64
+		gap    float64
+		passed bool
+	}
+	var targetChecks []targetCheck
+
+	gorootGap := gorootFPR - *gorootTarget
+	targetChecks = append(targetChecks, targetCheck{
+		name:   "Source 1: GOROOT",
+		target: *gorootTarget,
+		actual: gorootFPR,
+		gap:    gorootGap,
+		passed: gorootFPR <= *gorootTarget,
+	})
+
+	for _, ms := range set1StatsList {
+		subFPR := 0.0
+		if ms.totalFiles > 0 {
+			subFPR = (float64(ms.rejectedFiles) / float64(ms.totalFiles)) * 100.0
+		}
+		target := *pinnedTarget
+		if strings.Contains(ms.sourceName, "testify") {
+			target = *testifyTarget
+		}
+		targetChecks = append(targetChecks, targetCheck{
+			name:   fmt.Sprintf("Source 2: %s@%s", ms.sourceName, ms.version),
+			target: target,
+			actual: subFPR,
+			gap:    subFPR - target,
+			passed: subFPR <= target,
+		})
+	}
+
+	for _, ms := range set2StatsList {
+		subFPR := 0.0
+		if ms.totalFiles > 0 {
+			subFPR = (float64(ms.rejectedFiles) / float64(ms.totalFiles)) * 100.0
+		}
+		target := *secondSetTarget
+		targetChecks = append(targetChecks, targetCheck{
+			name:   fmt.Sprintf("Source 3: %s@%s", ms.sourceName, ms.version),
+			target: target,
+			actual: subFPR,
+			gap:    subFPR - target,
+			passed: subFPR <= target,
+		})
+	}
+
+	fmt.Printf("\n===================================================\n")
+	fmt.Printf("=== ABSOLUTE FPR TARGETS & GAP ANALYSIS (R14-9) ===\n")
+	fmt.Printf("===================================================\n")
+	hasTargetFailure := false
+	for _, tc := range targetChecks {
+		statusStr := "MET"
+		if !tc.passed {
+			statusStr = "FAILED"
+			hasTargetFailure = true
+		}
+		fmt.Printf("  [%-6s] %-45s Target: <=%5.2f%% | Actual: %5.2f%% | Gap: %+6.2f%%\n",
+			statusStr, tc.name, tc.target, tc.actual, tc.gap)
+	}
+
+	if !*updateBaseline && hasTargetFailure {
+		fmt.Fprintf(os.Stderr, "\nFAILURE: One or more corpus sources exceeded absolute FPR targets.\n")
+		os.Exit(1)
+	}
+
 	// Check for regressions vs committed baseline CSV
 	if !*updateBaseline && len(baselineMap) > 0 && len(allRegressions) > 0 {
 		fmt.Fprintf(os.Stderr, "\nFAILURE: %d benign corpus regression(s) vs committed baseline CSV detected:\n", len(allRegressions))
@@ -243,7 +318,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("\nSUCCESS: Benign corpus evaluation completed with 0 regressions vs committed baseline CSV.\n")
+	fmt.Printf("\nSUCCESS: Benign corpus evaluation completed: all absolute FPR targets met and 0 regressions vs committed baseline CSV.\n")
 }
 
 func evalModule(pm pinnedModule, rev *reviewer.AdversarialReviewer, writer *csv.Writer, baseline map[string]string, regressions *[]regressionItem) sourceStats {

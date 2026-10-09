@@ -45,7 +45,7 @@ Commands:
   lsp           Launch Language Server Protocol backend for IDEs (VS Code, Zed, etc.)
   plan, spec    Deliberate with Stakeholder Council to produce Story Spec
   code          Execute Domain Coder <-> Reviewer convergence loop
-  verify-approval Verify forge approval and merge candidate commit (Phase 2)
+  verify-approval Verify forge approval for candidate commit (Phase 2)
   review        Run Adversarial Reviewer against current git diff and tests
   audit         Audit log management and tamper verification (audit verify)
   steering      Manage dynamic steering rules (list, sync, bind)

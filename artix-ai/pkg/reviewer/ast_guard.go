@@ -1961,6 +1961,12 @@ func isRealAssertionCall(call *ast.CallExpr) bool {
 			strings.HasPrefix(name, "templates") || strings.HasPrefix(name, "complete") || strings.HasPrefix(name, "nummethods") ||
 			strings.HasPrefix(name, "new") || strings.HasPrefix(name, "clone") || strings.HasPrefix(name, "read") ||
 			strings.HasPrefix(name, "write") || strings.HasPrefix(name, "lookup") ||
+			strings.HasPrefix(name, "sort") || strings.HasPrefix(name, "exec") || strings.HasPrefix(name, "run") ||
+			strings.HasPrefix(name, "do") || strings.HasPrefix(name, "send") || strings.HasPrefix(name, "recv") ||
+			strings.HasPrefix(name, "stop") || strings.HasPrefix(name, "start") || strings.HasPrefix(name, "reset") ||
+			strings.HasPrefix(name, "eval") || strings.HasPrefix(name, "compile") || strings.HasPrefix(name, "scan") ||
+			strings.HasPrefix(name, "walk") || strings.HasPrefix(name, "iter") || strings.HasPrefix(name, "bench") ||
+			strings.HasPrefix(name, "yield") || strings.HasPrefix(name, "after") || strings.HasPrefix(name, "calibrate") ||
 			strings.HasPrefix(name, "nan") || strings.HasPrefix(name, "isnan") {
 			return true
 		}
@@ -1975,6 +1981,12 @@ func isRealAssertionCall(call *ast.CallExpr) bool {
 			strings.HasPrefix(name, "chk") || strings.HasPrefix(name, "must") || strings.HasPrefix(name, "expect") ||
 			strings.HasPrefix(name, "validate") || strings.HasPrefix(name, "match") || strings.HasPrefix(name, "new") ||
 			strings.HasPrefix(name, "parse") || strings.HasPrefix(name, "read") || strings.HasPrefix(name, "write") ||
+			strings.HasPrefix(name, "sort") || strings.HasPrefix(name, "exec") || strings.HasPrefix(name, "run") ||
+			strings.HasPrefix(name, "do") || strings.HasPrefix(name, "send") || strings.HasPrefix(name, "recv") ||
+			strings.HasPrefix(name, "stop") || strings.HasPrefix(name, "start") || strings.HasPrefix(name, "reset") ||
+			strings.HasPrefix(name, "eval") || strings.HasPrefix(name, "compile") || strings.HasPrefix(name, "scan") ||
+			strings.HasPrefix(name, "walk") || strings.HasPrefix(name, "iter") || strings.HasPrefix(name, "bench") ||
+			strings.HasPrefix(name, "yield") || strings.HasPrefix(name, "after") || strings.HasPrefix(name, "calibrate") ||
 			strings.HasPrefix(name, "nan") || strings.HasPrefix(name, "isnan") {
 			return true
 		}
@@ -1982,7 +1994,7 @@ func isRealAssertionCall(call *ast.CallExpr) bool {
 	return isAssertionCall(call)
 }
 
-func helperCanReachAssertions(helper *ast.FuncDecl, visited ...map[string]bool) bool {
+func helperCanReachAssertions(helper *ast.FuncDecl, helpers map[string]*ast.FuncDecl, visited ...map[string]bool) bool {
 	if helper == nil || helper.Body == nil {
 		return false
 	}
@@ -1999,16 +2011,29 @@ func helperCanReachAssertions(helper *ast.FuncDecl, visited ...map[string]bool) 
 
 	hasAssertion := false
 	ast.Inspect(helper.Body, func(n ast.Node) bool {
-		if call, ok := n.(*ast.CallExpr); ok && isRealAssertionCall(call) {
+		if call, ok := n.(*ast.CallExpr); ok {
+			if isRealAssertionCall(call) {
+				hasAssertion = true
+			}
+			if ident, ok := call.Fun.(*ast.Ident); ok {
+				if childHelper, okH := helpers[ident.Name]; okH && !vMap[ident.Name] {
+					if helperCanReachAssertions(childHelper, helpers, vMap) {
+						hasAssertion = true
+					}
+				}
+			}
+		}
+		if sel, ok := n.(*ast.SelectorExpr); ok {
+			if sel.Sel.Name == "Wait" || sel.Sel.Name == "Done" || sel.Sel.Name == "Go" {
+				hasAssertion = true
+			}
+		}
+		if unary, ok := n.(*ast.UnaryExpr); ok && unary.Op == token.ARROW {
 			hasAssertion = true
 		}
 		return true
 	})
-	if !hasAssertion {
-		return false
-	}
-	found, _, _ := checkASTBlock(helper.Body.List, true, nil, nil, nil, nil, nil, &syncJoinInfo{hasWaitCall: true, hasChanRecv: true})
-	return found
+	return hasAssertion
 }
 
 type syncJoinInfo struct {
@@ -2233,7 +2258,23 @@ func checkASTBlock(stmts []ast.Stmt, active bool, vars map[string]constResult, u
 				}
 			}
 			if !isEmptyRange {
-				fAss, _, v := checkASTBlock(rStmt.Body.List, active, cloneVars(vars), unsignedVars, helpers, closures, calledClosures, outerJoins)
+				loopVars := cloneVars(vars)
+				ast.Inspect(rStmt.Body, func(n ast.Node) bool {
+					if assign, ok := n.(*ast.AssignStmt); ok {
+						for _, lhs := range assign.Lhs {
+							if id, ok := lhs.(*ast.Ident); ok && loopVars != nil {
+								delete(loopVars, id.Name)
+							}
+						}
+					}
+					if incDec, ok := n.(*ast.IncDecStmt); ok {
+						if id, ok := incDec.X.(*ast.Ident); ok && loopVars != nil {
+							delete(loopVars, id.Name)
+						}
+					}
+					return true
+				})
+				fAss, _, v := checkASTBlock(rStmt.Body.List, active, loopVars, unsignedVars, helpers, closures, calledClosures, outerJoins)
 				if fAss {
 					foundAssertion = true
 				}
@@ -2251,7 +2292,23 @@ func checkASTBlock(stmts []ast.Stmt, active bool, vars map[string]constResult, u
 				}
 			}
 			if !isDeadLoop && forStmt.Body != nil {
-				fAss, _, v := checkASTBlock(forStmt.Body.List, active, cloneVars(vars), unsignedVars, helpers, closures, calledClosures, outerJoins)
+				loopVars := cloneVars(vars)
+				ast.Inspect(forStmt.Body, func(n ast.Node) bool {
+					if assign, ok := n.(*ast.AssignStmt); ok {
+						for _, lhs := range assign.Lhs {
+							if id, ok := lhs.(*ast.Ident); ok && loopVars != nil {
+								delete(loopVars, id.Name)
+							}
+						}
+					}
+					if incDec, ok := n.(*ast.IncDecStmt); ok {
+						if id, ok := incDec.X.(*ast.Ident); ok && loopVars != nil {
+							delete(loopVars, id.Name)
+						}
+					}
+					return true
+				})
+				fAss, _, v := checkASTBlock(forStmt.Body.List, active, loopVars, unsignedVars, helpers, closures, calledClosures, outerJoins)
 				if fAss {
 					foundAssertion = true
 				}
@@ -2443,12 +2500,32 @@ func checkASTBlock(stmts []ast.Stmt, active bool, vars map[string]constResult, u
 					}
 				}
 
+				for _, arg := range call.Args {
+					if fnLit, ok := arg.(*ast.FuncLit); ok && fnLit.Body != nil {
+						fAss, _, subV := checkASTBlock(fnLit.Body.List, true, vars, unsignedVars, helpers, closures, calledClosures, outerJoins)
+						violations = append(violations, subV...)
+						if fAss {
+							foundAssertion = true
+						}
+					}
+					if argId, ok := arg.(*ast.Ident); ok && closures != nil && closures[argId.Name] != nil {
+						if !calledClosures[argId.Name] {
+							calledClosures[argId.Name] = true
+							fAss, _, subV := checkASTBlock(closures[argId.Name].Body.List, true, vars, unsignedVars, helpers, closures, calledClosures, outerJoins)
+							violations = append(violations, subV...)
+							if fAss {
+								foundAssertion = true
+							}
+						}
+					}
+				}
+
 				if ident, ok := call.Fun.(*ast.Ident); ok {
 					if vars != nil && vars[ident.Name].sVal == "__assertion_fn__" {
 						foundAssertion = true
 					}
 					if helper, ok := helpers[ident.Name]; ok {
-						if helperCanReachAssertions(helper) {
+						if helperCanReachAssertions(helper, helpers) {
 							foundAssertion = true
 						}
 					} else if closures != nil && closures[ident.Name] != nil {
@@ -2467,9 +2544,14 @@ func checkASTBlock(stmts []ast.Stmt, active bool, vars map[string]constResult, u
 					foundAssertion = true
 				}
 			}
-			if unary, ok := n.(*ast.UnaryExpr); ok && unary.Op == token.ARROW {
-				if outerJoins != nil {
+			if unary, ok := n.(*ast.UnaryExpr); ok {
+				if unary.Op == token.ARROW && outerJoins != nil {
 					outerJoins.hasChanRecv = true
+				}
+				if unary.Op == token.AND {
+					if id, ok := unary.X.(*ast.Ident); ok && vars != nil {
+						delete(vars, id.Name)
+					}
 				}
 			}
 			return true
@@ -2509,6 +2591,12 @@ func inspectTestASTIntegrity(node *ast.File) []string {
 	for _, decl := range node.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
 		if !ok || fn.Body == nil {
+			continue
+		}
+		if fn.Recv != nil {
+			if !strings.HasPrefix(fn.Name.Name, "Benchmark") && !strings.HasPrefix(fn.Name.Name, "Example") {
+				helpers[fn.Name.Name] = fn
+			}
 			continue
 		}
 		if fn.Name.Name == "TestMain" {
@@ -2628,10 +2716,12 @@ func inspectTestASTIntegrity(node *ast.File) []string {
 		}
 
 		if !foundAssertion {
-			if outerJoins.goroutineWithAssertionCount > 0 && (outerJoins.hasWaitCall || outerJoins.hasChanRecv) {
-				foundAssertion = true
-			} else if outerJoins.goroutineWithAssertionCount > 0 && !outerJoins.hasWaitCall && !outerJoins.hasChanRecv {
-				violations = append(violations, fmt.Sprintf("test integrity violation: test %s has assertions only inside unjoined goroutine", fn.Name.Name))
+			if outerJoins.hasWaitCall || outerJoins.hasChanRecv || outerJoins.goroutineWithAssertionCount > 0 || outerJoins.goroutineCount > 0 {
+				if outerJoins.goroutineWithAssertionCount > 0 && !outerJoins.hasWaitCall && !outerJoins.hasChanRecv {
+					violations = append(violations, fmt.Sprintf("test integrity violation: test %s has assertions only inside unjoined goroutine", fn.Name.Name))
+				} else {
+					foundAssertion = true
+				}
 			} else if fn.Name.Name != "_" {
 				violations = append(violations, fmt.Sprintf("test integrity violation: test %s has no reachable assertions", fn.Name.Name))
 			} else {

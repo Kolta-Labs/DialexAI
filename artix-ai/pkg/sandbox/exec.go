@@ -102,7 +102,7 @@ func BuildSanitizedChildEnv(cwd string, extraEnv map[string]string) []string {
 
 	isDeniedKey := func(key string) bool {
 		kUpper := strings.ToUpper(key)
-		return strings.Contains(kUpper, "TOKEN") ||
+		if strings.Contains(kUpper, "TOKEN") ||
 			strings.Contains(kUpper, "KEY") ||
 			strings.Contains(kUpper, "SECRET") ||
 			strings.Contains(kUpper, "PASSWORD") ||
@@ -122,8 +122,13 @@ func BuildSanitizedChildEnv(cwd string, extraEnv map[string]string) []string {
 			strings.Contains(kUpper, "SSH") ||
 			strings.Contains(kUpper, "PRIVATE") ||
 			strings.Contains(kUpper, "BEARER") ||
-			strings.HasPrefix(kUpper, "ARTIX_") ||
-			strings.HasPrefix(kUpper, "KRITIX_")
+			strings.HasPrefix(kUpper, "KRITIX_") {
+			return true
+		}
+		if strings.HasPrefix(kUpper, "ARTIX_") && !strings.HasPrefix(kUpper, "ARTIX_ARG_") {
+			return true
+		}
+		return false
 	}
 
 	var childEnv []string
