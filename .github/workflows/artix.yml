@@ -56,6 +56,9 @@ jobs:
       - name: Verify Tag Immutability Registry
         run: ./scripts/verify-tag-registry.sh
 
+      - name: Verify Test Suite Retention Gate
+        run: ./scripts/check-test-retention.sh
+
       - name: Build Enterprise CLI & Daemon Binaries
         working-directory: artix-ai
         run: |

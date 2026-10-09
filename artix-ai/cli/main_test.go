@@ -63,6 +63,49 @@ func TestRunCLI_PersonaAndUnknown(t *testing.T) {
 	}
 }
 
+func TestRunCLI_MergeCommandValidation(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	// 1. Missing flags on verify-approval -> error mentioning required flags
+	code := RunCLI("", nil, []string{"verify-approval"}, &stdout, &stderr)
+	if code != 1 {
+		t.Errorf("expected exit code 1 for verify-approval without arguments, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "--pr") || !strings.Contains(stderr.String(), "--sha") || !strings.Contains(stderr.String(), "--spec") {
+		t.Errorf("expected stderr mentioning required flags, got: %s", stderr.String())
+	}
+
+	// 2. Invoking deprecated merge command -> error noting deprecation
+	stdout.Reset()
+	stderr.Reset()
+	code = RunCLI("", nil, []string{"merge"}, &stdout, &stderr)
+	if code != 1 {
+		t.Errorf("expected exit code 1 for deprecated merge command, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "deprecated") || !strings.Contains(stderr.String(), "verify-approval") {
+		t.Errorf("expected stderr mentioning deprecation and verify-approval, got: %s", stderr.String())
+	}
+}
+
+func TestRunCLI_MergeCommand_AcceptsVerdictHashFlag(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	// 1. When --verdict-hash is supplied to verify-approval, verify it parses and does not fail with unknown flag
+	code := RunCLI("", nil, []string{"verify-approval", "--pr", "1", "--sha", "abcdef123456", "--spec", "S-01", "--verdict-hash", "hash1234"}, &stdout, &stderr)
+	if strings.Contains(stderr.String(), "flag provided but not defined: -verdict-hash") {
+		t.Fatalf("runVerifyApproval failed to recognize --verdict-hash flag: %s", stderr.String())
+	}
+	_ = code
+
+	// 2. Deprecated merge alias with verdict hash returns deprecation error
+	stdout.Reset()
+	stderr.Reset()
+	code = RunCLI("", nil, []string{"merge", "--pr", "1", "--sha", "abcdef123456", "--verdict-hash", "hash1234"}, &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), "deprecated") {
+		t.Fatalf("expected merge alias to exit 1 with deprecation error, got code=%d stderr=%s", code, stderr.String())
+	}
+}
+
 func TestR13_5_VerifyApprovalCommand(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
@@ -107,5 +150,6 @@ func TestR13_5_MergeCommand_Deprecated(t *testing.T) {
 		t.Errorf("expected JSON/stderr output to mention deprecation, got stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 }
+
 
 

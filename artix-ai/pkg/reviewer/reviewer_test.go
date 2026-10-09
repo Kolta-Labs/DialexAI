@@ -2585,6 +2585,33 @@ func TestR13_3_TaglessSwitchWithInit_AssertionReachability(t *testing.T) {
 	if verdictDead.Approved {
 		t.Fatalf("expected dead case in tagless switch to be rejected, got: %+v", verdictDead)
 	}
+
+	// Case 3: Tagless switch with init containing impossible assertion (if 1 == 2 { t.Fatal(...) }) -> MUST NOT BE APPROVED
+	diffImpossible := `diff --git a/pkg/service/impossible_test.go b/pkg/service/impossible_test.go
++++ b/pkg/service/impossible_test.go
+@@ -1,5 +1,14 @@
+ package service
++import "testing"
++func getVal() string { return "active" }
++func TestImpossibleSwitch(t *testing.T) {
++	switch v := getVal(); {
++	case v == "active":
++		t.Log("handling active")
++		if 1 == 2 { t.Fatal("impossible") }
++	}
++}
++`
+	ctxImp := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diffImpossible,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdictImp := rev.Evaluate(ctxImp)
+	if verdictImp.Approved {
+		t.Fatalf("expected tagless switch with dead assertion (if 1 == 2) to be REJECTED, got approved: %+v", verdictImp)
+	}
 }
 
 func TestR13_3_NonSecretEnv_WithUnrelatedNetworkCall_Allowed(t *testing.T) {
