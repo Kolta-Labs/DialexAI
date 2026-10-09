@@ -32,7 +32,11 @@ jobs:
       - name: Enterprise Binary Builds
         run: |
           mkdir -p bin
-          TRUSTED_PUBKEY="${{ secrets.ARTIX_POLICY_COMPILED_PUBKEY || '8a6d953686bdbe746ffdfb8c2c54d7285ea9ddcc7d23d8544d6739d48b78996b' }}"
+          TRUSTED_PUBKEY="${{ secrets.ARTIX_POLICY_COMPILED_PUBKEY }}"
+          if [ -z "$TRUSTED_PUBKEY" ]; then
+            echo "ERROR: ARTIX_POLICY_COMPILED_PUBKEY secret is required for enterprise build but is unset" >&2
+            exit 1
+          fi
           go build -ldflags "-X artix/pkg/policy.RequireSignedPolicyFlag=true -X artix/pkg/policy.CompiledTrustedPublicKeyHex=${TRUSTED_PUBKEY} -s -w" -o bin/artix ./cli
           go build -ldflags "-X artix/pkg/policy.RequireSignedPolicyFlag=true -X artix/pkg/policy.CompiledTrustedPublicKeyHex=${TRUSTED_PUBKEY} -s -w" -o bin/artixd ./cmd/artixd
 

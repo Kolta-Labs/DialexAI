@@ -209,23 +209,25 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Download Linux Binaries
-        uses: actions/download-artifact@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          name: artix-binaries-linux
-          path: release-assets/
+          go-version-file: 'artix-ai/go.mod'
 
-      - name: Download VS Code Extension
-        uses: actions/download-artifact@v4
-        with:
-          name: artix-vscode-extension
-          path: release-assets/
-
-      - name: Download IntelliJ Plugin
-        uses: actions/download-artifact@v4
-        with:
-          name: artix-intellij-plugin
-          path: release-assets/
+      - name: Build Enterprise Release Binaries with Compiled Policy Public Key
+        working-directory: artix-ai
+        env:
+          POLICY_PUBKEY: ${{ secrets.ARTIX_POLICY_COMPILED_PUBKEY }}
+        run: |
+          if [ -z "$POLICY_PUBKEY" ]; then
+            echo "ERROR: ARTIX_POLICY_COMPILED_PUBKEY secret is required for enterprise release builds but is unset" >&2
+            exit 1
+          fi
+          mkdir -p bin
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X artix/pkg/policy.RequireSignedPolicyFlag=true -X artix/pkg/policy.CompiledTrustedPublicKeyHex=${POLICY_PUBKEY}" -o bin/artix ./cli
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X artix/pkg/policy.RequireSignedPolicyFlag=true -X artix/pkg/policy.CompiledTrustedPublicKeyHex=${POLICY_PUBKEY}" -o bin/artixd ./cmd/artixd
+          mkdir -p ../release-assets
+          cp bin/artix bin/artixd ../release-assets/
 
       - name: Generate Unified SHA256SUMS and Sign
         working-directory: release-assets
