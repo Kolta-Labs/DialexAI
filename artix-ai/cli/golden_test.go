@@ -989,7 +989,7 @@ As an enterprise security officer, I want policy trust roots isolated from the e
 		t.Fatalf("SECURITY VIOLATION (R2 d): enterprise binary allowed autonomous code generation using self-signed policy with env keys! (Stdout: %s)", stdout.String())
 	}
 	outStr := stdout.String() + stderr.String()
-	expectedRefusal := "Enterprise safety violation: --autonomy autonomous is disabled by default in enterprise/CI environments or disallowed by enterprise policy"
+	expectedRefusal := "Enterprise safety violation: --autonomy autonomous is disabled by default in enterprise/CI environments or disallowed by policy"
 	if !strings.Contains(outStr, expectedRefusal) {
 		t.Fatalf("expected specific refusal string %q in IsolateEnvKeys check, got stdout=%s stderr=%s", expectedRefusal, stdout.String(), stderr.String())
 	}

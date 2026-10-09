@@ -154,11 +154,10 @@ func (c *ConvergenceCoordinator) Run(
 	}
 
 	// Enterprise Autonomous Gate (ARTIX-SEC-02):
-	// In enterprise/CI environments, autonomous commits require an explicit operator opt-in via
-	// policy or ARTIX_ALLOW_AUTONOMOUS=1.
+	// In enterprise/CI environments, autonomous commits require an explicit verified signed policy with allowAutonomous=true.
 	if autonomy == AutonomyAutonomous {
 		if !policy.IsAutonomousAllowed() {
-			res.Error = "autonomous commit blocked: in enterprise/CI environments, autonomous commits require explicit ARTIX_ALLOW_AUTONOMOUS=1 opt-in or enterprise policy enablement"
+			res.Error = "autonomous commit blocked: in enterprise/CI environments, autonomous commits require a verified signed policy with allowAutonomous=true"
 			res.CostReport = costReport
 			return res
 		}
@@ -623,8 +622,8 @@ func (c *ConvergenceCoordinator) Run(
 				approverIdentity = opts.Approver
 			}
 
-			// Autonomous commit gate: only reached when ARTIX_ALLOW_AUTONOMOUS=1 has already been
-			// confirmed at loop entry (enterprise gate fires before the first round). The guard
+			// Autonomous commit gate: only reached when autonomy has already been verified via signed policy
+			// at loop entry (enterprise gate fires before the first round). The guard
 			// below exists solely to require at least one verified test command before committing.
 			if autonomy == AutonomyAutonomous {
 				approver := ""

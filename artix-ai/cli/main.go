@@ -369,7 +369,7 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 
 	// Enterprise Safety Gate
 	if *autonomyFlag == "autonomous" && !policy.IsAutonomousAllowed() {
-		errStr := "Error: Enterprise safety violation: --autonomy autonomous is disabled by default in enterprise/CI environments or disallowed by enterprise policy.\nSet ARTIX_ALLOW_AUTONOMOUS=1 or configure enterprise policy to explicitly permit unattended autonomous commits."
+		errStr := "Error: Enterprise safety violation: --autonomy autonomous is disabled by default in enterprise/CI environments or disallowed by policy.\nA verified, cryptographically signed policy with allowAutonomous=true is required to permit unattended autonomous commits."
 		if isJSON {
 			sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
 		}

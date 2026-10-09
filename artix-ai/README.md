@@ -6,7 +6,7 @@
 > - The "Adversarial Reviewer": Rule-based checks + optional model-backed review pass. Diffs are scrutinized up to a configurable threshold (default 500 KB). Crucially, diffs exceeding the threshold are **never silently truncated**; they are hard-rejected with `DIFF_TRUNCATED: model review cannot be authoritative on an incomplete diff`.
 > - **Enterprise Data Isolation Mode (`ARTIX_ENTERPRISE=1`)**: Strict project-scoped knowledge store (global `~/.artix/knowledge/` disabled), published JSON Schema validation for `.artix/steering.json`, file-locked shadow worktrees with post-merge test verification and automatic rollback, and SIEM/OTEL-compatible structured audit events (`.artix/audit.jsonl`).
 > - **Sandbox Confinement**: CI-verified on Linux (`bwrap`) and macOS (`sandbox-exec`). `ARTIX_SANDBOX=off` is strictly blocked in enterprise mode. macOS `sandbox-exec` deprecation is tracked on the roadmap for container/microVM migration.
-> - **Autonomy Protection**: `--autonomy autonomous` is strictly disabled by default in enterprise and CI environments; requires explicit `ARTIX_ALLOW_AUTONOMOUS=1` opt-in.
+> - **Autonomy Protection**: `--autonomy autonomous` is strictly disabled by default in enterprise and CI environments; requires a verified cryptographically signed policy with `allowAutonomous: true`.
 > - **Worktree Lifecycle**: `artix gc --max-age <duration>` prunes orphaned or stale worktrees from crashed sessions.
 
 ---

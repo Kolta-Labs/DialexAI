@@ -2059,11 +2059,8 @@ func TestKnowledgeItem_CoderPrompt_OnlyActiveIncluded(t *testing.T) {
 }
 
 func TestAutonomyGate_ErrorStringDescribesSignedPolicy(t *testing.T) {
-	tempDir := t.TempDir()
-	driver := git.NewDriver(tempDir)
-	_ = driver.Init()
-	_ = os.WriteFile(filepath.Join(tempDir, "file.txt"), []byte("init\n"), 0644)
-	_ = driver.AddAndCommit("init", "test@artix.ai")
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
 
 	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
 	reg := persona.NewRegistry("")
@@ -2073,6 +2070,7 @@ func TestAutonomyGate_ErrorStringDescribesSignedPolicy(t *testing.T) {
 	coord := NewCoordinator(coderObj, rev, driver, box)
 
 	t.Setenv("ARTIX_ENTERPRISE", "1")
+	policy.ResetTestPolicy()
 	policy.ResetCache()
 	defer policy.ResetCache()
 
