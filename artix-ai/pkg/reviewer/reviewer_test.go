@@ -2711,6 +2711,342 @@ func TestR13_3_AuthorizationHeaderPolicy(t *testing.T) {
 	}
 }
 
+func TestR14_2_ErrgroupWithoutWait_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	// Unjoined errgroup.Go in test or non-test code -> MUST BE REJECTED
+	diff := `diff --git a/pkg/worker/worker_test.go b/pkg/worker/worker_test.go
++++ b/pkg/worker/worker_test.go
+@@ -1,5 +1,17 @@
+ package worker
++import (
++	"testing"
++	"golang.org/x/sync/errgroup"
++)
++func TestWorkerGroup(t *testing.T) {
++	var g errgroup.Group
++	g.Go(func() error {
++		t.Log("in goroutine")
++		return nil
++	})
++	if 10 > 5 {
++		t.Log("active branch outside goroutine")
++	}
++}
++`
+	ctx := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diff,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected errgroup.Go without g.Wait() to be REJECTED, got approved: %+v", verdict)
+	}
+
+	// With g.Wait() -> MUST BE APPROVED
+	diffWithWait := `diff --git a/pkg/worker/worker_test.go b/pkg/worker/worker_test.go
++++ b/pkg/worker/worker_test.go
+@@ -1,5 +1,18 @@
+ package worker
++import (
++	"testing"
++	"golang.org/x/sync/errgroup"
++)
++func TestWorkerGroup(t *testing.T) {
++	var g errgroup.Group
++	g.Go(func() error {
++		return nil
++	})
++	if err := g.Wait(); err != nil {
++		t.Fatalf("group failed: %v", err)
++	}
++}
++`
+	ctxWait := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diffWithWait,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdictWait := rev.Evaluate(ctxWait)
+	if !verdictWait.Approved {
+		t.Fatalf("expected errgroup with g.Wait() to be APPROVED, got: %+v", verdictWait)
+	}
+}
+
+func TestR14_2_UnconditionalSkipBeforeAssertion_TreatedAsNoAssertion(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	// Unconditional t.Skip / t.SkipNow before assertions -> MUST BE REJECTED
+	diffs := []string{
+		`diff --git a/pkg/service/skip_test.go b/pkg/service/skip_test.go
++++ b/pkg/service/skip_test.go
+@@ -1,5 +1,10 @@
+ package service
++import "testing"
++func TestSkipUnconditional(t *testing.T) {
++	t.Skip("skipping unconditionally")
++	t.Fatal("never reached")
++}
++`,
+		`diff --git a/pkg/service/skip_test.go b/pkg/service/skip_test.go
++++ b/pkg/service/skip_test.go
+@@ -1,5 +1,10 @@
+ package service
++import "testing"
++func TestSkipNowUnconditional(t *testing.T) {
++	t.SkipNow()
++	if 1 == 1 { t.Fatal("unreachable") }
++}
++`,
+		`diff --git a/pkg/service/skip_test.go b/pkg/service/skip_test.go
++++ b/pkg/service/skip_test.go
+@@ -1,5 +1,10 @@
+ package service
++import "testing"
++func TestSkipConstantTrue(t *testing.T) {
++	if true {
++		t.Skip("always true skip")
++	}
++	t.Fatal("never reached")
++}
++`,
+	}
+
+	for i, d := range diffs {
+		ctx := &ReviewContext{
+			Ctx:  context.Background(),
+			Diff: d,
+			TestResults: []*sandbox.ExecResult{
+				{Command: "go test ./...", ExitCode: 0},
+			},
+		}
+		verdict := rev.Evaluate(ctx)
+		if verdict.Approved {
+			t.Fatalf("case %d: expected unconditional t.Skip before assertion to be REJECTED, got approved: %+v", i, verdict)
+		}
+	}
+}
+
+func TestR14_2_Testify_LiteralEmptyTautology_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	variants := []string{
+		// 1. assert.Empty(t, "")
+		`diff --git a/pkg/util/util_test.go b/pkg/util/util_test.go
++++ b/pkg/util/util_test.go
+@@ -1,5 +1,9 @@
+ package util
++import ( "testing"; "github.com/stretchr/testify/assert" )
++func TestEmptyStr(t *testing.T) {
++	assert.Empty(t, "")
++}
++`,
+		// 2. assert.Empty(t, []int{})
+		`diff --git a/pkg/util/util_test.go b/pkg/util/util_test.go
++++ b/pkg/util/util_test.go
+@@ -1,5 +1,9 @@
+ package util
++import ( "testing"; "github.com/stretchr/testify/assert" )
++func TestEmptySlice(t *testing.T) {
++	assert.Empty(t, []int{})
++}
++`,
+		// 3. assert.Empty(t, map[string]int{})
+		`diff --git a/pkg/util/util_test.go b/pkg/util/util_test.go
++++ b/pkg/util/util_test.go
+@@ -1,5 +1,9 @@
+ package util
++import ( "testing"; "github.com/stretchr/testify/assert" )
++func TestEmptyMap(t *testing.T) {
++	assert.Empty(t, map[string]int{})
++}
++`,
+		// 4. assert.Len(t, "", 0)
+		`diff --git a/pkg/util/util_test.go b/pkg/util/util_test.go
++++ b/pkg/util/util_test.go
+@@ -1,5 +1,9 @@
+ package util
++import ( "testing"; "github.com/stretchr/testify/assert" )
++func TestLenStr0(t *testing.T) {
++	assert.Len(t, "", 0)
++}
++`,
+		// 5. assert.Len(t, []string{}, 0)
+		`diff --git a/pkg/util/util_test.go b/pkg/util/util_test.go
++++ b/pkg/util/util_test.go
+@@ -1,5 +1,9 @@
+ package util
++import ( "testing"; "github.com/stretchr/testify/assert" )
++func TestLenSlice0(t *testing.T) {
++	assert.Len(t, []string{}, 0)
++}
++`,
+		// 6. assert.Len(t, map[int]string{}, 0)
+		`diff --git a/pkg/util/util_test.go b/pkg/util/util_test.go
++++ b/pkg/util/util_test.go
+@@ -1,5 +1,9 @@
+ package util
++import ( "testing"; "github.com/stretchr/testify/assert" )
++func TestLenMap0(t *testing.T) {
++	assert.Len(t, map[int]string{}, 0)
++}
++`,
+		// 7. assert.Contains(t, "foobar", "")
+		`diff --git a/pkg/util/util_test.go b/pkg/util/util_test.go
++++ b/pkg/util/util_test.go
+@@ -1,5 +1,9 @@
+ package util
++import ( "testing"; "github.com/stretchr/testify/assert" )
++func TestContainsEmpty(t *testing.T) {
++	assert.Contains(t, "foobar", "")
++}
++`,
+		// 8. require.Empty(t, "")
+		`diff --git a/pkg/util/util_test.go b/pkg/util/util_test.go
++++ b/pkg/util/util_test.go
+@@ -1,5 +1,9 @@
+ package util
++import ( "testing"; "github.com/stretchr/testify/require" )
++func TestReqEmpty(t *testing.T) {
++	require.Empty(t, "")
++}
++`,
+		// 9. require.Len(t, []byte{}, 0)
+		`diff --git a/pkg/util/util_test.go b/pkg/util/util_test.go
++++ b/pkg/util/util_test.go
+@@ -1,5 +1,9 @@
+ package util
++import ( "testing"; "github.com/stretchr/testify/require" )
++func TestReqLen(t *testing.T) {
++	require.Len(t, []byte{}, 0)
++}
++`,
+		// 10. assert.Empty(t, nil)
+		`diff --git a/pkg/util/util_test.go b/pkg/util/util_test.go
++++ b/pkg/util/util_test.go
+@@ -1,5 +1,9 @@
+ package util
++import ( "testing"; "github.com/stretchr/testify/assert" )
++func TestEmptyNil(t *testing.T) {
++	assert.Empty(t, nil)
++}
++`,
+	}
+
+	for i, d := range variants {
+		ctx := &ReviewContext{
+			Ctx:  context.Background(),
+			Diff: d,
+			TestResults: []*sandbox.ExecResult{
+				{Command: "go test ./...", ExitCode: 0},
+			},
+		}
+		verdict := rev.Evaluate(ctx)
+		if verdict.Approved {
+			t.Fatalf("variant %d: expected testify literal empty tautology to be REJECTED, got approved: %+v", i+1, verdict)
+		}
+	}
+}
+
+func TestR14_2_NilChannelSelectCase_DeadCode_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	// Select case receiving from nil channel literal or unassigned nil chan -> MUST BE REJECTED
+	diffs := []string{
+		`diff --git a/pkg/chan/chan_test.go b/pkg/chan/chan_test.go
++++ b/pkg/chan/chan_test.go
+@@ -1,5 +1,12 @@
+ package ch
++import "testing"
++func TestNilChanRecv(t *testing.T) {
++	select {
++	case <-(chan int)(nil):
++		t.Fatal("dead code")
++	}
++}
++`,
+		`diff --git a/pkg/chan/chan_test.go b/pkg/chan/chan_test.go
++++ b/pkg/chan/chan_test.go
+@@ -1,5 +1,12 @@
+ package ch
++import "testing"
++func TestNilChanSend(t *testing.T) {
++	select {
++	case (chan string)(nil) <- "msg":
++		t.Fatal("dead code")
++	}
++}
++`,
+	}
+
+	for i, d := range diffs {
+		ctx := &ReviewContext{
+			Ctx:  context.Background(),
+			Diff: d,
+			TestResults: []*sandbox.ExecResult{
+				{Command: "go test ./...", ExitCode: 0},
+			},
+		}
+		verdict := rev.Evaluate(ctx)
+		if verdict.Approved {
+			t.Fatalf("case %d: expected nil-channel select case to be REJECTED as dead code, got approved: %+v", i+1, verdict)
+		}
+	}
+}
+
+func TestR14_2_FloatNaN_SelfComparison_Allowed(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	// Float self-comparison (f != f) is standard IEEE-754 NaN detection -> MUST BE APPROVED
+	diff := `diff --git a/pkg/math/nan_test.go b/pkg/math/nan_test.go
++++ b/pkg/math/nan_test.go
+@@ -1,5 +1,15 @@
+ package math
++import (
++	"math"
++	"testing"
++)
++func TestFloatNaN(t *testing.T) {
++	f := math.NaN()
++	if f != f {
++		t.Log("verified NaN")
++	}
++}
++`
+	ctx := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diff,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdict := rev.Evaluate(ctx)
+	if !verdict.Approved {
+		t.Fatalf("expected float NaN self-comparison (f != f) to be APPROVED, got: %+v", verdict)
+	}
+}
+
+
 
 
 
