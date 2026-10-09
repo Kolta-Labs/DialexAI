@@ -585,6 +585,14 @@ func (c *ConvergenceCoordinator) Run(
 					}
 				}
 
+				// Post-test workspace scan: check for secret canary / env-value leaks in all workspace files before commit
+				if scanErr := scanWorkspaceForSecretLeaks(repoCtx.RootDir); scanErr != nil {
+					_ = activeSession.Rollback()
+					res.Success = false
+					res.Error = fmt.Sprintf("pre-commit security canary scan failed: %v (commit aborted, changes rolled back)", scanErr)
+					return res
+				}
+
 				headBeforeCommit, headBeforeErr := c.driver.HeadHash()
 				if headBeforeErr != nil {
 					_ = activeSession.Rollback()
@@ -933,3 +941,63 @@ func IsScriptOrBuildIndirection(cmdStr string, touchedFiles []string) bool {
 	}
 	return false
 }
+
+// scanWorkspaceForSecretLeaks scans all workspace files (including .txt, .md, source files, etc.)
+// to ensure no sensitive environment variables, tokens, or canaries were written to the workspace
+// before a commit is created.
+func scanWorkspaceForSecretLeaks(rootDir string) error {
+	sensitiveValues := make(map[string]string)
+	for _, envStr := range os.Environ() {
+		parts := strings.SplitN(envStr, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		k, val := parts[0], parts[1]
+		valTrim := strings.TrimSpace(val)
+		if len(valTrim) < 8 { // skip short common values
+			continue
+		}
+		kUpper := strings.ToUpper(k)
+		isSensitive := strings.Contains(kUpper, "SECRET") || strings.Contains(kUpper, "TOKEN") ||
+			strings.Contains(kUpper, "KEY") || strings.Contains(kUpper, "PASSWORD") ||
+			strings.Contains(kUpper, "AUTH") || strings.Contains(kUpper, "CREDENTIAL") ||
+			strings.Contains(kUpper, "CANARY") || strings.Contains(kUpper, "FORGE") ||
+			strings.Contains(kUpper, "SIGN") || strings.Contains(kUpper, "BEARER")
+		if isSensitive {
+			sensitiveValues[valTrim] = k
+		}
+	}
+
+	if len(sensitiveValues) == 0 {
+		return nil
+	}
+
+	return filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			if info.Name() == ".git" || info.Name() == ".artix" || info.Name() == ".kritix" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// Skip large binaries (> 10MB)
+		if info.Size() > 10*1024*1024 {
+			return nil
+		}
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
+		}
+		contentStr := string(content)
+		for secretVal, envKey := range sensitiveValues {
+			if strings.Contains(contentStr, secretVal) {
+				relPath, _ := filepath.Rel(rootDir, path)
+				return fmt.Errorf("security canary leak detected: workspace file %q contains sensitive environment value from %s", relPath, envKey)
+			}
+		}
+		return nil
+	})
+}
+
