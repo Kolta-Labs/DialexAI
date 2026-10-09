@@ -2,8 +2,6 @@ package forge
 
 import (
 	"encoding/hex"
-	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"

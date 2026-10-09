@@ -616,6 +616,21 @@ func (c *ConvergenceCoordinator) Run(
 							_ = activeSession.Rollback()
 						}
 						res.Error = fmt.Sprintf("TIMEOUT: test phase timed out after %s", tOpts.Timeout)
+						_ = AppendRoundTrace(repoCtx.RootDir, &RoundTrace{
+							TaskID:          s.ID,
+							Round:           round,
+							PromptHash:      HashContent(sysPrompt + "\n" + userPrompt),
+							PatchHash:       HashContent(patch),
+							Patch:           patch,
+							SandboxCommand:  cmdStr,
+							ExitCode:        tRes.ExitCode,
+							ReviewerVerdict: "TIMEOUT",
+							BlockingIssues:  []string{res.Error},
+							Tokens:          totalCoderTokens,
+							Cost:            0,
+							Phase:           "TEST",
+							Timestamp:       time.Now().UTC(),
+						})
 						_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
 							EventType:   audit.EventCodeConvergence,
 							Status:      "TIMEOUT",
@@ -633,6 +648,21 @@ func (c *ConvergenceCoordinator) Run(
 					combinedErr := tRes.Stderr + "\n" + tRes.Stdout
 					if artifact, ok := plugins.DetectOfflineCacheMiss(combinedErr); ok {
 						res.Error = fmt.Sprintf("OFFLINE_CACHE_MISS: %s", artifact)
+						_ = AppendRoundTrace(repoCtx.RootDir, &RoundTrace{
+							TaskID:          s.ID,
+							Round:           round,
+							PromptHash:      HashContent(sysPrompt + "\n" + userPrompt),
+							PatchHash:       HashContent(patch),
+							Patch:           patch,
+							SandboxCommand:  cmdStr,
+							ExitCode:        tRes.ExitCode,
+							ReviewerVerdict: "OFFLINE_CACHE_MISS",
+							BlockingIssues:  []string{res.Error},
+							Tokens:          totalCoderTokens,
+							Cost:            0,
+							Phase:           "TEST",
+							Timestamp:       time.Now().UTC(),
+						})
 						_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
 							EventType:   audit.EventCodeConvergence,
 							Status:      "OFFLINE_CACHE_MISS",
@@ -782,6 +812,38 @@ func (c *ConvergenceCoordinator) Run(
 		}
 		costReport.Rounds = append(costReport.Rounds, roundCost)
 		costReport.DNAOverheadTokens += coderDNATokens + reviewerDNATokens
+
+		// Record round trace next to audit log
+		cmdUsed := ""
+		exitCode := 0
+		if len(testResults) > 0 {
+			lastTR := testResults[len(testResults)-1]
+			cmdUsed = lastTR.Command
+			exitCode = lastTR.ExitCode
+		} else if len(effectiveTestCommands) > 0 {
+			cmdUsed = effectiveTestCommands[0]
+		}
+		var bIssues []string
+		vVerdict := ""
+		if verdict != nil {
+			vVerdict = string(verdict.Status)
+			bIssues = verdict.BlockingIssues
+		}
+		_ = AppendRoundTrace(repoCtx.RootDir, &RoundTrace{
+			TaskID:          s.ID,
+			Round:           round,
+			PromptHash:      HashContent(sysPrompt + "\n" + userPrompt),
+			PatchHash:       HashContent(patch),
+			Patch:           patch,
+			SandboxCommand:  cmdUsed,
+			ExitCode:        exitCode,
+			ReviewerVerdict: vVerdict,
+			BlockingIssues:  bIssues,
+			Tokens:          roundCost.TotalRoundTokens,
+			Cost:            0,
+			Phase:           "REVIEW",
+			Timestamp:       time.Now().UTC(),
+		})
 
 		// Check budget exhaustion after reviewer pass
 		if budget != nil {

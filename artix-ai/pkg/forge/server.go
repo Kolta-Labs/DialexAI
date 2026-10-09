@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"artix/pkg/audit"
 	"artix/pkg/knowledge"
 	"artix/pkg/policy"
 	"artix/pkg/steering"
@@ -39,6 +41,7 @@ type WebhookServerConfig struct {
 	MaxBodyLength      int
 	JobTimeout         time.Duration
 	StoragePath        string
+	OfflineCacheDir    string
 }
 
 // JobStatus tracks the state of an asynchronous worker run.
@@ -100,6 +103,11 @@ func NewWebhookServer(cfg WebhookServerConfig) *WebhookServer {
 			cfg.MaxConcurrentJobs = 4
 		}
 	}
+	if cfg.OfflineCacheDir == "" {
+		if envCache := os.Getenv("ARTIX_OFFLINE_CACHE_DIR"); envCache != "" {
+			cfg.OfflineCacheDir = envCache
+		}
+	}
 	if cfg.MaxQueuedJobs <= 0 {
 		if envVal := os.Getenv("ARTIX_MAX_QUEUED_JOBS"); envVal != "" {
 			if n, err := strconv.Atoi(envVal); err == nil && n > 0 {
@@ -129,6 +137,8 @@ func NewWebhookServer(cfg WebhookServerConfig) *WebhookServer {
 func (s *WebhookServer) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.handleHealthz)
+	mux.HandleFunc("/readyz", s.handleReadyz)
+	mux.HandleFunc("/metrics", s.handleMetrics)
 	mux.HandleFunc("/webhook/github", s.handleGitHubWebhook)
 	mux.HandleFunc("/webhook/gitlab", s.handleGitLabWebhook)
 	mux.HandleFunc("/jobs", s.handleJobs)
@@ -760,15 +770,172 @@ func (s *WebhookServer) canAcceptJob() bool {
 	return activeOrQueued < limit
 }
 
-func (s *WebhookServer) handleJobs(w http.ResponseWriter, r *http.Request) {
-	// Authentication gate for /jobs endpoint
-	if s.cfg.JobsAuthToken != "" || policy.IsEnterprise() {
+func (s *WebhookServer) isAuthorized(r *http.Request) bool {
+	if s.cfg.JobsAuthToken != "" {
 		authHeader := r.Header.Get("Authorization")
 		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if token == "" || (s.cfg.JobsAuthToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.cfg.JobsAuthToken)) != 1) {
-			http.Error(w, "unauthorized: valid jobs authorization token required", http.StatusUnauthorized)
+		if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(s.cfg.JobsAuthToken)) != 1 {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *WebhookServer) handleReadyz(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.JobsAuthToken != "" {
+		if !s.isAuthorized(r) {
+			http.Error(w, "unauthorized: valid authorization token required", http.StatusUnauthorized)
 			return
 		}
+	}
+
+	if err := s.checkJobStoreWritable(); err != nil {
+		http.Error(w, fmt.Sprintf("service unavailable: %v", err), http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := s.checkEnterpriseAuditSink(); err != nil {
+		http.Error(w, fmt.Sprintf("service unavailable: %v", err), http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := s.checkOfflineCache(); err != nil {
+		http.Error(w, fmt.Sprintf("service unavailable: %v", err), http.StatusServiceUnavailable)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"status":"ready"}`))
+}
+
+func (s *WebhookServer) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.JobsAuthToken != "" {
+		if !s.isAuthorized(r) {
+			http.Error(w, "unauthorized: valid authorization token required", http.StatusUnauthorized)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(RenderPrometheusMetrics()))
+}
+
+func (s *WebhookServer) checkJobStoreWritable() error {
+	storePath := s.cfg.StoragePath
+	if storePath == "" {
+		if s.cfg.Worker != nil && s.cfg.Worker.WorkRoot() != "" {
+			storePath = filepath.Join(s.cfg.Worker.WorkRoot(), "jobs.json")
+		} else {
+			storePath = filepath.Join(os.TempDir(), "artix-jobs.json")
+		}
+	}
+	dir := filepath.Dir(storePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("job store directory %s unwritable: %w", dir, err)
+	}
+	testFile := filepath.Join(dir, fmt.Sprintf(".readyz_test_%d", time.Now().UnixNano()))
+	if err := os.WriteFile(testFile, []byte("ready"), 0600); err != nil {
+		return fmt.Errorf("job store unwritable: %w", err)
+	}
+	_ = os.Remove(testFile)
+	return nil
+}
+
+func (s *WebhookServer) checkEnterpriseAuditSink() error {
+	if !policy.IsEnterprise() {
+		return nil
+	}
+	logger := audit.Default(s.cfg.StoragePath)
+	var sinks []policy.RemoteSinkConfig
+	if logger != nil {
+		sinks = logger.RemoteSinks()
+	}
+	if len(sinks) == 0 {
+		pol := policy.Active()
+		sinks = pol.AuditRemoteSinks
+	}
+	if len(sinks) == 0 {
+		if ep := os.Getenv("ARTIX_AUDIT_REMOTE_SINK"); ep != "" {
+			sinks = append(sinks, policy.RemoteSinkConfig{Type: "http", Endpoint: ep})
+		} else if ep := os.Getenv("ARTIX_AUDIT_HTTP_ENDPOINT"); ep != "" {
+			sinks = append(sinks, policy.RemoteSinkConfig{Type: "http", Endpoint: ep})
+		}
+	}
+	if len(sinks) == 0 {
+		return fmt.Errorf("no enterprise audit sinks configured")
+	}
+	for _, sink := range sinks {
+		if !isSinkReachable(sink) {
+			return fmt.Errorf("enterprise audit sink unreachable: %s (%s)", sink.Endpoint, sink.Type)
+		}
+	}
+	return nil
+}
+
+func (s *WebhookServer) checkOfflineCache() error {
+	cacheDir := s.cfg.OfflineCacheDir
+	if cacheDir == "" {
+		cacheDir = os.Getenv("ARTIX_OFFLINE_CACHE_DIR")
+	}
+	if cacheDir != "" {
+		if _, err := os.Stat(cacheDir); err != nil {
+			return fmt.Errorf("offline cache is missing: %w", err)
+		}
+		return nil
+	}
+	home, _ := os.UserHomeDir()
+	candidates := []string{
+		filepath.Join(home, "Library/Caches"),
+		filepath.Join(home, ".cache"),
+		filepath.Join(os.TempDir(), "artix-cache"),
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("offline cache is missing: no default cache directory found")
+}
+
+func isSinkReachable(sink policy.RemoteSinkConfig) bool {
+	endpoint := sink.Endpoint
+	if endpoint == "" {
+		return false
+	}
+	switch strings.ToLower(sink.Type) {
+	case "http", "https":
+		client := &http.Client{
+			Timeout: 1 * time.Second,
+		}
+		resp, err := client.Get(endpoint)
+		if err != nil {
+			return false
+		}
+		_ = resp.Body.Close()
+		return true
+	case "syslog", "tcp", "udp":
+		proto := strings.ToLower(sink.Type)
+		if proto == "syslog" {
+			proto = "udp"
+		}
+		conn, err := net.DialTimeout(proto, endpoint, 1*time.Second)
+		if err != nil {
+			return false
+		}
+		_ = conn.Close()
+		return true
+	default:
+		return true
+	}
+}
+
+func (s *WebhookServer) handleJobs(w http.ResponseWriter, r *http.Request) {
+	// Authentication gate for /jobs endpoint
+	if !s.isAuthorized(r) {
+		http.Error(w, "unauthorized: valid jobs authorization token required", http.StatusUnauthorized)
+		return
 	}
 
 	tenantQuery := r.URL.Query().Get("tenant")
@@ -798,13 +965,9 @@ func (s *WebhookServer) handleJobs(w http.ResponseWriter, r *http.Request) {
 
 func (s *WebhookServer) handleTasks(w http.ResponseWriter, r *http.Request) {
 	// Authentication gate for /tasks endpoint
-	if s.cfg.JobsAuthToken != "" || policy.IsEnterprise() {
-		authHeader := r.Header.Get("Authorization")
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if token == "" || (s.cfg.JobsAuthToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.cfg.JobsAuthToken)) != 1) {
-			http.Error(w, "unauthorized: valid authorization token required", http.StatusUnauthorized)
-			return
-		}
+	if !s.isAuthorized(r) {
+		http.Error(w, "unauthorized: valid authorization token required", http.StatusUnauthorized)
+		return
 	}
 
 	if r.Method == http.MethodGet {

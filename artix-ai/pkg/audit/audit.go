@@ -372,6 +372,15 @@ func (l *Logger) LogPath() string {
 	return l.logPath
 }
 
+// RemoteSinks returns a copy of configured remote audit sinks.
+func (l *Logger) RemoteSinks() []policy.RemoteSinkConfig {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	copied := make([]policy.RemoteSinkConfig, len(l.remoteSinks))
+	copy(copied, l.remoteSinks)
+	return copied
+}
+
 // Close gracefully flushes pending spooled sinks and stops workers.
 func (l *Logger) Close() {
 	select {
