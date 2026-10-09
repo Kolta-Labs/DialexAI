@@ -329,6 +329,85 @@ func TestRemoteWorker_Execute_LocalSimulated(t *testing.T) {
 	}
 }
 
+func TestRemoteWorker_EnforceDisjointModelFamilies_RejectsEmptyFamily(t *testing.T) {
+	workDir := t.TempDir()
+	remoteDir := t.TempDir()
+
+	runCmd := func(dir string, name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("cmd %s %v failed: %v\nOutput: %s", name, args, err, string(out))
+		}
+	}
+
+	runCmd(remoteDir, "git", "init", "-b", "main")
+	runCmd(remoteDir, "git", "config", "user.name", "Test Admin")
+	runCmd(remoteDir, "git", "config", "user.email", "admin@test.local")
+	_ = os.WriteFile(filepath.Join(remoteDir, "go.mod"), []byte("module simrepo\n\ngo 1.22\n"), 0644)
+	_ = os.WriteFile(filepath.Join(remoteDir, "sim_test.go"), []byte("package simrepo\nimport \"testing\"\nfunc TestDummy(t *testing.T) {\n\ta, b := 1, 1\n\tif a+b != 2 { t.Fatalf(\"math broke\") }\n}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(remoteDir, "README.md"), []byte("# Simulated Repo\n"), 0644)
+	runCmd(remoteDir, "git", "add", ".")
+	runCmd(remoteDir, "git", "commit", "-m", "initial commit")
+
+	forgeMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id": 101, "number": 1, "state": "open"}`))
+	}))
+	defer forgeMock.Close()
+
+	registry := persona.NewRegistry("")
+	worker := NewRemoteWorker(workDir, registry, "", "localhost", "127.0.0.1")
+	worker.SetAllowInsecureLocalCloneForTest(true)
+	policy.SetActivePolicyForTest(&policy.Policy{
+		IsVerified:      true,
+		AllowAutonomous: true,
+		Reviewer: policy.ReviewerPolicyConfig{
+			EnforceDisjointModelFamilies: true,
+		},
+	})
+	defer policy.ResetTestPolicy()
+
+	task := &RemoteWorkerTask{
+		Target: RemoteRepoTarget{
+			CloneURL: remoteDir,
+			Owner:    "sim",
+			Repo:     "repo",
+			Branch:   "main",
+		},
+		Auth: ForgeAuth{
+			Type:    ForgeGitHub,
+			Token:   "dummy-token",
+			BaseURL: forgeMock.URL,
+		},
+		Prompt:       "Add an architecture section to README.md",
+		Domain:       "backend_engineer",
+		CoderFamily:  "", // empty family must be rejected under EnforceDisjointModelFamilies
+		CriticFamily: "",
+		MockPatchGen: func(round int, feedback string) string {
+			return `diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -1,1 +1,3 @@
+ # Simulated Repo
++
++## Architecture
+`
+		},
+	}
+
+	ctx := context.Background()
+	result := worker.Execute(ctx, task)
+
+	if result.Success {
+		t.Fatalf("expected remote worker to REJECT empty model families under EnforceDisjointModelFamilies, but it succeeded")
+	}
+	if !strings.Contains(result.Error, "model families must be explicitly configured") && !strings.Contains(result.Error, "disjoint model families") {
+		t.Errorf("expected error mentioning disjoint model families, got: %s", result.Error)
+	}
+}
+
 func TestWebhookServer_ConcurrencyAndQueueCap(t *testing.T) {
 	cfg := WebhookServerConfig{
 		DefaultDomain:     "backend_engineer",

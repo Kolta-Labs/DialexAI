@@ -275,6 +275,49 @@ User Story: As a user I want a feature
 	}
 }
 
+func TestDisjointModelFamilies_RejectsEmptyModelFamily(t *testing.T) {
+	tmpDir := t.TempDir()
+	policy.ResetCache()
+	defer policy.ResetCache()
+
+	specPath := filepath.Join(tmpDir, "spec.json")
+	specData := `{
+		"id": "SPEC-EMPTY-FAM-01",
+		"title": "Empty Family Test",
+		"testCommands": ["echo ok"]
+	}`
+	_ = os.WriteFile(specPath, []byte(specData), 0644)
+
+	policyFile := filepath.Join(tmpDir, "policy.json")
+	pol := policy.Policy{
+		Reviewer: policy.ReviewerPolicyConfig{
+			EnforceDisjointModelFamilies: true,
+		},
+		AllowedTestCommands: []string{"echo ok"},
+	}
+	data, _ := json.Marshal(pol)
+	_ = os.WriteFile(policyFile, data, 0644)
+	key := "policy-key"
+	policy.SetTrustedKey("test-key", key)
+	_ = policy.SignPolicyFile(policyFile, key)
+	policy.SetDefaultPolicyPath(policyFile)
+	defer func() {
+		policy.SetDefaultPolicyPath("/etc/artix/policy.json")
+		policy.ResetCache()
+	}()
+
+	var stdout, stderr bytes.Buffer
+	code := RunCLI(tmpDir, nil, []string{
+		"code",
+		"--confirm-tests",
+		specPath,
+	}, &stdout, &stderr)
+
+	if code == 0 {
+		t.Errorf("expected failure when model families cannot be resolved under EnforceDisjointModelFamilies")
+	}
+}
+
 func TestAutonomyGateErrorText_SignedPolicyRequirement(t *testing.T) {
 	tmpDir := t.TempDir()
 	policy.ResetCache()
