@@ -55,7 +55,9 @@ type LoopOptions struct {
 	TestCommandsConfirmed              bool                `json:"testCommandsConfirmed,omitempty"`
 	ConfirmTestCommands                func(commands []string) bool
 	Model                              string              `json:"model,omitempty"`
+	CoderFamily                        string              `json:"coderFamily,omitempty"`
 	ReviewerModel                      string              `json:"reviewerModel,omitempty"`
+	ReviewerFamily                     string              `json:"reviewerFamily,omitempty"`
 	MaxTokens                          int                 `json:"maxTokens,omitempty"`
 	MaxUSD                             float64             `json:"maxUsd,omitempty"`
 	MaxWall                            time.Duration       `json:"maxWall,omitempty"`
@@ -826,6 +828,10 @@ func (c *ConvergenceCoordinator) Run(
 							"roundsRun":        res.RoundsRun,
 							"commitHash":       newCommitSHA,
 							"testCommandsHash": testCommandsHash,
+							"coderModel":       opts.Model,
+							"coderFamily":      opts.CoderFamily,
+							"criticModel":      opts.ReviewerModel,
+							"criticFamily":     opts.ReviewerFamily,
 						},
 					})
 					if preCommitAuditErr != nil {
@@ -837,19 +843,27 @@ func (c *ConvergenceCoordinator) Run(
 				}
 			}
 
+			convergenceDetails := map[string]any{
+				"storyId":          s.ID,
+				"roundsRun":        res.RoundsRun,
+				"success":          true,
+				"commitHash":       res.CommitHash,
+				"totalTokens":      costReport.TotalTokens,
+				"dnaOverhead":      costReport.DNAOverheadTokens,
+				"testCommandsHash": testCommandsHash,
+			}
+			if opts != nil {
+				convergenceDetails["coderModel"] = opts.Model
+				convergenceDetails["coderFamily"] = opts.CoderFamily
+				convergenceDetails["criticModel"] = opts.ReviewerModel
+				convergenceDetails["criticFamily"] = opts.ReviewerFamily
+			}
+
 			emitErr := auditLogger.Emit(audit.AuditEvent{
 				EventType: audit.EventCodeConvergence,
 				Status:    "SUCCESS",
 				Approver:  approverIdentity,
-				Details: map[string]any{
-					"storyId":          s.ID,
-					"roundsRun":        res.RoundsRun,
-					"success":          true,
-					"commitHash":       res.CommitHash,
-					"totalTokens":      costReport.TotalTokens,
-					"dnaOverhead":      costReport.DNAOverheadTokens,
-					"testCommandsHash": testCommandsHash,
-				},
+				Details:   convergenceDetails,
 			})
 			if emitErr != nil && policy.IsEnterprise() {
 				_ = activeSession.Rollback()
@@ -912,18 +926,26 @@ func (c *ConvergenceCoordinator) Run(
 		res.Error = fmt.Sprintf("failed to converge after %d rounds", maxRounds)
 	}
 
+	failedDetails := map[string]any{
+		"storyId":          s.ID,
+		"roundsRun":        res.RoundsRun,
+		"success":          res.Success,
+		"totalTokens":      costReport.TotalTokens,
+		"dnaOverhead":      costReport.DNAOverheadTokens,
+		"testCommandsHash": testCommandsHash,
+		"error":            res.Error,
+	}
+	if opts != nil {
+		failedDetails["coderModel"] = opts.Model
+		failedDetails["coderFamily"] = opts.CoderFamily
+		failedDetails["criticModel"] = opts.ReviewerModel
+		failedDetails["criticFamily"] = opts.ReviewerFamily
+	}
+
 	emitErr := audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
 		EventType: audit.EventCodeConvergence,
 		Status:    "FAILED",
-		Details: map[string]any{
-			"storyId":          s.ID,
-			"roundsRun":        res.RoundsRun,
-			"success":          res.Success,
-			"totalTokens":      costReport.TotalTokens,
-			"dnaOverhead":      costReport.DNAOverheadTokens,
-			"testCommandsHash": testCommandsHash,
-			"error":            res.Error,
-		},
+		Details:   failedDetails,
 	})
 	if emitErr != nil && res.Error == "" {
 		res.Error = fmt.Sprintf("audit emission failed: %v", emitErr)

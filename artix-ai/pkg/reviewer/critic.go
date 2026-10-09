@@ -48,28 +48,79 @@ func RunnerCriticWithTracker(r runner.AgentRunner, agent model.Agent, onUsage fu
 // SetCritic adds a model-backed review pass on top of the rule-based checks.
 func (r *AdversarialReviewer) SetCritic(c Critic) { r.critic = c }
 
-// NormalizeModelFamily extracts the canonical model/provider family.
-func NormalizeModelFamily(name string) string {
-	lower := strings.ToLower(strings.TrimSpace(name))
-	if strings.Contains(lower, "openai") || strings.Contains(lower, "gpt") || strings.Contains(lower, "o1") || strings.Contains(lower, "o3") {
-		return "openai"
-	}
-	if strings.Contains(lower, "anthropic") || strings.Contains(lower, "claude") {
+// ResolveModelFamily derives the canonical model family from the resolved model ID
+// via a model-to-family table. If the model is unknown, it treats the model as its own family.
+// If model ID is empty, it falls back to the provider name.
+func ResolveModelFamily(provider, modelID string) string {
+	rawModel := strings.ToLower(strings.TrimSpace(modelID))
+	rawProvider := strings.ToLower(strings.TrimSpace(provider))
+
+	// Model ID -> Family lookup
+	if strings.Contains(rawModel, "claude") || strings.Contains(rawModel, "anthropic") {
 		return "anthropic"
 	}
-	if strings.Contains(lower, "google") || strings.Contains(lower, "gemini") {
+	if strings.Contains(rawModel, "gpt") || strings.Contains(rawModel, "o1") || strings.Contains(rawModel, "o3") || strings.Contains(rawModel, "o4") || strings.Contains(rawModel, "chatgpt") {
+		return "openai"
+	}
+	if strings.Contains(rawModel, "gemini") || strings.Contains(rawModel, "gemma") || strings.Contains(rawModel, "palm") {
 		return "google"
 	}
-	if strings.Contains(lower, "meta") || strings.Contains(lower, "llama") {
+	if strings.Contains(rawModel, "llama") || strings.Contains(rawModel, "codellama") {
 		return "meta"
 	}
-	if strings.Contains(lower, "deepseek") {
+	if strings.Contains(rawModel, "qwen") || strings.Contains(rawModel, "qwq") {
+		return "qwen"
+	}
+	if strings.Contains(rawModel, "deepseek") {
 		return "deepseek"
 	}
-	if strings.Contains(lower, "mistral") {
+	if strings.Contains(rawModel, "mistral") || strings.Contains(rawModel, "codestral") || strings.Contains(rawModel, "mixtral") || strings.Contains(rawModel, "pixtral") || strings.Contains(rawModel, "ministral") {
 		return "mistral"
 	}
-	return lower
+	if strings.Contains(rawModel, "grok") {
+		return "xai"
+	}
+	if strings.Contains(rawModel, "command") || strings.Contains(rawModel, "cohere") {
+		return "cohere"
+	}
+	if strings.Contains(rawModel, "phi") {
+		return "microsoft"
+	}
+
+	// If a specific model ID was provided but not matched above, treat it as its own family
+	if rawModel != "" {
+		return rawModel
+	}
+
+	// Fall back to provider if model ID is not specified
+	if rawProvider != "" {
+		if strings.Contains(rawProvider, "anthropic") {
+			return "anthropic"
+		}
+		if strings.Contains(rawProvider, "openai") {
+			return "openai"
+		}
+		if strings.Contains(rawProvider, "google") || strings.Contains(rawProvider, "gemini") {
+			return "google"
+		}
+		if strings.Contains(rawProvider, "deepseek") {
+			return "deepseek"
+		}
+		if strings.Contains(rawProvider, "mistral") {
+			return "mistral"
+		}
+		if strings.Contains(rawProvider, "grok") || strings.Contains(rawProvider, "xai") {
+			return "xai"
+		}
+		return rawProvider
+	}
+
+	return ""
+}
+
+// NormalizeModelFamily extracts the canonical model/provider family.
+func NormalizeModelFamily(name string) string {
+	return ResolveModelFamily("", name)
 }
 
 // SetCriticWithFamily registers a Critic along with its model family and verifies policy constraints.

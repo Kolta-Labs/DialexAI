@@ -605,14 +605,6 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 		return 1
 	}
 
-	modelRunner, agent, err := coder.NewAPIRunnerFromEnv(*providerFlag, *modelFlag, os.Getenv)
-	if err != nil {
-		if isJSON {
-			sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
-		}
-		fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 1
-	}
 	opts.Model = *modelFlag
 	if *reviewModel != "" {
 		opts.ReviewerModel = *reviewModel
@@ -620,11 +612,14 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 		opts.ReviewerModel = *modelFlag
 	}
 
-	coderFamily := strings.TrimSpace(*providerFlag)
-	criticFamily := strings.TrimSpace(*reviewProvider)
+	coderFamily := reviewer.ResolveModelFamily(*providerFlag, *modelFlag)
+	criticFamily := reviewer.ResolveModelFamily(*reviewProvider, opts.ReviewerModel)
 	if criticFamily == "" {
 		criticFamily = coderFamily
 	}
+
+	opts.CoderFamily = coderFamily
+	opts.ReviewerFamily = criticFamily
 
 	advReviewer.SetCoderFamily(coderFamily)
 	advReviewer.SetCriticFamily(criticFamily)
@@ -647,6 +642,15 @@ func runCode(cwd string, reg *persona.Registry, args []string, stdin io.Reader, 
 			fmt.Fprintf(stderr, "%s\n", errStr)
 			return 1
 		}
+	}
+
+	modelRunner, agent, err := coder.NewAPIRunnerFromEnv(*providerFlag, *modelFlag, os.Getenv)
+	if err != nil {
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
+		}
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
 	}
 
 	var revUsageMu sync.Mutex
