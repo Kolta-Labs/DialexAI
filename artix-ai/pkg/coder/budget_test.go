@@ -2,11 +2,14 @@ package coder
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"artix/pkg/audit"
 	"artix/pkg/persona"
 	"artix/pkg/repo"
 	"artix/pkg/reviewer"
@@ -209,4 +212,67 @@ func TestMaxUSD_CustomModelPrice_AbortsAtCalculatedDollarAmount(t *testing.T) {
 		t.Fatalf("expected task budget USD limit reached error with custom pricing ($0.15), got: %s", res.Error)
 	}
 }
+
+func TestMaxUSD_UnpricedModel_AbortsAndAudits(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	reg := persona.NewRegistry("")
+	dc, _ := NewDomainCoder("backend_engineer", reg)
+	rev := newTestReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	coord := NewCoordinator(dc, rev, driver, sandbox.NewSandbox(tempDir))
+	s := &spec.StorySpec{ID: "R5-UNPRICED", Title: "Unpriced model USD budget test", TestCommands: []string{"grep '1' counter.txt"}}
+	rc := &repo.RepositoryContext{RootDir: tempDir}
+
+	// Budget with a price table that does NOT include "unpriced-model-v1"
+	customBudget := &TokenBudget{
+		MaxStoryCost: 0.10,
+		PriceTable: map[string]float64{
+			"claude-3-opus": 0.075,
+		},
+	}
+
+	opts := &LoopOptions{
+		MaxRounds: 5,
+		MaxUSD:    0.10,
+		Model:     "unpriced-model-v1",
+		Budget:    customBudget,
+		MockPatchGen: func(round int, feedback string) string {
+			return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+1\n"
+		},
+	}
+
+	res := coord.Run(context.Background(), s, rc, nil, nil, opts)
+	if res.Success {
+		t.Fatalf("expected loop to abort when MaxUSD is configured with an unpriced model, got success")
+	}
+	if !strings.Contains(res.Error, "unpriced-model-v1") && !strings.Contains(res.Error, "price") && !strings.Contains(res.Error, "budget") {
+		t.Fatalf("expected error mentioning unpriced model / price table / budget, got: %s", res.Error)
+	}
+
+	// Verify audit log recorded the budget rejection with unpriced model details
+	logPath := filepath.Join(tempDir, ".artix", "audit.jsonl")
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("expected audit log file at %s: %v", logPath, err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	found := false
+	for _, line := range lines {
+		var evt audit.AuditEvent
+		if json.Unmarshal([]byte(line), &evt) == nil && (evt.EventType == audit.EventBudgetExhausted || evt.EventType == "budget.exhausted") {
+			if evt.Details != nil && (evt.Details["unpricedModel"] == "unpriced-model-v1" || evt.Details["model"] == "unpriced-model-v1" || strings.Contains(line, "unpriced-model-v1")) {
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected budget exhaustion audit event to record unpriced model details, got log:\n%s", string(data))
+	}
+}
+
 
