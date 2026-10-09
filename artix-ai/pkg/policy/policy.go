@@ -255,8 +255,14 @@ func LoadPolicy(path string) (*Policy, error) {
 	isRoot := isFileRootOwned(info)
 	sigValid, errSig := verifyPolicySignature(path)
 
-	if !isRoot && !sigValid {
-		return nil, fmt.Errorf("policy file at %s is untrusted: must be root-owned (UID 0) or cryptographically signed (sig error: %v)", path, errSig)
+	if isSignedPolicyEnforced() {
+		if !sigValid {
+			return nil, fmt.Errorf("policy file at %s is untrusted: signed-policy enforcement active; policy must be cryptographically signed (sig error: %v)", path, errSig)
+		}
+	} else {
+		if !isRoot && !sigValid {
+			return nil, fmt.Errorf("policy file at %s is untrusted: must be root-owned (UID 0) or cryptographically signed (sig error: %v)", path, errSig)
+		}
 	}
 
 	data, err := os.ReadFile(path)
