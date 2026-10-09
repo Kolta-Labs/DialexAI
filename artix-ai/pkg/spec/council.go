@@ -241,6 +241,17 @@ func (c *Council) Plan(ctx context.Context, pCtx *PlanningContext) (*StorySpec, 
 	}
 
 	spec.RawMarkdown = FormatToMarkdown(spec)
+
+	if c.streamHandler != nil {
+		c.streamHandler(CouncilStreamEvent{
+			Type:        "council_done",
+			Timestamp:   time.Now().UTC(),
+			SpecID:      specID,
+			TotalRounds: 1,
+			Status:      "completed",
+			Message:     fmt.Sprintf("Council template generation completed for %s", specID),
+		})
+	}
 	return spec, nil
 }
 

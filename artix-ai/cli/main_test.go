@@ -551,3 +551,17 @@ func TestRunCLI_StreamFlag(t *testing.T) {
 		}
 	}
 }
+
+func TestRunCLI_ACPCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	in := strings.NewReader("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"shutdown\"}\n")
+	var stdout, stderr bytes.Buffer
+
+	code := RunCLIWithIO(tmpDir, nil, []string{"acp"}, in, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for acp shutdown, got %d, stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "\"ok\":true") {
+		t.Errorf("expected shutdown response in stdout, got: %s", stdout.String())
+	}
+}

@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"artix/pkg/acp"
 	"artix/pkg/audit"
 	"artix/pkg/coder"
 	"artix/pkg/forge"
@@ -44,6 +45,7 @@ Usage:
 Commands:
   repl          Launch interactive TUI shell with @mentions and /grill-me
   lsp           Launch Language Server Protocol backend for IDEs (VS Code, Zed, etc.)
+  acp           Launch Agent Communication Protocol (ACP) server for JetBrains Air, Zed, etc.
   plan, spec    Deliberate with Stakeholder Council to produce Story Spec
   code          Execute Domain Coder <-> Reviewer convergence loop
   verify-approval Verify forge approval for candidate commit (Phase 2)
@@ -150,6 +152,17 @@ func RunCLIWithIO(cwd string, reg *persona.Registry, rawArgs []string, stdin io.
 		}
 		return 0
 
+	case "acp":
+		server := acp.NewServer(cwd, reg, stdin, stdout)
+		if err := server.Serve(); err != nil {
+			if isJSON {
+				sendJSON(map[string]any{"ok": false, "status": "error", "error": err.Error()})
+			}
+			fmt.Fprintf(stderr, "ACP server error: %v\n", err)
+			return 1
+		}
+		return 0
+
 	case "plan", "spec":
 		return runPlan(cwd, reg, cmdArgs, humanOut, sendJSON, isJSON, isStream, stdout, stderr)
 
@@ -222,6 +235,15 @@ func main() {
 		server := lsp.NewServer(cwd, os.Stdin, os.Stdout)
 		if err := server.Serve(); err != nil {
 			fmt.Fprintf(os.Stderr, "LSP server error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if os.Args[1] == "acp" {
+		server := acp.NewServer(cwd, registry, os.Stdin, os.Stdout)
+		if err := server.Serve(); err != nil {
+			fmt.Fprintf(os.Stderr, "ACP server error: %v\n", err)
 			os.Exit(1)
 		}
 		return
