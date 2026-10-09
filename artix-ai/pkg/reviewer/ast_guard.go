@@ -1285,6 +1285,10 @@ func inspectMultiLanguageSemantics(code string, taboos []string) []string {
 		violations = append(violations, "Security Taboo: forbidden destructive system file deletion detected")
 	}
 
+	// Normalized de-concatenated code to defeat string splitting: "java.lang." + "Runtime" -> java.lang.runtime
+	reConcat := regexp.MustCompile(`["']\s*\+\s*["']`)
+	deconcatCode := reConcat.ReplaceAllString(diffLower, "")
+
 	// Python alias & reflection bypasses
 	rePyAlias := regexp.MustCompile(`(?m)^\s*import\s+subprocess\s+as\s+(\w+)`)
 	if m := rePyAlias.FindStringSubmatch(code); len(m) > 1 {
@@ -1302,6 +1306,48 @@ func inspectMultiLanguageSemantics(code string, taboos []string) []string {
 	}
 	if strings.Contains(diffLower, "getattr") && (strings.Contains(diffLower, "os") || strings.Contains(diffLower, "sys")) && (strings.Contains(diffLower, "system") || strings.Contains(diffLower, "popen") || strings.Contains(diffLower, `"sys"`) || strings.Contains(diffLower, `'sys'`)) {
 		violations = append(violations, "Security Taboo: forbidden reflection/dynamic invocation (getattr)")
+	}
+
+	// Kotlin & Java import alias bypass: import java.lang.Runtime as EvilRuntime
+	reKtImportAlias := regexp.MustCompile(`(?m)^\s*import\s+([\w\.]+)\s+as\s+(\w+)`)
+	for _, m := range reKtImportAlias.FindAllStringSubmatch(code, -1) {
+		if len(m) > 2 {
+			pkg := strings.ToLower(m[1])
+			alias := m[2]
+			if strings.Contains(pkg, "runtime") || strings.Contains(pkg, "processbuilder") || strings.Contains(pkg, "process") {
+				if strings.Contains(diffLower, strings.ToLower(alias)+".") || strings.Contains(diffLower, strings.ToLower(alias)+"(") {
+					violations = append(violations, fmt.Sprintf("Security Taboo: forbidden arbitrary execution detected (Kotlin import alias %s -> %s)", alias, m[1]))
+				}
+			}
+		}
+	}
+
+	// Kotlin & Swift typealias: typealias PB = java.lang.ProcessBuilder or typealias TaskRunner = Process
+	reTypealias := regexp.MustCompile(`(?m)^\s*typealias\s+(\w+)\s*=\s*([\w\.]+)`)
+	for _, m := range reTypealias.FindAllStringSubmatch(code, -1) {
+		if len(m) > 2 {
+			alias := m[1]
+			target := strings.ToLower(m[2])
+			if strings.Contains(target, "runtime") || strings.Contains(target, "processbuilder") || strings.Contains(target, "process") || strings.Contains(target, "nstask") {
+				if strings.Contains(diffLower, strings.ToLower(alias)+".") || strings.Contains(diffLower, strings.ToLower(alias)+"(") || strings.Contains(diffLower, strings.ToLower(alias)+"()") {
+					violations = append(violations, fmt.Sprintf("Security Taboo: forbidden execution detected via typealias %s = %s", alias, m[2]))
+				}
+			}
+		}
+	}
+
+	// Kotlin / Java Reflection: Class.forName(...)
+	if strings.Contains(deconcatCode, "class.forname") {
+		if strings.Contains(deconcatCode, "runtime") || strings.Contains(deconcatCode, "processbuilder") || strings.Contains(deconcatCode, "process") {
+			violations = append(violations, "Security Taboo: forbidden reflection Class.forName invocation of process execution class")
+		}
+	}
+
+	// Swift Dynamic Loading / Reflection: NSClassFromString, objc_getClass
+	if strings.Contains(deconcatCode, "nsclassfromstring") || strings.Contains(deconcatCode, "objc_getclass") {
+		if strings.Contains(deconcatCode, "nstask") || strings.Contains(deconcatCode, "process") {
+			violations = append(violations, "Security Taboo: forbidden dynamic class resolution (NSClassFromString/objc_getClass) for Process/NSTask")
+		}
 	}
 
 	// JS/TS alias & concat bypasses
@@ -1325,16 +1371,16 @@ func inspectMultiLanguageSemantics(code string, taboos []string) []string {
 		matched := false
 
 		// Kotlin / Android
-		if strings.Contains(lowerTaboo, "raw sqlite") && (strings.Contains(diffLower, "android.database.sqlite") || strings.Contains(diffLower, "sqlitedatabase") || strings.Contains(diffLower, "rawquery")) {
+		if strings.Contains(lowerTaboo, "raw sqlite") && (strings.Contains(diffLower, "android.database.sqlite") || strings.Contains(diffLower, "sqlitedatabase") || strings.Contains(diffLower, "rawquery") || strings.Contains(deconcatCode, "sqlitedatabase")) {
 			matched = true
 		} else if strings.Contains(lowerTaboo, "blocking main thread") && (strings.Contains(diffLower, "thread.sleep") || strings.Contains(diffLower, "runblocking") || strings.Contains(diffLower, "dispatchers.main")) {
 			matched = true
-		} else if (strings.Contains(lowerTaboo, "runtime.exec") || strings.Contains(lowerTaboo, "exec") || strings.Contains(lowerTaboo, "shell")) && (strings.Contains(diffLower, "runtime.getruntime().exec") || strings.Contains(diffLower, "runtime.exec") || strings.Contains(diffLower, "processbuilder")) {
+		} else if (strings.Contains(lowerTaboo, "runtime.exec") || strings.Contains(lowerTaboo, "exec") || strings.Contains(lowerTaboo, "shell") || strings.Contains(lowerTaboo, "processbuilder")) && (strings.Contains(diffLower, "runtime.getruntime().exec") || strings.Contains(diffLower, "runtime.exec") || strings.Contains(diffLower, "processbuilder") || strings.Contains(deconcatCode, "processbuilder") || strings.Contains(deconcatCode, "runtime.getruntime")) {
 			matched = true
 		}
 
 		// Swift / macOS / iOS
-		if strings.Contains(lowerTaboo, "process()") && (strings.Contains(diffLower, "process()") || strings.Contains(diffLower, "nstask") || strings.Contains(diffLower, "system(")) {
+		if strings.Contains(lowerTaboo, "process()") && (strings.Contains(diffLower, "process()") || strings.Contains(diffLower, "nstask") || strings.Contains(diffLower, "system(") || strings.Contains(deconcatCode, "nstask") || strings.Contains(deconcatCode, "process()")) {
 			matched = true
 		}
 
@@ -1348,7 +1394,7 @@ func inspectMultiLanguageSemantics(code string, taboos []string) []string {
 		// Generic core token match
 		if !matched {
 			corePattern := extractCoreToken(lowerTaboo)
-			if corePattern != "" && strings.Contains(diffLower, corePattern) {
+			if corePattern != "" && (strings.Contains(diffLower, corePattern) || strings.Contains(deconcatCode, corePattern)) {
 				matched = true
 			}
 		}

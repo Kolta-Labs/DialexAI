@@ -95,14 +95,26 @@ type ReviewContext struct {
 	SemanticRunnerExecuted   bool
 }
 
+func determineScanMode(diff string) string {
+	touched := extractTouchedFiles(diff)
+	for _, f := range touched {
+		ext := strings.ToLower(filepath.Ext(f))
+		if ext == ".kt" || ext == ".swift" || ext == ".py" || ext == ".ts" || ext == ".js" || ext == ".java" || ext == ".rb" || ext == ".sh" {
+			return "heuristic"
+		}
+	}
+	return "diff-literal | AST"
+}
+
 // Evaluate performs deterministic pre-filtering (tests, diff, taboos, static analyzers) and
 // runs the model-backed Critic against security and correctness rubrics.
 // If no model is configured or reachable, it returns StatusUnreviewed with Approved=false.
 func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
+	scanMode := determineScanMode(ctx.Diff)
 	verdict := &ReviewVerdict{
 		Status:         StatusApproved,
 		Approved:       true,
-		ScanMode:       "diff-literal | AST",
+		ScanMode:       scanMode,
 		BlockingIssues: make([]string, 0),
 		Warnings:       make([]string, 0),
 	}
@@ -312,7 +324,7 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 
 	if verdict.Approved {
 		verdict.Status = StatusApproved
-		verdict.Summary = fmt.Sprintf("[scan mode: diff-literal | AST] Approved by rule-based pre-filter (%d test(s) passed, diff non-empty, no taboos violated) and model review against security/correctness rubric.", len(ctx.TestResults))
+		verdict.Summary = fmt.Sprintf("[scan mode: %s] Approved by rule-based pre-filter (%d test(s) passed, diff non-empty, no taboos violated) and model review against security/correctness rubric.", verdict.ScanMode, len(ctx.TestResults))
 	} else {
 		verdict.Status = StatusRejected
 		var sb strings.Builder
@@ -320,7 +332,7 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 		for i, issue := range verdict.BlockingIssues {
 			fmt.Fprintf(&sb, "%d. %s\n", i+1, issue)
 		}
-		verdict.Summary = fmt.Sprintf("[scan mode: diff-literal | AST] Review rejected with %d blocking issue(s).", len(verdict.BlockingIssues))
+		verdict.Summary = fmt.Sprintf("[scan mode: %s] Review rejected with %d blocking issue(s).", verdict.ScanMode, len(verdict.BlockingIssues))
 		verdict.ActionableFeedback = sb.String()
 	}
 
