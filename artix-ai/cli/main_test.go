@@ -345,12 +345,24 @@ func TestAutonomyGateErrorText_SignedPolicyRequirement(t *testing.T) {
 		t.Errorf("CLI error message must describe signed policy / allowAutonomous requirement, got: %s", errOutput)
 	}
 
-	// Verify README does not contain ARTIX_ALLOW_AUTONOMOUS
+	// Verify README and USER_GUIDE do not contain ARTIX_ALLOW_AUTONOMOUS
 	readmeBytes, err := os.ReadFile("../README.md")
 	if err == nil {
 		if strings.Contains(string(readmeBytes), "ARTIX_ALLOW_AUTONOMOUS") {
 			t.Errorf("README.md must NOT mention ARTIX_ALLOW_AUTONOMOUS")
 		}
+	}
+
+	userGuideBytes, err := os.ReadFile("../docs/USER_GUIDE.md")
+	if err == nil {
+		if strings.Contains(string(userGuideBytes), "ARTIX_ALLOW_AUTONOMOUS") {
+			t.Errorf("USER_GUIDE.md must NOT mention ARTIX_ALLOW_AUTONOMOUS")
+		}
+		if !strings.Contains(string(userGuideBytes), "verified, cryptographically signed policy with allowAutonomous=true") {
+			t.Errorf("USER_GUIDE.md must describe signed policy requirement: 'verified, cryptographically signed policy with allowAutonomous=true'")
+		}
+	} else {
+		t.Fatalf("failed to read USER_GUIDE.md: %v", err)
 	}
 }
 
