@@ -293,3 +293,65 @@ func TestReviewer_ScanMode_ExplicitReporting(t *testing.T) {
 		t.Errorf("expected review output to explicitly report scan mode, got summary: %q", verdict.Summary)
 	}
 }
+
+func TestKotlinAndSwift_BypassCorpus_AndHeuristicScanModeReporting(t *testing.T) {
+	reg := persona.NewRegistry("")
+	rev := NewAdversarialReviewer(reg)
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	testCases := []struct {
+		name string
+		diff string
+	}{
+		{
+			name: "Kotlin import alias bypass",
+			diff: "diff --git a/Runner.kt b/Runner.kt\n--- a/Runner.kt\n+++ b/Runner.kt\n@@ -0,0 +1,4 @@\n+import java.lang.Runtime as EvilRuntime\n+class Runner {\n+    fun runCmd() { EvilRuntime.getRuntime().exec(\"id\") }\n+}",
+		},
+		{
+			name: "Kotlin Class.forName string concatenation bypass",
+			diff: "diff --git a/Service.kt b/Service.kt\n--- a/Service.kt\n+++ b/Service.kt\n@@ -0,0 +1,3 @@\n+class Service {\n+    fun sneaky() { Class.forName(\"java.lang.\" + \"Runtime\").getMethod(\"getRuntime\").invoke(null) }\n+}",
+		},
+		{
+			name: "Kotlin typealias bypass",
+			diff: "diff --git a/Task.kt b/Task.kt\n--- a/Task.kt\n+++ b/Task.kt\n@@ -0,0 +1,4 @@\n+typealias PB = java.lang.ProcessBuilder\n+class Task {\n+    fun execute() { PB(\"rm\", \"-rf\", \"/\").start() }\n+}",
+		},
+		{
+			name: "Swift typealias bypass",
+			diff: "diff --git a/ProcessRunner.swift b/ProcessRunner.swift\n--- a/ProcessRunner.swift\n+++ b/ProcessRunner.swift\n@@ -0,0 +1,4 @@\n+typealias TaskRunner = Process\n+class ProcessRunner {\n+    func execute() { let t = TaskRunner(); t.launch() }\n+}",
+		},
+		{
+			name: "Swift NSClassFromString concat bypass",
+			diff: "diff --git a/AppService.swift b/AppService.swift\n--- a/AppService.swift\n+++ b/AppService.swift\n@@ -0,0 +1,3 @@\n+class AppService {\n+    func dynamicTask() { let cls = NSClassFromString(\"NS\" + \"Task\") }\n+}",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &ReviewContext{
+				Diff: tc.diff,
+				TestResults: []*sandbox.ExecResult{
+					{Command: "test", ExitCode: 0},
+				},
+				SteeringContext: &steering.PersonaSteeringContext{
+					Taboos: model.TabooSpace{
+						ForbiddenArguments: []string{"runtime.exec", "processbuilder", "process()"},
+					},
+				},
+			}
+			verdict := rev.Evaluate(ctx)
+
+			// 1. Must catch the taboo bypass
+			if verdict.Approved || len(verdict.BlockingIssues) == 0 {
+				t.Errorf("[%s] expected reviewer to reject bypass diff, got approved: %+v", tc.name, verdict)
+			}
+
+			// 2. Must report ScanMode as heuristic for Kotlin / Swift files
+			if verdict.ScanMode != "heuristic" {
+				t.Errorf("[%s] expected ScanMode 'heuristic' for non-Go file, got %q", tc.name, verdict.ScanMode)
+			}
+		})
+	}
+}
+
