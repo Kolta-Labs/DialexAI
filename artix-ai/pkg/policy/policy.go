@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"artix/internal/forgesec"
 )
@@ -189,13 +190,16 @@ type Policy struct {
 	AuditPublicKey          string               `json:"auditPublicKey,omitempty"`
 	AuditPrivateKeyPath     string               `json:"auditPrivateKeyPath,omitempty"`
 	AuditRemoteSinks        []RemoteSinkConfig   `json:"auditRemoteSinks,omitempty"`
-	Budget                     BudgetConfig         `json:"budget,omitempty"`
-	Reviewer                   ReviewerPolicyConfig `json:"reviewer,omitempty"`
-	AllowedTestCommands        []string             `json:"allowedTestCommands,omitempty"`
-	RequireSignedTestCommands  bool                 `json:"requireSignedTestCommands,omitempty"`
-	RequireForgeApproval       bool                 `json:"requireForgeApproval,omitempty"`
-	Source                     string               `json:"-"`
-	IsVerified                 bool                 `json:"-"`
+	Budget                  BudgetConfig         `json:"budget,omitempty"`
+	Reviewer                ReviewerPolicyConfig `json:"reviewer,omitempty"`
+	AllowedTestCommands     []string             `json:"allowedTestCommands,omitempty"`
+	RequireSignedTestCommands bool               `json:"requireSignedTestCommands,omitempty"`
+	RequireForgeApproval    bool                 `json:"requireForgeApproval,omitempty"`
+	ExpiresAt               string               `json:"expiresAt,omitempty"`
+	ApproverIdentity        string               `json:"approverIdentity,omitempty"`
+	PolicyHash              string               `json:"policyHash,omitempty"`
+	Source                  string               `json:"-"`
+	IsVerified              bool                 `json:"-"`
 }
 
 var (
@@ -222,16 +226,13 @@ func ResetCache() {
 // It enforces that the policy file must be root-owned (UID 0) or cryptographically signed.
 func LoadPolicy(path string) (*Policy, error) {
 	if path == "" {
-		if !isSignedPolicyEnforced() {
-			if envPath := os.Getenv("ARTIX_POLICY_PATH"); envPath != "" {
-				path = envPath
-			}
+		if envPath := os.Getenv("ARTIX_POLICY_PATH"); envPath != "" {
+			path = envPath
 		}
 		if path == "" {
 			path = DefaultPolicyPath
 		}
 	}
-
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -256,6 +257,8 @@ func LoadPolicy(path string) (*Policy, error) {
 		return nil, fmt.Errorf("failed to parse policy JSON: %w", err)
 	}
 
+	h := sha256.Sum256(data)
+	p.PolicyHash = hex.EncodeToString(h[:])
 	p.Source = path
 	p.IsVerified = true
 	return &p, nil
@@ -422,10 +425,8 @@ func Active() *Policy {
 	}
 
 	policyPath := DefaultPolicyPath
-	if !isSignedPolicyEnforced() {
-		if envPath := os.Getenv("ARTIX_POLICY_PATH"); envPath != "" {
-			policyPath = envPath
-		}
+	if envPath := os.Getenv("ARTIX_POLICY_PATH"); envPath != "" {
+		policyPath = envPath
 	}
 	p, err := LoadPolicy(policyPath)
 	if err == nil && p != nil && p.IsVerified {
@@ -434,31 +435,53 @@ func Active() *Policy {
 		return &res
 	}
 
-
 	// Fallback when no system policy file is present or verification failed
 	isEnvEnterprise := os.Getenv("ARTIX_ENTERPRISE") == "1" || os.Getenv("KRITIX_ENTERPRISE") == "1"
-	if isEnvEnterprise || isSignedPolicyEnforced() {
-		// FAIL-CLOSED: Enterprise intent or compile-time flag requires verified policy.
-		// An absent or invalid policy file CANNOT grant autonomy and strictly forces
-		// EnterpriseMode, RequireSignedPolicy, and RequireSeparateApprover.
-		return &Policy{
-			EnterpriseMode:          true,
-			AllowAutonomous:         false, // FAIL CLOSED
-			RequireSignedPolicy:     true,
-			RequireSeparateApprover: true,
-			Source:                  "fail_closed_unverified",
-			IsVerified:              false,
-		}
-	}
-
-	allowAuto := os.Getenv("ARTIX_ALLOW_AUTONOMOUS") == "1"
 	return &Policy{
-		EnterpriseMode:          false,
-		AllowAutonomous:         allowAuto,
-		RequireSeparateApprover: false,
-		Source:                  "environment",
+		EnterpriseMode:          isEnvEnterprise || isSignedPolicyEnforced(),
+		AllowAutonomous:         false, // FAIL CLOSED: unsigned or missing policy cannot grant autonomy
+		RequireSignedPolicy:     true,
+		RequireSeparateApprover: isEnvEnterprise || isSignedPolicyEnforced(),
+		Source:                  "fail_closed_unverified",
 		IsVerified:              false,
 	}
+}
+
+// VerifyAutonomyGate validates that autonomous operations are permitted by a cryptographically signed, unexpired policy.
+// It fails closed if the signature is absent, invalid, or expired.
+func VerifyAutonomyGate() error {
+	pol := Active()
+	if pol == nil {
+		return errors.New("autonomy gate failed: no policy loaded")
+	}
+	if !pol.IsVerified {
+		return errors.New("autonomy gate failed: signed policy is absent, invalid, or unverified (fail closed)")
+	}
+	if !pol.AllowAutonomous {
+		return errors.New("autonomy gate failed: allowAutonomous is not enabled in signed policy")
+	}
+	if pol.ExpiresAt != "" {
+		exp, err := time.Parse(time.RFC3339, pol.ExpiresAt)
+		if err != nil {
+			exp, err = time.Parse(time.RFC3339Nano, pol.ExpiresAt)
+		}
+		if err != nil {
+			return fmt.Errorf("autonomy gate failed: invalid expiresAt timestamp %q: %w", pol.ExpiresAt, err)
+		}
+		if time.Now().UTC().After(exp) {
+			return fmt.Errorf("autonomy gate failed: signed policy expired at %s", pol.ExpiresAt)
+		}
+	}
+	return nil
+}
+
+// GetPolicyHash returns the SHA-256 hash of the active signed policy.
+func GetPolicyHash() string {
+	pol := Active()
+	if pol != nil {
+		return pol.PolicyHash
+	}
+	return ""
 }
 
 // IsEnterprise returns true if enterprise mode is enforced by verified policy or environment.
@@ -471,24 +494,9 @@ func IsEnterprise() bool {
 	return os.Getenv("ARTIX_ENTERPRISE") == "1" || os.Getenv("KRITIX_ENTERPRISE") == "1" || isSignedPolicyEnforced()
 }
 
-// IsAutonomousAllowed returns whether autonomous commits are permitted.
-// If a verified policy is active, it strictly determines whether autonomy is allowed.
-// In unverified mode, enterprise intent strictly fails closed.
+// IsAutonomousAllowed returns whether autonomous commits are permitted by the signed autonomy gate.
 func IsAutonomousAllowed() bool {
-	pol := Active()
-	if pol.IsVerified {
-		return pol.AllowAutonomous
-	}
-
-	// Unverified mode:
-	// If enterprise mode is signalled, require-signed-policy is set, or compile-time flag is on,
-	// strictly FAIL CLOSED: autonomy is never permitted without a verified signature.
-	if pol.RequireSignedPolicy || isSignedPolicyEnforced() || (pol.EnterpriseMode && pol.Source == "fail_closed_unverified") {
-		return false
-	}
-
-	// In non-enterprise environments, autonomy is never default-enabled; it requires explicit opt-in
-	return os.Getenv("ARTIX_ALLOW_AUTONOMOUS") == "1"
+	return VerifyAutonomyGate() == nil
 }
 
 // ValidateApprover enforces Separation of Duties (Four-Eyes Principle).

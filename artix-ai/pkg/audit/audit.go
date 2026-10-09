@@ -104,6 +104,7 @@ type AuditEvent struct {
 	Cost            float64        `json:"cost,omitempty"`
 	SandboxExitCode int            `json:"sandboxExitCode,omitempty"`
 	Approver        string         `json:"approver,omitempty"`
+	PolicyHash      string         `json:"policyHash,omitempty"`
 	Details         map[string]any `json:"details,omitempty"`
 	PrevHash        string         `json:"prevHash"`
 	RecordHash      string         `json:"recordHash"`
@@ -116,7 +117,7 @@ func ComputeRecordHash(e *AuditEvent) string {
 	if e.Details != nil {
 		detailsJSON, _ = json.Marshal(e.Details)
 	}
-	payload := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%d|%s|%s|%s|%s|%s|%s|%d|%.6f|%d|%s|%s",
+	payload := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%d|%s|%s|%s|%s|%s|%s|%d|%.6f|%d|%s|%s|%s",
 		e.PrevHash,
 		e.EventID,
 		e.Timestamp.UTC().Format(time.RFC3339Nano),
@@ -135,6 +136,7 @@ func ComputeRecordHash(e *AuditEvent) string {
 		e.Cost,
 		e.SandboxExitCode,
 		e.Approver,
+		e.PolicyHash,
 		string(detailsJSON),
 	)
 	h := sha256.Sum256([]byte(payload))
@@ -360,6 +362,9 @@ func (l *Logger) Emit(event AuditEvent) error {
 	}
 	if event.Approver != "" {
 		event.Approver = RedactSecrets(event.Approver)
+	}
+	if event.PolicyHash == "" {
+		event.PolicyHash = policy.GetPolicyHash()
 	}
 
 	l.mu.Lock()

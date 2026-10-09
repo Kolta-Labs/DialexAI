@@ -90,6 +90,13 @@ func setupTestRepo(t *testing.T) (string, *git.Driver) {
 
 	driver := git.NewDriver(tempDir)
 	_, _ = driver.CommitAll("initial commit")
+	policy.SetActivePolicyForTest(&policy.Policy{
+		IsVerified:      true,
+		AllowAutonomous: true,
+	})
+	t.Cleanup(func() {
+		policy.ResetTestPolicy()
+	})
 	return tempDir, driver
 }
 
@@ -219,6 +226,7 @@ func TestAutonomousModeBlockedInEnterpriseWithoutOptIn(t *testing.T) {
 
 	t.Setenv("ARTIX_ENTERPRISE", "1")
 	t.Setenv("ARTIX_ALLOW_AUTONOMOUS", "")
+	policy.ResetTestPolicy()
 
 	reg := persona.NewRegistry("")
 	coder, _ := NewDomainCoder("backend_engineer", reg)

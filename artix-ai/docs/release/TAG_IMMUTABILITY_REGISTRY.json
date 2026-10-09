@@ -51,6 +51,11 @@
       "tag": "v0.10.0-enterprise",
       "tag_object": "4e4cae598feaaa60f8430d6dbf03595296d0064f",
       "commit": "4b7892495515bc779a9434be591da363b467315f"
+    },
+    {
+      "tag": "v0.11.0-enterprise",
+      "tag_object": "326e30912d35c319e44284d4a0c8e575954e9b30",
+      "commit": "054854a0259cf6e9d78f31a5ad8687b9debd927a"
     }
   ]
 }

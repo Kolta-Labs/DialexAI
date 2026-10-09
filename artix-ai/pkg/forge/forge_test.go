@@ -280,6 +280,11 @@ func TestRemoteWorker_Execute_LocalSimulated(t *testing.T) {
 	registry := persona.NewRegistry("")
 	worker := NewRemoteWorker(workDir, registry, "", "localhost", "127.0.0.1")
 	worker.SetAllowInsecureLocalCloneForTest(true)
+	policy.SetActivePolicyForTest(&policy.Policy{
+		IsVerified:      true,
+		AllowAutonomous: true,
+	})
+	defer policy.ResetTestPolicy()
 
 	task := &RemoteWorkerTask{
 		Target: RemoteRepoTarget{
