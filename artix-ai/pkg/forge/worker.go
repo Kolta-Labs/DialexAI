@@ -13,6 +13,7 @@ import (
 	"artix/pkg/coder"
 	"artix/pkg/git"
 	"artix/pkg/persona"
+	"artix/pkg/policy"
 	"artix/pkg/repo"
 	"artix/pkg/reviewer"
 	"artix/pkg/sandbox"
@@ -181,16 +182,20 @@ func (w *RemoteWorker) Execute(ctx context.Context, task *RemoteWorkerTask) *Rem
 	}
 
 	rev := reviewer.NewAdversarialReviewer(w.registry)
-	coderFam := task.CoderFamily
-	if coderFam == "" {
-		coderFam = "anthropic"
+	rev.SetCoderFamily(task.CoderFamily)
+	rev.SetCriticFamily(task.CriticFamily)
+
+	pol := policy.Active()
+	if pol.IsDisjointModelFamiliesEnforced() {
+		if task.CoderFamily == "" || task.CriticFamily == "" {
+			res.Error = fmt.Sprintf("disjoint model families policy violation: model families must be explicitly configured (coder=%q, critic=%q); disjoint model families required", task.CoderFamily, task.CriticFamily)
+			return res
+		}
+		if strings.EqualFold(task.CoderFamily, task.CriticFamily) {
+			res.Error = fmt.Sprintf("disjoint model families policy violation: critic model family %q matches coder family %q (disjoint model families required)", task.CriticFamily, task.CoderFamily)
+			return res
+		}
 	}
-	criticFam := task.CriticFamily
-	if criticFam == "" {
-		criticFam = "openai"
-	}
-	rev.SetCoderFamily(coderFam)
-	rev.SetCriticFamily(criticFam)
 
 	if task.Critic != nil {
 		rev.SetCritic(task.Critic)
