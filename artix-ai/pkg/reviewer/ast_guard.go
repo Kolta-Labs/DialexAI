@@ -101,15 +101,6 @@ func CheckTestIntegrity(diff string) []string {
 	var deletedAssertions int
 	var addedAssertions int
 
-	isJSTSTarget := false
-	for _, tf := range extractTouchedFiles(diff) {
-		tfLower := strings.ToLower(tf)
-		if strings.HasSuffix(tfLower, ".ts") || strings.HasSuffix(tfLower, ".js") || strings.HasSuffix(tfLower, ".tsx") || strings.HasSuffix(tfLower, ".jsx") {
-			isJSTSTarget = true
-			break
-		}
-	}
-
 	for i, line := range lines {
 		// Ignore diff header lines
 		if strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++") {
@@ -144,12 +135,12 @@ func CheckTestIntegrity(diff string) []string {
 			}
 
 			if (strings.Contains(trimmed, "t.Skip(") || strings.Contains(trimmed, "t.SkipNow()") || strings.Contains(trimmed, "t.Skip") || strings.Contains(trimmed, "t.Skipf")) &&
-				!strings.Contains(diff, "testing.Short()") && !strings.Contains(trimmed, "Short()") && !strings.Contains(trimmed, "if ") && !strings.Contains(diff, "if ") {
+				!strings.Contains(diff, "testing.Short()") && !strings.Contains(trimmed, "Short()") {
 				violations = append(violations, "test integrity violation: Go test skipping is forbidden (t.Skip)")
 			} else if strings.Contains(trimmed, "@Ignore") || strings.Contains(trimmed, "@Disabled") {
 				violations = append(violations, "test integrity violation: test disablement is forbidden (@Ignore/@Disabled)")
-			} else if (strings.Contains(trimmed, ".skip(") || strings.Contains(trimmed, "xit(") || strings.Contains(trimmed, "xtest(")) && isJSTSTarget {
-				violations = append(violations, "test integrity violation: test skipping is forbidden (.skip/xit/xtest)")
+			} else if strings.Contains(trimmed, ".skip(") || strings.Contains(trimmed, "xit(") || strings.Contains(trimmed, "xtest(") || strings.Contains(trimmed, "xdescribe(") || strings.Contains(trimmed, "it.skip(") || strings.Contains(trimmed, "test.skip(") {
+				violations = append(violations, "test integrity violation: test skipping is forbidden (.skip/xit/xtest/xdescribe)")
 			} else if strings.Contains(trimmed, "@pytest.mark.skip") || strings.Contains(trimmed, "@unittest.skip") {
 				violations = append(violations, "test integrity violation: test skipping is forbidden (@skip)")
 			}

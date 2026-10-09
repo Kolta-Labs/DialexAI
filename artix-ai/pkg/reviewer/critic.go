@@ -48,19 +48,43 @@ func RunnerCriticWithTracker(r runner.AgentRunner, agent model.Agent, onUsage fu
 // SetCritic adds a model-backed review pass on top of the rule-based checks.
 func (r *AdversarialReviewer) SetCritic(c Critic) { r.critic = c }
 
+// NormalizeModelFamily extracts the canonical model/provider family.
+func NormalizeModelFamily(name string) string {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if strings.Contains(lower, "openai") || strings.Contains(lower, "gpt") || strings.Contains(lower, "o1") || strings.Contains(lower, "o3") {
+		return "openai"
+	}
+	if strings.Contains(lower, "anthropic") || strings.Contains(lower, "claude") {
+		return "anthropic"
+	}
+	if strings.Contains(lower, "google") || strings.Contains(lower, "gemini") {
+		return "google"
+	}
+	if strings.Contains(lower, "meta") || strings.Contains(lower, "llama") {
+		return "meta"
+	}
+	if strings.Contains(lower, "deepseek") {
+		return "deepseek"
+	}
+	if strings.Contains(lower, "mistral") {
+		return "mistral"
+	}
+	return lower
+}
+
 // SetCriticWithFamily registers a Critic along with its model family and verifies policy constraints.
 func (r *AdversarialReviewer) SetCriticWithFamily(c Critic, family string) error {
 	trimmed := strings.TrimSpace(family)
-	pol := policy.Active()
-	if pol.Reviewer.EnforceDisjointModelFamilies && r.coderFamily != "" && trimmed != "" {
-		if strings.EqualFold(r.coderFamily, trimmed) {
-			return fmt.Errorf("reviewer policy violation: critic model family %q matches coder family %q (disjoint model families required)", trimmed, r.coderFamily)
-		}
+	coderNorm := NormalizeModelFamily(r.coderFamily)
+	criticNorm := NormalizeModelFamily(trimmed)
+	if coderNorm != "" && criticNorm != "" && coderNorm == criticNorm {
+		return fmt.Errorf("reviewer policy violation: critic model family %q matches coder family %q (disjoint model families required)", trimmed, r.coderFamily)
 	}
+	pol := policy.Active()
 	if len(pol.Reviewer.AllowedCriticFamilies) > 0 && trimmed != "" {
 		allowed := false
 		for _, f := range pol.Reviewer.AllowedCriticFamilies {
-			if strings.EqualFold(f, trimmed) {
+			if strings.EqualFold(NormalizeModelFamily(f), criticNorm) {
 				allowed = true
 				break
 			}

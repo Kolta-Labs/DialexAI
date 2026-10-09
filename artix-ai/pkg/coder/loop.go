@@ -55,6 +55,9 @@ type LoopOptions struct {
 	ConfirmTestCommands                func(commands []string) bool
 	Model                              string              `json:"model,omitempty"`
 	ReviewerModel                      string              `json:"reviewerModel,omitempty"`
+	MaxTokens                          int                 `json:"maxTokens,omitempty"`
+	MaxUSD                             float64             `json:"maxUsd,omitempty"`
+	MaxWall                            time.Duration       `json:"maxWall,omitempty"`
 	CoderUsageTracker                  func() *ProviderUsage
 	ReviewerUsageTracker               func() *ProviderUsage
 }
@@ -104,6 +107,7 @@ func (c *ConvergenceCoordinator) Run(
 	revSteering *steering.PersonaSteeringContext,
 	opts *LoopOptions,
 ) *LoopResult {
+	startTime := time.Now()
 	maxRounds := 3
 	autonomy := AutonomySupervised
 
@@ -312,6 +316,70 @@ func (c *ConvergenceCoordinator) Run(
 				if emitErr != nil && res.Error == "" {
 					res.Error = fmt.Sprintf("budget exhausted and audit emission failed: %v", emitErr)
 				}
+				return res
+			}
+		}
+
+		// Hard task budget limits (MaxTokens, MaxUSD, MaxWall per task)
+		if opts != nil {
+			var currentTotalTokens int
+			var currentTotalUSD float64
+
+			if opts.CoderUsageTracker != nil {
+				if u := opts.CoderUsageTracker(); u != nil {
+					currentTotalTokens += u.TotalTokens
+					currentTotalUSD += (float64(u.TotalTokens) / 1000.0) * 0.015
+				}
+			} else {
+				currentTotalTokens = costReport.TotalTokens
+				currentTotalUSD = costReport.TotalCost
+			}
+
+			if opts.MaxTokens > 0 && currentTotalTokens > opts.MaxTokens {
+				res.CostReport = costReport
+				res.Error = fmt.Sprintf("task budget limit exceeded: tokens limit %d reached (used %d tokens)", opts.MaxTokens, currentTotalTokens)
+				_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+					EventType:   audit.EventBudgetExhausted,
+					Status:      "FAILED",
+					StorySpecID: s.ID,
+					Details: map[string]any{
+						"limit":     opts.MaxTokens,
+						"current":   currentTotalTokens,
+						"limitType": "max_tokens",
+					},
+				})
+				return res
+			}
+
+			if opts.MaxUSD > 0 && currentTotalUSD > opts.MaxUSD {
+				res.CostReport = costReport
+				res.Error = fmt.Sprintf("task budget limit exceeded: USD cost limit $%.2f reached (cost $%.2f)", opts.MaxUSD, currentTotalUSD)
+				_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+					EventType:   audit.EventBudgetExhausted,
+					Status:      "FAILED",
+					StorySpecID: s.ID,
+					Details: map[string]any{
+						"limit":     opts.MaxUSD,
+						"current":   currentTotalUSD,
+						"limitType": "max_usd",
+					},
+				})
+				return res
+			}
+
+			if opts.MaxWall > 0 && time.Since(startTime) > opts.MaxWall {
+				res.CostReport = costReport
+				res.Error = fmt.Sprintf("task budget limit exceeded: wall clock duration %s reached (elapsed %s)", opts.MaxWall, time.Since(startTime).Round(time.Millisecond))
+				_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+					EventType:   audit.EventBudgetExhausted,
+					Status:      "FAILED",
+					StorySpecID: s.ID,
+					Details: map[string]any{
+						"limit":     opts.MaxWall.String(),
+						"elapsed":   time.Since(startTime).String(),
+						"limitType": "max_wall",
+					},
+				})
 				return res
 			}
 		}
