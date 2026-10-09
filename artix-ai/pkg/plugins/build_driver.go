@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -163,14 +164,89 @@ func (g *GoDriver) ParseErrorTrace(output string) []BuildDiagnostic {
 
 // Gradle / KMP Driver
 // GradleDriver supports Android and Kotlin Multiplatform Gradle projects.
-type GradleDriver struct{}
+type GradleDriver struct {
+	tasksCacheMu sync.RWMutex
+	tasksCache   map[string][]string
+}
 
 func (gr *GradleDriver) Name() string { return "gradle" }
 
 func (gr *GradleDriver) Detect(rootDir string) bool {
-	_, errKts := os.Stat(filepath.Join(rootDir, "build.gradle.kts"))
-	_, errGroovy := os.Stat(filepath.Join(rootDir, "build.gradle"))
-	return errKts == nil || errGroovy == nil
+	// Check root build and settings files
+	for _, f := range []string{"build.gradle.kts", "build.gradle", "settings.gradle.kts", "settings.gradle"} {
+		if _, err := os.Stat(filepath.Join(rootDir, f)); err == nil {
+			return true
+		}
+	}
+	// Check immediate subdirectories for build files (nested/multi-module)
+	entries, err := os.ReadDir(rootDir)
+	if err == nil {
+		for _, e := range entries {
+			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+				sub := filepath.Join(rootDir, e.Name())
+				if _, err := os.Stat(filepath.Join(sub, "build.gradle.kts")); err == nil {
+					return true
+				}
+				if _, err := os.Stat(filepath.Join(sub, "build.gradle")); err == nil {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (gr *GradleDriver) IsKMP(rootDir string) bool {
+	kmpIndicators := []string{
+		`kotlin("multiplatform")`,
+		`kotlin(\"multiplatform\")`,
+		`org.jetbrains.kotlin.multiplatform`,
+		`kotlin-multiplatform`,
+		`libs.plugins.kotlinMultiplatform`,
+		`alias(libs.plugins.kotlinMultiplatform)`,
+	}
+	checkFile := func(path string) bool {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return false
+		}
+		content := string(data)
+		for _, ind := range kmpIndicators {
+			if strings.Contains(content, ind) {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, f := range []string{"build.gradle.kts", "build.gradle", "settings.gradle.kts", "settings.gradle"} {
+		if checkFile(filepath.Join(rootDir, f)) {
+			return true
+		}
+	}
+
+	// Check subdirectories
+	entries, err := os.ReadDir(rootDir)
+	if err == nil {
+		for _, e := range entries {
+			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+				sub := filepath.Join(rootDir, e.Name())
+				for _, f := range []string{"build.gradle.kts", "build.gradle"} {
+					if checkFile(filepath.Join(sub, f)) {
+						return true
+					}
+				}
+				if _, err := os.Stat(filepath.Join(sub, "src", "commonMain")); err == nil {
+					return true
+				}
+			}
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(rootDir, "src", "commonMain")); err == nil {
+		return true
+	}
+	return false
 }
 
 func (gr *GradleDriver) gradlewCmd(rootDir string) string {
@@ -186,11 +262,122 @@ func (gr *GradleDriver) CompileCmd(rootDir string) string {
 }
 
 func (gr *GradleDriver) TestCmd(rootDir string) string {
+	if gr.IsKMP(rootDir) {
+		selected, _, _ := gr.ResolveKMPTasks(context.Background(), rootDir)
+		if len(selected) > 0 {
+			return gr.gradlewCmd(rootDir) + " " + strings.Join(selected, " ") + " --offline"
+		}
+	}
 	return gr.gradlewCmd(rootDir) + " testDebugUnitTest --offline"
 }
 
 func (gr *GradleDriver) LintCmd(rootDir string) string {
 	return gr.gradlewCmd(rootDir) + " ktlintCheck --offline"
+}
+
+func (gr *GradleDriver) ResolveKMPTasks(ctx context.Context, rootDir string) ([]string, map[string]string, error) {
+	allTasks, err := gr.fetchAllTasks(ctx, rootDir)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	host := runtime.GOOS
+	skippedTargets := gr.EvaluateKMPTargetsForHost(host, allTasks)
+
+	var selected []string
+	taskSet := make(map[string]bool)
+	for _, t := range allTasks {
+		taskSet[t] = true
+	}
+
+	candidates := []string{"jvmTest", "desktopTest", "testDebugUnitTest"}
+	for _, c := range candidates {
+		if taskSet[c] {
+			selected = append(selected, c)
+		}
+	}
+
+	if host == "darwin" && taskSet["iosSimulatorArm64Test"] {
+		selected = append(selected, "iosSimulatorArm64Test")
+	}
+
+	if len(selected) == 0 {
+		if taskSet["allTests"] && len(skippedTargets) == 0 {
+			selected = append(selected, "allTests")
+		} else if taskSet["testDebugUnitTest"] {
+			selected = append(selected, "testDebugUnitTest")
+		} else if taskSet["test"] {
+			selected = append(selected, "test")
+		}
+	}
+
+	return selected, skippedTargets, nil
+}
+
+func (gr *GradleDriver) fetchAllTasks(ctx context.Context, rootDir string) ([]string, error) {
+	gr.tasksCacheMu.RLock()
+	if tasks, ok := gr.tasksCache[rootDir]; ok {
+		gr.tasksCacheMu.RUnlock()
+		return tasks, nil
+	}
+	gr.tasksCacheMu.RUnlock()
+
+	gradlew := gr.gradlewCmd(rootDir)
+	cmd := exec.CommandContext(ctx, "sh", "-c", gradlew+" tasks --all")
+	cmd.Dir = rootDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return []string{"testDebugUnitTest"}, nil
+	}
+
+	var tasks []string
+	lines := strings.Split(string(out), "\n")
+	for _, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if trimmed == "" || strings.HasPrefix(trimmed, "-") || strings.HasPrefix(trimmed, "*") {
+			continue
+		}
+		fields := strings.Fields(trimmed)
+		if len(fields) > 0 {
+			taskName := fields[0]
+			if !strings.Contains(taskName, " ") && len(taskName) > 2 {
+				tasks = append(tasks, taskName)
+			}
+		}
+	}
+
+	gr.tasksCacheMu.Lock()
+	if gr.tasksCache == nil {
+		gr.tasksCache = make(map[string][]string)
+	}
+	gr.tasksCache[rootDir] = tasks
+	gr.tasksCacheMu.Unlock()
+
+	return tasks, nil
+}
+
+func (gr *GradleDriver) EvaluateKMPTargetsForHost(hostOS string, allTasks []string) map[string]string {
+	skipped := make(map[string]string)
+	if strings.ToLower(hostOS) != "darwin" {
+		for _, t := range allTasks {
+			tLower := strings.ToLower(t)
+			if strings.HasPrefix(tLower, "ios") || strings.Contains(tLower, "iossimulator") || strings.Contains(tLower, "iosarm") || strings.Contains(tLower, "iostest") {
+				skipped[t] = "SKIPPED_HOST_UNSUPPORTED"
+			}
+		}
+	}
+	return skipped
+}
+
+func (gr *GradleDriver) FormatTargetStatusSummary(passedTasks []string, skippedTargets map[string]string) string {
+	if len(skippedTargets) > 0 {
+		var skippedParts []string
+		for target, status := range skippedTargets {
+			skippedParts = append(skippedParts, fmt.Sprintf("%s: %s", target, status))
+		}
+		return fmt.Sprintf("Passed: [%s]; Skipped: [%s]", strings.Join(passedTasks, ", "), strings.Join(skippedParts, ", "))
+	}
+	return "All targets green"
 }
 
 func (gr *GradleDriver) Warm(ctx context.Context, rootDir string) error {

@@ -91,6 +91,7 @@ exit 0
 	if err != nil {
 		t.Fatalf("ResolveKMPTasks failed: %v", err)
 	}
+	_ = skippedTargets
 
 	// jvmTest, desktopTest, testDebugUnitTest must be selected
 	tasksStr := strings.Join(selectedTasks, " ")
