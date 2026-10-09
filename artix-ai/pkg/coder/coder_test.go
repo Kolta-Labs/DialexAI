@@ -2058,6 +2058,44 @@ func TestKnowledgeItem_CoderPrompt_OnlyActiveIncluded(t *testing.T) {
 	}
 }
 
+func TestAutonomyGate_ErrorStringDescribesSignedPolicy(t *testing.T) {
+	tempDir := t.TempDir()
+	driver := git.NewDriver(tempDir)
+	_ = driver.Init()
+	_ = os.WriteFile(filepath.Join(tempDir, "file.txt"), []byte("init\n"), 0644)
+	_ = driver.AddAndCommit("init", "test@artix.ai")
+
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+	reg := persona.NewRegistry("")
+	coderObj, _ := NewDomainCoder("backend_engineer", reg)
+	rev := newTestReviewer(reg)
+	box := sandbox.NewSandbox(tempDir)
+	coord := NewCoordinator(coderObj, rev, driver, box)
+
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+	policy.ResetCache()
+	defer policy.ResetCache()
+
+	storySpec := &spec.StorySpec{
+		ID:           "SPEC-AUTONOMY-ERR",
+		Title:        "Autonomy Error Verification",
+		TestCommands: []string{"test -f file.txt"},
+	}
+	opts := &LoopOptions{
+		MaxRounds: 1,
+		Autonomy:  AutonomyAutonomous,
+	}
+
+	res := coord.Run(context.Background(), storySpec, repoCtx, nil, nil, opts)
+	if strings.Contains(res.Error, "ARTIX_ALLOW_AUTONOMOUS") {
+		t.Errorf("Autonomy gate error must NOT mention ARTIX_ALLOW_AUTONOMOUS, got: %q", res.Error)
+	}
+	if !strings.Contains(res.Error, "signed policy") && !strings.Contains(res.Error, "allowAutonomous") {
+		t.Errorf("Autonomy gate error must mention signed policy / allowAutonomous requirement, got: %q", res.Error)
+	}
+}
+
+
 
 
 

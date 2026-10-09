@@ -273,6 +273,43 @@ User Story: As a user I want a feature
 	}
 }
 
+func TestAutonomyGateErrorText_SignedPolicyRequirement(t *testing.T) {
+	tmpDir := t.TempDir()
+	policy.ResetCache()
+	defer policy.ResetCache()
+
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+	t.Setenv("CI", "true")
+
+	var stdout, stderr bytes.Buffer
+	code := RunCLI(tmpDir, nil, []string{
+		"code",
+		"--autonomy", "autonomous",
+		"dummy.md",
+	}, &stdout, &stderr)
+
+	if code == 0 {
+		t.Fatalf("expected failure for autonomous mode without verified signed policy in enterprise mode")
+	}
+
+	errOutput := stderr.String()
+	if strings.Contains(errOutput, "ARTIX_ALLOW_AUTONOMOUS") {
+		t.Errorf("CLI error message must NOT mention obsolete ARTIX_ALLOW_AUTONOMOUS, got: %s", errOutput)
+	}
+	if !strings.Contains(errOutput, "signed policy") && !strings.Contains(errOutput, "allowAutonomous") {
+		t.Errorf("CLI error message must describe signed policy / allowAutonomous requirement, got: %s", errOutput)
+	}
+
+	// Verify README does not contain ARTIX_ALLOW_AUTONOMOUS
+	readmeBytes, err := os.ReadFile("../README.md")
+	if err == nil {
+		if strings.Contains(string(readmeBytes), "ARTIX_ALLOW_AUTONOMOUS") {
+			t.Errorf("README.md must NOT mention ARTIX_ALLOW_AUTONOMOUS")
+		}
+	}
+}
+
+
 
 
 
