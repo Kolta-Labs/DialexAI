@@ -743,5 +743,125 @@ func TestR9_SetPrivateKeyPath_Permissions_RequireOwnerOnly(t *testing.T) {
 	}
 }
 
+func TestBoard2_MandatoryExternalSink_EnterpriseMode(t *testing.T) {
+	tempDir := t.TempDir()
+	secDir := filepath.Join(t.TempDir(), "keys", ".ssh")
+	_ = os.MkdirAll(secDir, 0700)
+	_, priv, _ := ed25519.GenerateKey(nil)
+	keyPath := filepath.Join(secDir, "audit.key")
+	_ = os.WriteFile(keyPath, []byte(hex.EncodeToString(priv)), 0600)
+
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+	t.Setenv("ARTIX_AUDIT_PRIVATE_KEY_PATH", keyPath)
+	policy.ResetCache()
+	defer policy.ResetCache()
+
+	// 1. Without remote sink under ARTIX_ENTERPRISE -> Must fail closed
+	loggerNoSink := NewLogger(tempDir)
+	if err := loggerNoSink.InitError(); err == nil {
+		if errEmit := loggerNoSink.Emit(AuditEvent{EventType: EventSpecDeliberation, Status: "SUCCESS"}); errEmit == nil {
+			t.Errorf("NewLogger under ARTIX_ENTERPRISE must fail closed without mandatory external sink (syslog/OTel/S3)")
+		}
+	}
+
+	// 2. With remote sink under ARTIX_ENTERPRISE -> Sinks allowed and emission succeeds
+	received := make(chan AuditEvent, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var evt AuditEvent
+		_ = json.NewDecoder(r.Body).Decode(&evt)
+		received <- evt
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	loggerWithSink := NewLogger(tempDir)
+	loggerWithSink.AddRemoteSink(policy.RemoteSinkConfig{
+		Type:     "http",
+		Endpoint: server.URL,
+	})
+	if err := loggerWithSink.Emit(AuditEvent{EventType: EventSpecDeliberation, Status: "SUCCESS"}); err != nil {
+		t.Errorf("Emit with mandatory sink failed under enterprise: %v", err)
+	}
+}
+
+func TestBoard2_AuditLogRedirect_CannotDisableInEnterprise(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+	policy.ResetCache()
+	defer policy.ResetCache()
+
+	// 1. ARTIX_AUDIT_LOG=/dev/null or empty/none must NOT disable audit log
+	t.Setenv("ARTIX_AUDIT_LOG", "/dev/null")
+	path := policy.EffectiveAuditLogPath(tempDir)
+	if path == "/dev/null" || path == "" || path == "none" {
+		t.Errorf("ARTIX_AUDIT_LOG=/dev/null must not disable audit under enterprise mode; got: %s", path)
+	}
+
+	// 2. Valid redirect path should be honored if non-empty and not /dev/null
+	customLog := filepath.Join(tempDir, "custom_enterprise_audit.jsonl")
+	t.Setenv("ARTIX_AUDIT_LOG", customLog)
+	pathCustom := policy.EffectiveAuditLogPath(tempDir)
+	if pathCustom != customLog {
+		t.Errorf("ARTIX_AUDIT_LOG should allow redirecting log path, expected %s, got %s", customLog, pathCustom)
+	}
+}
+
+func TestBoard2_VerifyAudit_DetectsTruncationAndEdits(t *testing.T) {
+	tempDir := t.TempDir()
+	logger := NewLogger(tempDir)
+	logger.SetSigningKey("test-board2-key")
+
+	for i := 1; i <= 5; i++ {
+		_ = logger.Emit(AuditEvent{
+			EventType:   EventCodeConvergence,
+			Status:      "SUCCESS",
+			Round:       i,
+			Cost:        float64(i) * 0.05,
+			StorySpecID: "STORY-B2",
+		})
+	}
+
+	logFile := logger.LogPath()
+	res, err := VerifyLog(logFile, "test-board2-key")
+	if err != nil {
+		t.Fatalf("valid log failed verification: %v", err)
+	}
+	if res.ValidRecords != 5 {
+		t.Fatalf("expected 5 valid records, got %d", res.ValidRecords)
+	}
+
+	// 1. Edit record payload -> must be detected
+	data, _ := os.ReadFile(logFile)
+	tamperedData := strings.Replace(string(data), `"round":3`, `"round":99`, 1)
+	tamperedFile := filepath.Join(tempDir, "tampered.jsonl")
+	_ = os.WriteFile(tamperedFile, []byte(tamperedData), 0644)
+	if _, err := VerifyLog(tamperedFile, "test-board2-key"); err == nil {
+		t.Errorf("VerifyLog must detect edited record payload")
+	}
+
+	// 2. Truncate middle record -> must detect broken hash chain
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	deletedMiddle := append([]string{}, lines[:2]...)
+	deletedMiddle = append(deletedMiddle, lines[3:]...)
+	deletedFile := filepath.Join(tempDir, "deleted_middle.jsonl")
+	_ = os.WriteFile(deletedFile, []byte(strings.Join(deletedMiddle, "\n")+"\n"), 0644)
+	if _, err := VerifyLog(deletedFile, "test-board2-key"); err == nil {
+		t.Errorf("VerifyLog must detect deleted middle record")
+	}
+
+	// 3. Truncate tail record with expected count -> must detect truncation
+	truncatedTail := strings.Join(lines[:3], "\n") + "\n"
+	truncFile := filepath.Join(tempDir, "truncated_tail.jsonl")
+	_ = os.WriteFile(truncFile, []byte(truncatedTail), 0644)
+	opts := VerifyOptions{
+		SigningKey:    "test-board2-key",
+		ExpectedCount: 5,
+	}
+	if _, err := VerifyLogWithOptions(truncFile, opts); err == nil {
+		t.Errorf("VerifyLogWithOptions must detect tail truncation when expected count is 5")
+	}
+}
+
+
 
 
