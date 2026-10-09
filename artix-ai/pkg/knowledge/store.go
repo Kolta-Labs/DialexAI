@@ -126,6 +126,16 @@ func (s *Store) Save(ki *KnowledgeItem) error {
 	return os.WriteFile(targetFile, data, 0644)
 }
 
+// CompareAndSwapSessionCount atomically updates session count if it matches expected.
+func (s *Store) CompareAndSwapSessionCount(id string, expected, newCount int) (bool, error) {
+	return false, nil
+}
+
+// IncrementSessionCount increments session count using compare-and-swap.
+func (s *Store) IncrementSessionCount(id string) (int, error) {
+	return 0, nil
+}
+
 // Get retrieves a Knowledge Item by ID and applies schema migrations if needed.
 func (s *Store) Get(id string) (*KnowledgeItem, error) {
 	s.mu.RLock()

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -2254,6 +2255,109 @@ func TestLoop_RealABEvalHarness_AutoDemotesHarmfulKI_WithoutSuppliedRunner(t *te
 			updatedKI.LastEvalResult.RoundsBaseline, updatedKI.LastEvalResult.RoundsWithKI)
 	}
 }
+
+func TestLoop_ConcurrentRunsOnSameRepo_CorrectSessionCount(t *testing.T) {
+	tempDir, driver := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
+
+	feature1 := filepath.Join(tempDir, "feature1.txt")
+	_ = os.WriteFile(feature1, []byte("init1\n"), 0644)
+	feature2 := filepath.Join(tempDir, "feature2.txt")
+	_ = os.WriteFile(feature2, []byte("init2\n"), 0644)
+	_, _ = driver.CommitAll("initial files")
+
+	kStore := knowledge.NewStore(tempDir)
+	activeKI := &knowledge.KnowledgeItem{
+		ID:           "ki-concurrent-loop-session",
+		Title:        "Concurrent Loop Run Item",
+		Category:     knowledge.CategoryDebugging,
+		Status:       "active",
+		SessionCount: 0,
+		CreatedAt:    time.Now(),
+	}
+	if err := kStore.Save(activeKI); err != nil {
+		t.Fatalf("failed to save active KI: %v", err)
+	}
+
+	repoCtx := &repo.RepositoryContext{RootDir: tempDir}
+	reg := persona.NewRegistry("")
+
+	// Coordinator 1 setup
+	coder1, _ := NewDomainCoder("backend_engineer", reg)
+	rev1 := newTestReviewer(reg)
+	rev1.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	driver1 := git.NewDriver(tempDir)
+	box1 := sandbox.NewSandbox(tempDir)
+	coord1 := NewCoordinator(coder1, rev1, driver1, box1)
+
+	// Coordinator 2 setup
+	coder2, _ := NewDomainCoder("backend_engineer", reg)
+	rev2 := newTestReviewer(reg)
+	rev2.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+	driver2 := git.NewDriver(tempDir)
+	box2 := sandbox.NewSandbox(tempDir)
+	coord2 := NewCoordinator(coder2, rev2, driver2, box2)
+
+	spec1 := &spec.StorySpec{
+		ID:           "STORY-CONC-1",
+		Title:        "Feature 1 Convergence",
+		TestCommands: []string{"grep 'done1' feature1.txt"},
+	}
+	opts1 := &LoopOptions{
+		MaxRounds: 1,
+		PatchGenerator: func(ctx context.Context, req PatchRequest) (string, error) {
+			return "diff --git a/feature1.txt b/feature1.txt\n--- a/feature1.txt\n+++ b/feature1.txt\n@@ -1 +1 @@\n-init1\n+done1\n", nil
+		},
+	}
+
+	spec2 := &spec.StorySpec{
+		ID:           "STORY-CONC-2",
+		Title:        "Feature 2 Convergence",
+		TestCommands: []string{"grep 'done2' feature2.txt"},
+	}
+	opts2 := &LoopOptions{
+		MaxRounds: 1,
+		PatchGenerator: func(ctx context.Context, req PatchRequest) (string, error) {
+			return "diff --git a/feature2.txt b/feature2.txt\n--- a/feature2.txt\n+++ b/feature2.txt\n@@ -1 +1 @@\n-init2\n+done2\n", nil
+		},
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	var res1, res2 *LoopResult
+
+	go func() {
+		defer wg.Done()
+		res1 = coord1.Run(context.Background(), spec1, repoCtx, nil, nil, opts1)
+	}()
+
+	go func() {
+		defer wg.Done()
+		res2 = coord2.Run(context.Background(), spec2, repoCtx, nil, nil, opts2)
+	}()
+
+	wg.Wait()
+
+	if !res1.Success {
+		t.Fatalf("run 1 failed: %v", res1.Error)
+	}
+	if !res2.Success {
+		t.Fatalf("run 2 failed: %v", res2.Error)
+	}
+
+	finalKI, err := kStore.Get("ki-concurrent-loop-session")
+	if err != nil {
+		t.Fatalf("failed to retrieve KI: %v", err)
+	}
+	if finalKI.SessionCount != 2 {
+		t.Fatalf("expected SessionCount == 2 after two concurrent loop runs, got %d", finalKI.SessionCount)
+	}
+}
+
 
 
 
