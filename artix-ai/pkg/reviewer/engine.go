@@ -26,6 +26,7 @@ const (
 type ReviewVerdict struct {
 	Status             ReviewStatus `json:"status"` // "approved", "rejected", "unreviewed"
 	Approved           bool         `json:"approved"`
+	ScanMode           string       `json:"scanMode,omitempty"`
 	Summary            string       `json:"summary"`
 	BlockingIssues     []string     `json:"blockingIssues"`
 	Warnings           []string     `json:"warnings"`
@@ -101,6 +102,7 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 	verdict := &ReviewVerdict{
 		Status:         StatusApproved,
 		Approved:       true,
+		ScanMode:       "diff-literal | AST",
 		BlockingIssues: make([]string, 0),
 		Warnings:       make([]string, 0),
 	}
@@ -306,7 +308,7 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 
 	if verdict.Approved {
 		verdict.Status = StatusApproved
-		verdict.Summary = fmt.Sprintf("Approved by rule-based pre-filter (%d test(s) passed, diff non-empty, no taboos violated) and model review against security/correctness rubric.", len(ctx.TestResults))
+		verdict.Summary = fmt.Sprintf("[scan mode: diff-literal | AST] Approved by rule-based pre-filter (%d test(s) passed, diff non-empty, no taboos violated) and model review against security/correctness rubric.", len(ctx.TestResults))
 	} else {
 		verdict.Status = StatusRejected
 		var sb strings.Builder
@@ -314,7 +316,7 @@ func (r *AdversarialReviewer) Evaluate(ctx *ReviewContext) *ReviewVerdict {
 		for i, issue := range verdict.BlockingIssues {
 			fmt.Fprintf(&sb, "%d. %s\n", i+1, issue)
 		}
-		verdict.Summary = fmt.Sprintf("Review rejected with %d blocking issue(s).", len(verdict.BlockingIssues))
+		verdict.Summary = fmt.Sprintf("[scan mode: diff-literal | AST] Review rejected with %d blocking issue(s).", len(verdict.BlockingIssues))
 		verdict.ActionableFeedback = sb.String()
 	}
 

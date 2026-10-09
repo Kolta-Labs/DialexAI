@@ -294,18 +294,33 @@ func CheckSemanticASTTaboos(diff string, tabooList []string, workspaceDir ...str
 		return violations
 	}
 
-	// 1. If workspaceDir is provided, parse whole post-patch Go files
+	// 1. If workspaceDir is provided, scan full post-patch tree (all source files)
 	var wholeFiles []*ast.File
 	fset := token.NewFileSet()
 	if len(workspaceDir) > 0 && workspaceDir[0] != "" {
-		for _, f := range extractTouchedFiles(diff) {
-			if strings.HasSuffix(f, ".go") {
-				fullPath := filepath.Join(workspaceDir[0], f)
-				if node, err := parser.ParseFile(fset, fullPath, nil, parser.ParseComments); err == nil {
+		root := workspaceDir[0]
+		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info == nil {
+				return nil
+			}
+			name := info.Name()
+			if info.IsDir() {
+				if name == ".git" || name == "vendor" || name == "node_modules" || name == ".artix" || (strings.HasPrefix(name, ".") && name != ".") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if strings.HasSuffix(name, ".go") {
+				if node, err := parser.ParseFile(fset, path, nil, parser.ParseComments); err == nil {
 					wholeFiles = append(wholeFiles, node)
 				}
+			} else if strings.HasSuffix(name, ".py") || strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".js") || strings.HasSuffix(name, ".kt") || strings.HasSuffix(name, ".swift") {
+				if content, err := os.ReadFile(path); err == nil {
+					violations = append(violations, inspectMultiLanguageSemantics(string(content), tabooList)...)
+				}
 			}
-		}
+			return nil
+		})
 	}
 
 	// 2. Extract added code lines (excluding comments)
@@ -470,18 +485,23 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 
 		// Track import aliases: map of local identifier -> package path
 		importAliases := make(map[string]string)
+		dotImports := make(map[string]bool)
 		for _, imp := range node.Imports {
 			pkgPath := strings.Trim(imp.Path.Value, `"`)
 			alias := filepath.Base(pkgPath)
 			if imp.Name != nil {
 				alias = imp.Name.Name
 			}
-			importAliases[alias] = pkgPath
+			if alias == "." {
+				dotImports[pkgPath] = true
+			} else if alias != "_" {
+				importAliases[alias] = pkgPath
+			}
 
 			// Check if import itself violates package taboo
 			for _, taboo := range taboos {
 				tLower := strings.ToLower(taboo)
-				if strings.Contains(tLower, strings.ToLower(pkgPath)) || (pkgPath == "net/http" && strings.Contains(tLower, "net/http")) {
+				if strings.Contains(tLower, strings.ToLower(pkgPath)) || (pkgPath == "net/http" && strings.Contains(tLower, "net/http")) || (pkgPath == "os/exec" && strings.Contains(tLower, "os/exec")) || (pkgPath == "reflect" && (tLower == "reflect" || tLower == "reflection")) {
 					violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden import of package %q (alias %q)", pkgPath, alias))
 				}
 			}
@@ -490,6 +510,36 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 			if checkReflection && (pkgPath == "reflect" || strings.Contains(pkgPath, "reflect")) {
 				violations = append(violations, "AST Taboo Violation: forbidden import of reflect package (reflection taboo)")
 			}
+		}
+
+		stringConsts := make(map[string]string)
+		var resolveStringExpr func(expr ast.Expr) string
+		resolveStringExpr = func(expr ast.Expr) string {
+			if expr == nil {
+				return ""
+			}
+			switch e := expr.(type) {
+			case *ast.BasicLit:
+				if e.Kind == token.STRING {
+					return strings.Trim(e.Value, "`\"")
+				}
+			case *ast.BinaryExpr:
+				if e.Op == token.ADD {
+					return resolveStringExpr(e.X) + resolveStringExpr(e.Y)
+				}
+			case *ast.Ident:
+				if val, ok := stringConsts[e.Name]; ok {
+					return val
+				}
+				return e.Name
+			case *ast.CallExpr:
+				var parts []string
+				for _, arg := range e.Args {
+					parts = append(parts, resolveStringExpr(arg))
+				}
+				return strings.Join(parts, "")
+			}
+			return ""
 		}
 
 		// Taint tracking data structures
@@ -1078,6 +1128,18 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 		}
 
 		ast.Inspect(node, func(n ast.Node) bool {
+			// 0. Direct call checks (e.g. dot-imported packages)
+			if call, ok := n.(*ast.CallExpr); ok {
+				if id, ok := call.Fun.(*ast.Ident); ok {
+					if dotImports["os/exec"] && (id.Name == "Command" || id.Name == "CommandContext") {
+						violations = append(violations, "AST Taboo Violation: forbidden process execution via dot-imported Command")
+					}
+					if dotImports["reflect"] && (id.Name == "ValueOf" || id.Name == "TypeOf" || id.Name == "MethodByName") {
+						violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden reflection call via dot-imported reflect (%s)", id.Name))
+					}
+				}
+			}
+
 			// 1. Selector expressions: DefaultClient, DefaultServeMux, DefaultTransport, or aliased taboo package usage
 			if sel, ok := n.(*ast.SelectorExpr); ok {
 				name := sel.Sel.Name
@@ -1093,8 +1155,11 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 
 				// Check reflection calls
 				if checkReflection {
-					if id, ok := sel.X.(*ast.Ident); ok && id.Name == "reflect" {
+					if id, ok := sel.X.(*ast.Ident); ok && (id.Name == "reflect" || importAliases[id.Name] == "reflect") {
 						violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden reflection call (reflect.%s)", name))
+					}
+					if name == "MethodByName" || name == "ValueOf" || name == "TypeOf" || name == "New" || name == "MakeFunc" {
+						violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden reflection invocation (%s)", name))
 					}
 				}
 
@@ -1103,7 +1168,7 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 					if pkgPath, exists := importAliases[id.Name]; exists {
 						for _, taboo := range taboos {
 							tLower := strings.ToLower(taboo)
-							if strings.Contains(tLower, strings.ToLower(pkgPath)) || (pkgPath == "net/http" && strings.Contains(tLower, "net/http")) {
+							if strings.Contains(tLower, strings.ToLower(pkgPath)) || (pkgPath == "net/http" && strings.Contains(tLower, "net/http")) || (pkgPath == "os/exec" && (strings.Contains(tLower, "exec") || strings.Contains(tLower, "os/exec"))) || (pkgPath == "reflect" && (tLower == "reflect" || tLower == "reflection")) {
 								violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden reference to taboo package %q via alias %s.%s", pkgPath, id.Name, name))
 							}
 						}
@@ -1128,25 +1193,24 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 						if sel.Sel.Name == "CommandContext" && len(call.Args) > 1 {
 							argIdx = 1
 						}
-						if lit, ok := call.Args[argIdx].(*ast.BasicLit); ok {
-							val := strings.Trim(lit.Value, `"`)
-							if val == "sh" || val == "bash" || val == "zsh" || val == "/bin/sh" || val == "/bin/bash" || val == "/bin/zsh" {
-								violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden shell interpreter invocation via exec.Command(%q)", val))
+						prog := resolveStringExpr(call.Args[argIdx])
+						if prog == "" {
+							if lit, ok := call.Args[argIdx].(*ast.BasicLit); ok {
+								prog = strings.Trim(lit.Value, `"`)
 							}
-							if val == "git" && len(call.Args) > argIdx+1 {
-								arg1S := fmt.Sprintf("%v", call.Args[argIdx+1])
-								if strings.Contains(arg1S, "push") {
-									violations = append(violations, "AST Taboo Violation: forbidden remote git push via exec.Command")
-								}
+						}
+						progLower := strings.ToLower(prog)
+						if progLower == "sh" || progLower == "bash" || progLower == "zsh" || progLower == "/bin/sh" || progLower == "/bin/bash" || progLower == "/bin/zsh" {
+							violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden shell interpreter invocation via exec.Command(%q)", prog))
+						}
+						if progLower == "git" && len(call.Args) > argIdx+1 {
+							arg1S := resolveStringExpr(call.Args[argIdx+1])
+							if strings.Contains(arg1S, "push") {
+								violations = append(violations, "AST Taboo Violation: forbidden remote git push via exec.Command")
 							}
-							if val == "curl" || val == "wget" || val == "nc" {
-								for _, arg := range call.Args[argIdx+1:] {
-									argS := fmt.Sprintf("%v", arg)
-									if strings.Contains(argS, "Getenv") || strings.Contains(argS, "SECRET") || strings.Contains(argS, "KEY") {
-										violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden network exfiltration via exec.Command(%q)", val))
-									}
-								}
-							}
+						}
+						if progLower == "curl" || progLower == "wget" || progLower == "nc" {
+							violations = append(violations, fmt.Sprintf("AST Taboo Violation: forbidden network fetch invocation via exec.Command(%q)", prog))
 						}
 					}
 				}
@@ -1221,13 +1285,35 @@ func inspectMultiLanguageSemantics(code string, taboos []string) []string {
 		violations = append(violations, "Security Taboo: forbidden destructive system file deletion detected")
 	}
 
-	// Inherent security taboos across all languages: arbitrary command execution, destructive commands, file deletions on system paths
-	if strings.Contains(diffLower, "runtime.getruntime().exec") ||
-		strings.Contains(diffLower, "runtime.exec") ||
-		strings.Contains(diffLower, "processbuilder") ||
-		strings.Contains(diffLower, "rm -rf") ||
-		strings.Contains(diffLower, "child_process.exec") {
-		violations = append(violations, "Security Taboo: forbidden arbitrary shell/command execution detected")
+	// Python alias & reflection bypasses
+	rePyAlias := regexp.MustCompile(`(?m)^\s*import\s+subprocess\s+as\s+(\w+)`)
+	if m := rePyAlias.FindStringSubmatch(code); len(m) > 1 {
+		alias := m[1]
+		if strings.Contains(diffLower, alias+".") {
+			violations = append(violations, fmt.Sprintf("Security Taboo: forbidden arbitrary shell/command execution detected (Python subprocess alias %s)", alias))
+		}
+	}
+	rePyFromAlias := regexp.MustCompile(`(?m)^\s*from\s+os\s+import\s+system\s+as\s+(\w+)`)
+	if m := rePyFromAlias.FindStringSubmatch(code); len(m) > 1 {
+		alias := m[1]
+		if strings.Contains(diffLower, alias+"(") {
+			violations = append(violations, fmt.Sprintf("Security Taboo: forbidden arbitrary shell/command execution detected (Python os.system alias %s)", alias))
+		}
+	}
+	if strings.Contains(diffLower, "getattr") && (strings.Contains(diffLower, "os") || strings.Contains(diffLower, "sys")) && (strings.Contains(diffLower, "system") || strings.Contains(diffLower, "popen") || strings.Contains(diffLower, `"sys"`) || strings.Contains(diffLower, `'sys'`)) {
+		violations = append(violations, "Security Taboo: forbidden reflection/dynamic invocation (getattr)")
+	}
+
+	// JS/TS alias & concat bypasses
+	reJSAlias := regexp.MustCompile(`import\s+[*]\s+as\s+(\w+)\s+from\s+["']child_process["']`)
+	if m := reJSAlias.FindStringSubmatch(code); len(m) > 1 {
+		alias := m[1]
+		if strings.Contains(diffLower, alias+".") {
+			violations = append(violations, fmt.Sprintf("Security Taboo: forbidden arbitrary command execution in TypeScript/JavaScript (child_process alias %s)", alias))
+		}
+	}
+	if strings.Contains(diffLower, "require(") && (strings.Contains(diffLower, `"child"`) || strings.Contains(diffLower, `'child'`)) && (strings.Contains(diffLower, `"_process"`) || strings.Contains(diffLower, `'_process'`)) {
+		violations = append(violations, "Security Taboo: forbidden arbitrary command execution in TypeScript/JavaScript (child_process require concatenation)")
 	}
 
 	for _, taboo := range tabooListCanonical(taboos) {
