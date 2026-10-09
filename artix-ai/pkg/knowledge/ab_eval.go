@@ -56,7 +56,9 @@ func RunABEval(ctx context.Context, target any, runner ABEvalRunner) (*ABEvalRes
 	var targetID string
 	var summary string
 
+	status := "pass"
 	if regression {
+		status = "regression"
 		summary = fmt.Sprintf("A/B evaluation regression: %d rounds with KI vs %d baseline rounds", roundsWithKI, roundsBaseline)
 	} else {
 		summary = fmt.Sprintf("A/B evaluation pass: %d rounds with KI vs %d baseline rounds", roundsWithKI, roundsBaseline)
@@ -88,6 +90,7 @@ func RunABEval(ctx context.Context, target any, runner ABEvalRunner) (*ABEvalRes
 		RoundsBaseline: roundsBaseline,
 		RoundsWithKI:   roundsWithKI,
 		Regression:     regression,
+		Status:         status,
 		Summary:        summary,
 	}, nil
 }

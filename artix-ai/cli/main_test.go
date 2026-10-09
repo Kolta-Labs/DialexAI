@@ -333,12 +333,12 @@ func TestCLI_KnowledgeEval_Command(t *testing.T) {
 		"ki-eval-01",
 	}, &stdout, &stderr)
 
-	if code != 0 {
-		t.Fatalf("expected artix knowledge eval to succeed, got exit %d, stderr: %s", code, stderr.String())
+	if code == 0 {
+		t.Fatalf("expected artix knowledge eval to fail when unmeasured, got exit 0")
 	}
-	outStr := stdout.String()
-	if !strings.Contains(outStr, "ki-eval-01") || !strings.Contains(outStr, "A/B evaluation") {
-		t.Errorf("expected eval output to contain KI ID and eval result, got: %s", outStr)
+	outStr := stdout.String() + stderr.String()
+	if !strings.Contains(outStr, "ki-eval-01") || !strings.Contains(outStr, "unmeasured") {
+		t.Errorf("expected eval output to contain KI ID and unmeasured status, got: %s", outStr)
 	}
 }
 

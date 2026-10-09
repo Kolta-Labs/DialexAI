@@ -2196,7 +2196,7 @@ func TestLoop_RealABEvalHarness_AutoDemotesHarmfulKI_WithoutSuppliedRunner(t *te
 	storySpec := &spec.StorySpec{
 		ID:           "SPEC-REAL-AB-01",
 		Title:        "Real A/B Eval Harness Test",
-		TestCommands: []string{"grep 'TARGET_CONVERGED' output.txt"},
+		TestCommands: []string{"grep 'TARGET_CONVERGED' counter.txt"},
 	}
 
 	// The PatchGenerator checks PromptContext.KnowledgeItems:
@@ -2220,13 +2220,13 @@ func TestLoop_RealABEvalHarness_AutoDemotesHarmfulKI_WithoutSuppliedRunner(t *te
 
 			if hasHarmfulKI {
 				if req.Round == 1 {
-					return "diff --git a/output.txt b/output.txt\n--- a/output.txt\n+++ b/output.txt\n@@ -1 +1 @@\n-0\n+STILL_WAITING\n", nil
+					return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+STILL_WAITING\n", nil
 				}
-				return "diff --git a/output.txt b/output.txt\n--- a/output.txt\n+++ b/output.txt\n@@ -1 +1 @@\n-STILL_WAITING\n+TARGET_CONVERGED\n", nil
+				return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+TARGET_CONVERGED\n", nil
 			}
 
 			// Baseline without harmful KI converges immediately in round 1
-			return "diff --git a/output.txt b/output.txt\n--- a/output.txt\n+++ b/output.txt\n@@ -1 +1 @@\n-0\n+TARGET_CONVERGED\n", nil
+			return "diff --git a/counter.txt b/counter.txt\n--- a/counter.txt\n+++ b/counter.txt\n@@ -1 +1 @@\n-0\n+TARGET_CONVERGED\n", nil
 		},
 	}
 

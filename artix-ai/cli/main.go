@@ -1348,34 +1348,27 @@ func runKnowledge(cwd string, args []string, human io.Writer, sendJSON func(any)
 			return 1
 		}
 
-		runner := func(ctx context.Context, item any) (int, bool, error) {
-			return 1, true, nil
-		}
-		evalRes, err := knowledge.RunABEval(context.Background(), ki, runner)
-		if err != nil {
-			errStr := fmt.Sprintf("Error: A/B evaluation failed: %v", err)
-			if isJSON {
-				sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
-			}
-			fmt.Fprintf(stderr, "%s\n", errStr)
-			return 1
+		ki.LastEvalResult = &knowledge.ABEvalResult{
+			TargetID:   ki.ID,
+			Status:     "unmeasured",
+			Regression: false,
+			Summary:    fmt.Sprintf("A/B evaluation unmeasured: no evaluation harness or active session available to measure %s", ki.ID),
 		}
 		_ = store.Save(ki)
 
+		errStr := fmt.Sprintf("Error: A/B evaluation unmeasured: no evaluation harness or active session available to measure %s", ki.ID)
 		if isJSON {
 			sendJSON(map[string]any{
-				"ok":             true,
-				"status":         ki.Status,
-				"id":             ki.ID,
-				"roundsBaseline": evalRes.RoundsBaseline,
-				"roundsWithKi":   evalRes.RoundsWithKI,
-				"regression":     evalRes.Regression,
-				"summary":        evalRes.Summary,
+				"ok":      false,
+				"status":  "unmeasured",
+				"id":      ki.ID,
+				"error":   errStr,
+				"summary": ki.LastEvalResult.Summary,
 			})
 		} else {
-			fmt.Fprintf(human, "A/B evaluation for %s:\n  Rounds Baseline: %d\n  Rounds With KI: %d\n  Regression: %v\n  Status: %s\n  Summary: %s\n", ki.ID, evalRes.RoundsBaseline, evalRes.RoundsWithKI, evalRes.Regression, ki.Status, evalRes.Summary)
+			fmt.Fprintf(stderr, "%s\n", errStr)
 		}
-		return 0
+		return 1
 
 	default:
 		fmt.Fprintf(stderr, "Unknown knowledge subcommand: %s\n", sub)
