@@ -198,5 +198,86 @@ func TestSandboxBlocksArtixHomeDirectoryReadAndWrite(t *testing.T) {
 	}
 }
 
+func TestSandbox_GitDirectoryMountedReadOnly_BlocksGitHookWrites(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		if _, err := exec.LookPath("bwrap"); err != nil {
+			t.Skip("skipping sandbox test: no sandbox available on this OS")
+		}
+	}
 
+	ws := t.TempDir()
 
+	// Initialize a valid git repo in the workspace
+	cmdInit := exec.Command("git", "init")
+	cmdInit.Dir = ws
+	if out, err := cmdInit.CombinedOutput(); err != nil {
+		t.Fatalf("git init failed: %v (%s)", err, string(out))
+	}
+	exec.Command("git", "-C", ws, "config", "user.name", "Test User").Run()
+	exec.Command("git", "-C", ws, "config", "user.email", "test@example.com").Run()
+
+	// Create an initial commit
+	initFile := filepath.Join(ws, "file.txt")
+	if err := os.WriteFile(initFile, []byte("initial"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	exec.Command("git", "-C", ws, "add", "file.txt").Run()
+	exec.Command("git", "-C", ws, "commit", "-m", "initial commit").Run()
+
+	canaryFile := filepath.Join(ws, "hook_canary.txt")
+	defer os.Remove(canaryFile)
+
+	box := NewSandbox(ws)
+	ctx := context.Background()
+
+	// Attempt to write a malicious pre-commit hook inside the sandbox
+	payload := `mkdir -p .git/hooks && printf '#!/bin/sh\necho PWNED > hook_canary.txt\nexit 0\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit`
+	res := box.Run(ctx, payload, nil)
+
+	// Sandboxed execution MUST fail when trying to write to .git
+	if res.Success() {
+		t.Fatalf("sandbox must block writing to .git / .git/hooks/pre-commit, but command succeeded: %+v", res)
+	}
+
+	// Verify hook file was not created
+	hookFile := filepath.Join(ws, ".git", "hooks", "pre-commit")
+	if _, err := os.Stat(hookFile); err == nil {
+		t.Fatalf(".git/hooks/pre-commit was created by sandboxed execution")
+	}
+
+	// Create another commit outside sandbox to verify hook does not fire
+	secondFile := filepath.Join(ws, "second.txt")
+	_ = os.WriteFile(secondFile, []byte("second"), 0644)
+	exec.Command("git", "-C", ws, "add", "second.txt").Run()
+	if out, err := exec.Command("git", "-C", ws, "commit", "-m", "second commit").CombinedOutput(); err != nil {
+		t.Fatalf("git commit failed: %v (%s)", err, string(out))
+	}
+
+	// Canary file must NOT exist
+	if _, err := os.Stat(canaryFile); err == nil {
+		t.Fatalf("malicious pre-commit hook executed during git commit outside sandbox!")
+	}
+}
+
+func TestBuildBwrapArgs_MountsGitReadOnly(t *testing.T) {
+	ws := t.TempDir()
+	gitDir := filepath.Join(ws, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	writable := []string{ws}
+	args := BuildBwrapArgs(writable, false, "echo hello")
+
+	hasRoBindGit := false
+	for i := 0; i < len(args)-2; i++ {
+		if args[i] == "--ro-bind" && args[i+1] == gitDir && args[i+2] == gitDir {
+			hasRoBindGit = true
+			break
+		}
+	}
+
+	if !hasRoBindGit {
+		t.Fatalf("expected bwrap args to include --ro-bind %s %s, got: %v", gitDir, gitDir, args)
+	}
+}
