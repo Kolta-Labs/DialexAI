@@ -502,6 +502,27 @@ func TestReleaseWorkflow_NoLiteralKeyAndFailsWhenSecretUnset(t *testing.T) {
 	}
 }
 
+func TestEnterpriseBuild_RequiresCompiledPublicKeyInAllEnterpriseBuildSteps(t *testing.T) {
+	workflowPaths := []string{
+		filepath.Join("..", "..", ".github", "workflows", "artix.yml"),
+		filepath.Join("..", "..", "..", ".github", "workflows", "artix.yml"),
+	}
+	for _, workflowPath := range workflowPaths {
+		data, err := os.ReadFile(workflowPath)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		for idx, line := range lines {
+			if strings.Contains(line, "RequireSignedPolicyFlag=true") {
+				if !strings.Contains(line, "CompiledTrustedPublicKeyHex") {
+					t.Errorf("%s line %d sets RequireSignedPolicyFlag=true without CompiledTrustedPublicKeyHex: %s", workflowPath, idx+1, line)
+				}
+			}
+		}
+	}
+}
+
 
 
 
