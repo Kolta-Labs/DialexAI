@@ -332,7 +332,18 @@ func (c *ConvergenceCoordinator) Run(
 			if opts.CoderUsageTracker != nil {
 				if u := opts.CoderUsageTracker(); u != nil {
 					currentTotalTokens += u.TotalTokens
-					currentTotalUSD += (float64(u.TotalTokens) / 1000.0) * 0.015
+					modelKey := "default"
+					if opts.Model != "" {
+						modelKey = opts.Model
+					}
+					var costPer1k float64
+					if budget != nil {
+						costPer1k, _ = budget.GetModelPrice(modelKey)
+					}
+					if costPer1k <= 0 {
+						costPer1k = 0.015
+					}
+					currentTotalUSD += (float64(u.TotalTokens) / 1000.0) * costPer1k
 				}
 			} else {
 				currentTotalTokens = costReport.TotalTokens
