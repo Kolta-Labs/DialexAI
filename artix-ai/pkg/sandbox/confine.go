@@ -39,6 +39,10 @@ func BuildBwrapArgs(writable []string, net bool, cmdStr string) []string {
 	for _, w := range writable {
 		if _, err := os.Stat(w); err == nil {
 			args = append(args, "--bind", w, w)
+			gitDir := filepath.Join(w, ".git")
+			if _, err := os.Stat(gitDir); err == nil {
+				args = append(args, "--ro-bind", gitDir, gitDir)
+			}
 		}
 	}
 
@@ -136,6 +140,19 @@ func confine(cwd, cmdStr string) (*exec.Cmd, string) {
 			}
 			p.WriteString(")")
 		}
+
+		// Deny write explicitly for .git repository metadata and hooks inside workspace
+		p.WriteString("(deny file-write*")
+		gitPath := filepath.Join(cwd, ".git")
+		fmt.Fprintf(&p, " (subpath %q)", gitPath)
+		fmt.Fprintf(&p, " (literal %q)", gitPath)
+		if resolved := real(gitPath); resolved != gitPath {
+			fmt.Fprintf(&p, " (subpath %q)", resolved)
+			fmt.Fprintf(&p, " (literal %q)", resolved)
+		}
+		p.WriteString(" (regex #\"(^|/)\\.git(/|$)\")")
+		p.WriteString(")")
+
 		return exec.Command("sandbox-exec", "-p", p.String(), "sh", "-c", cmdStr), IsolationOSSandbox
 
 	case "linux":

@@ -58,8 +58,9 @@ func CheckProtectedPaths(diff string, customProtected ...string) []string {
 		if base == "CODEOWNERS" || strings.Contains(clean, "CODEOWNERS") {
 			isProtected = true
 		}
-		// 3. Git hooks anywhere
-		if strings.Contains(clean, ".githooks") || strings.Contains(clean, "githooks/") || strings.Contains(clean, ".git/hooks") ||
+		// 3. Git metadata and hooks anywhere
+		if strings.HasPrefix(clean, ".git/") || clean == ".git" || strings.Contains(clean, "/.git/") ||
+			strings.Contains(clean, ".githooks") || strings.Contains(clean, "githooks/") || strings.Contains(clean, ".git/hooks") ||
 			base == "pre-commit" || base == "post-commit" || base == "pre-push" || base == "commit-msg" {
 			isProtected = true
 		}
