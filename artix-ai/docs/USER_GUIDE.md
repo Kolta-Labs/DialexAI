@@ -360,14 +360,15 @@ artix steering sync
 ```
 
 ### 6.3 PR-to-Rule Synthesizer (Learning from Human Reviews)
-Artix includes an automatic synthesizer that converts human PR comments into permanent institutional rules:
-- Human senior engineer comments on a PR:  
+Artix includes an automatic synthesizer in `artixd` that ingests human PR review comments and synthesizes structured rules:
+- A reviewer comments on a pull request:  
   `"Never use GlobalScope.launch in our viewmodels, always use viewModelScope!"`
-- The Synthesizer parses the comment:
+- The Synthesizer parses and sanitizes the comment into a **PROPOSED** rule:
   - **Category:** Taboo Constraint.
   - **Target Persona:** `android_engineer`, `adversarial_code_reviewer`.
-  - **Action:** Persists rule to `.artix/steering.json`.
-- The mistake is permanently prevented from occurring again.
+  - **Status:** Starts as `proposed` (stored in `.artix/knowledge/`).
+  - **Governance:** Rules start `proposed` and require human CODEOWNER ratification via `artix knowledge ratify <ruleId> --approver <username>` before becoming active.
+- Once ratified by a CODEOWNER, the rule activates and permanently prevents the regression across all subsequent agent runs.
 
 ---
 

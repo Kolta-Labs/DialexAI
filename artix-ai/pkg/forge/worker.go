@@ -64,6 +64,14 @@ func NewRemoteWorker(workRoot string, registry *persona.Registry, allowedHosts .
 	}
 }
 
+// WorkRoot returns the base working directory for ephemeral clones.
+func (w *RemoteWorker) WorkRoot() string {
+	if w == nil {
+		return ""
+	}
+	return w.workRoot
+}
+
 // SetAllowInsecureLocalCloneForTest permits local file clones strictly within unit/integration tests.
 func (w *RemoteWorker) SetAllowInsecureLocalCloneForTest(allow bool) {
 	w.allowInsecureLocalCloneForTest = allow

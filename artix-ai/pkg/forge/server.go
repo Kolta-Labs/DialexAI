@@ -11,11 +11,13 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"artix/pkg/knowledge"
 	"artix/pkg/policy"
 	"artix/pkg/steering"
 )
@@ -192,6 +194,139 @@ func (s *WebhookServer) handleGitHubWebhook(w http.ResponseWriter, r *http.Reque
 	maxBodyLen := s.cfg.MaxBodyLength
 	if maxBodyLen <= 0 {
 		maxBodyLen = 65536
+	}
+
+	if eventType == "pull_request_review_comment" || eventType == "pull_request_review" {
+		var prReviewEvent struct {
+			Action      string `json:"action"`
+			PullRequest struct {
+				Number int    `json:"number"`
+				Title  string `json:"title"`
+				URL    string `json:"html_url"`
+			} `json:"pull_request"`
+			Comment struct {
+				Body              string `json:"body"`
+				AuthorAssociation string `json:"author_association"`
+				HTMLURL           string `json:"html_url"`
+				User              struct {
+					Login string `json:"login"`
+				} `json:"user"`
+			} `json:"comment"`
+			Review struct {
+				Body              string `json:"body"`
+				AuthorAssociation string `json:"author_association"`
+				HTMLURL           string `json:"html_url"`
+				User              struct {
+					Login string `json:"login"`
+				} `json:"user"`
+			} `json:"review"`
+			Sender struct {
+				Login             string `json:"login"`
+				AuthorAssociation string `json:"author_association"`
+			} `json:"sender"`
+			Repository struct {
+				CloneURL string `json:"clone_url"`
+				Name     string `json:"name"`
+				Owner    struct {
+					Login string `json:"login"`
+				} `json:"owner"`
+				DefaultBranch string `json:"default_branch"`
+			} `json:"repository"`
+		}
+
+		if err := json.Unmarshal(body, &prReviewEvent); err != nil {
+			http.Error(w, "invalid json payload", http.StatusBadRequest)
+			return
+		}
+
+		if prReviewEvent.Action != "created" && prReviewEvent.Action != "submitted" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"msg":"ignored pr review action"}`))
+			return
+		}
+
+		commentBody := strings.TrimSpace(prReviewEvent.Comment.Body)
+		author := prReviewEvent.Comment.User.Login
+		commentURL := prReviewEvent.Comment.HTMLURL
+
+		if commentBody == "" && prReviewEvent.Review.Body != "" {
+			commentBody = strings.TrimSpace(prReviewEvent.Review.Body)
+			author = prReviewEvent.Review.User.Login
+			commentURL = prReviewEvent.Review.HTMLURL
+		}
+
+		if author == "" {
+			author = prReviewEvent.Sender.Login
+		}
+
+		if commentBody == "" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"msg":"empty review comment body"}`))
+			return
+		}
+
+		if len(commentBody) > maxBodyLen {
+			http.Error(w, fmt.Sprintf("rejected: comment body length %d exceeds maximum cap of %d bytes", len(commentBody), maxBodyLen), http.StatusRequestEntityTooLarge)
+			return
+		}
+
+		// Check prompt injection in review comment
+		if detections := steering.ScanPromptInjection(commentBody); len(detections) > 0 {
+			http.Error(w, fmt.Sprintf("rejected: untrusted comment text contains prompt injection or policy/steering instructions: %s", strings.Join(detections, "; ")), http.StatusBadRequest)
+			return
+		}
+
+		// Synthesize rule from PR comment
+		synth := knowledge.NewRuleSynthesizer()
+		prov := knowledge.Provenance{
+			Author:       author,
+			PRCommentURL: commentURL,
+			SessionID:    fmt.Sprintf("pr-%d", prReviewEvent.PullRequest.Number),
+		}
+		rule, err := synth.SynthesizeFromCommentWithProvenance(commentBody, prov)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to synthesize rule: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		// Save synthesized rule in knowledge store as proposed
+		workDir := s.cfg.StoragePath
+		if workDir == "" && s.cfg.Worker != nil {
+			workDir = s.cfg.Worker.WorkRoot()
+		}
+		if workDir == "" {
+			workDir = filepath.Join(os.TempDir(), "artix-worker")
+		}
+
+		kStore := knowledge.NewStore(workDir)
+		ki := &knowledge.KnowledgeItem{
+			ID:           rule.RuleID,
+			Title:        rule.Name,
+			Category:     knowledge.CategoryArchitecture,
+			Breakthrough: rule.RuleText,
+			Context:      fmt.Sprintf("Synthesized from PR review comment by %s on PR #%d", author, prReviewEvent.PullRequest.Number),
+			Author:       author,
+			SourcePR:     fmt.Sprintf("%d", prReviewEvent.PullRequest.Number),
+			PRCommentURL: commentURL,
+			Status:       "proposed", // Proposed: requires artix knowledge ratify <id>
+			TTL:          rule.TTL,
+			CreatedAt:    rule.CreatedAt,
+			ExpiresAt:    rule.ExpiresAt,
+		}
+		if err := kStore.Save(ki); err != nil {
+			http.Error(w, fmt.Sprintf("failed to persist synthesized rule: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "proposed",
+			"ruleId": rule.RuleID,
+			"rule":   rule,
+			"msg":    "PR review comment synthesized into proposed rule; requires 'artix knowledge ratify <ruleId>' to activate",
+		})
+		return
 	}
 
 	if eventType == "issue_comment" {
