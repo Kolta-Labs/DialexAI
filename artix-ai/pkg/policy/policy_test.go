@@ -471,6 +471,33 @@ func TestRequireSignedPolicy_RejectsUnsignedFileEvenIfRootOwned(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflow_NoLiteralKeyAndFailsWhenSecretUnset(t *testing.T) {
+	workflowPath := filepath.Join("..", "..", ".github", "workflows", "artix.yml")
+	data, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", workflowPath, err)
+	}
+	content := string(data)
+
+	// 1. Must NOT contain literal hex fallback keys
+	if strings.Contains(content, "8a6d9536") || strings.Contains(content, "CompiledTrustedPublicKeyHex=8a") {
+		t.Errorf("artix.yml contains hardcoded literal key fallback")
+	}
+
+	// 2. Must reference ARTIX_POLICY_COMPILED_PUBKEY secret
+	if !strings.Contains(content, "ARTIX_POLICY_COMPILED_PUBKEY") {
+		t.Errorf("artix.yml must reference secrets.ARTIX_POLICY_COMPILED_PUBKEY")
+	}
+
+	// 3. Must fail build if secret is unset
+	if !strings.Contains(content, "ARTIX_POLICY_COMPILED_PUBKEY") ||
+		(!strings.Contains(content, "-z \"$POLICY_PUBKEY\"") && !strings.Contains(content, "-z \"$TRUSTED_PUBKEY\"")) {
+		t.Errorf("artix.yml must validate that compiled pubkey is set and fail if empty")
+	}
+}
+
+
+
 
 
 
