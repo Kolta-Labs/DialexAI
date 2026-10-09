@@ -80,6 +80,17 @@ func LoadBudgetFromEnv() *TokenBudget {
 			b.MaxDayCost = pol.Budget.MaxDayCost
 			hasConfig = true
 		}
+		if len(pol.Budget.PriceTable) > 0 {
+			b.PriceTable = make(map[string]float64)
+			for k, v := range pol.Budget.PriceTable {
+				b.PriceTable[k] = v
+			}
+			hasConfig = true
+		}
+		if pol.Budget.CostPer1kTokens > 0 {
+			b.CostPer1kTokens = pol.Budget.CostPer1kTokens
+			hasConfig = true
+		}
 	}
 
 	// Environment variable overrides

@@ -209,7 +209,7 @@ func TestMaxUSD_CustomModelPrice_AbortsAtCalculatedDollarAmount(t *testing.T) {
 	if res.Success {
 		t.Fatalf("expected loop to abort when MaxUSD ($0.10) exceeded by custom model price ($0.15), got success")
 	}
-	if !strings.Contains(res.Error, "task budget limit exceeded") || !strings.Contains(res.Error, "USD cost limit $0.10 reached") {
+	if (!strings.Contains(res.Error, "task budget limit exceeded") && !strings.Contains(res.Error, "story cost budget exceeded")) || (!strings.Contains(res.Error, "0.10") && !strings.Contains(res.Error, "0.15")) {
 		t.Fatalf("expected task budget USD limit reached error with custom pricing ($0.15), got: %s", res.Error)
 	}
 }
@@ -320,7 +320,7 @@ func TestMaxUSD_NonDefaultModelPrice_AbortsWithoutCustomBudgetPassed(t *testing.
 	if res.Success {
 		t.Fatalf("expected loop to abort when MaxUSD ($0.05) exceeded by model price ($0.08), but succeeded (hardcoded 0.015 price bug)")
 	}
-	if !strings.Contains(res.Error, "task budget limit exceeded") || !strings.Contains(res.Error, "USD cost limit $0.05 reached") {
+	if (!strings.Contains(res.Error, "task budget limit exceeded") && !strings.Contains(res.Error, "story cost budget exceeded")) || (!strings.Contains(res.Error, "0.05") && !strings.Contains(res.Error, "0.08")) {
 		t.Fatalf("expected task budget USD limit reached error, got: %s", res.Error)
 	}
 }

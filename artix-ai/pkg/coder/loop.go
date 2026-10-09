@@ -176,6 +176,19 @@ func (c *ConvergenceCoordinator) Run(
 	} else {
 		budget = LoadBudgetFromEnv()
 	}
+	if budget == nil && opts != nil && (opts.MaxUSD > 0 || opts.MaxTokens > 0) {
+		budget = &TokenBudget{
+			MaxStoryCost:   opts.MaxUSD,
+			MaxStoryTokens: opts.MaxTokens,
+		}
+	} else if budget != nil && opts != nil {
+		if opts.MaxUSD > 0 && budget.MaxStoryCost <= 0 {
+			budget.MaxStoryCost = opts.MaxUSD
+		}
+		if opts.MaxTokens > 0 && budget.MaxStoryTokens <= 0 {
+			budget.MaxStoryTokens = opts.MaxTokens
+		}
+	}
 
 	costReport := &CostReport{
 		StoryID: s.ID,
@@ -481,7 +494,6 @@ func (c *ConvergenceCoordinator) Run(
 							})
 							return res
 						}
-						costPer1k = 0.015
 					}
 					currentTotalUSD += (float64(u.TotalTokens) / 1000.0) * costPer1k
 				}
