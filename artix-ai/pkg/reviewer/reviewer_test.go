@@ -425,6 +425,28 @@ func TestDisjointModelFamiliesEnforcedInReviewer(t *testing.T) {
 	if v.Approved || v.Status != StatusRejected {
 		t.Fatalf("expected rejection when critic family matches coder family, got: %+v", v)
 	}
+
+	// Case 4: When disjoint families are enforced, empty coder or critic family must be rejected (fail closed)
+	revEmpty := NewAdversarialReviewer(persona.NewRegistry(""))
+	revEmpty.SetCritic(func(ctx context.Context, prompt string) (string, error) {
+		return `{"approved":true}`, nil
+	})
+	// coderFamily and criticFamily are empty by default
+	vEmpty := revEmpty.Evaluate(rc)
+	if vEmpty.Approved || vEmpty.Status != StatusRejected {
+		t.Fatalf("expected rejection when model families are unset/empty under disjoint policy (fail closed), got: %+v", vEmpty)
+	}
+	if len(vEmpty.BlockingIssues) == 0 || !strings.Contains(vEmpty.BlockingIssues[0], "disjoint model families") {
+		t.Fatalf("expected blocking issue mentioning disjoint model families, got: %v", vEmpty.BlockingIssues)
+	}
+
+	// Case 5: Enterprise policy defaults EnforceDisjointModelFamilies to true
+	entPol := policy.Policy{
+		EnterpriseMode: true,
+	}
+	if !entPol.IsDisjointModelFamiliesEnforced() {
+		t.Fatalf("expected enterprise mode policy to default EnforceDisjointModelFamilies to true")
+	}
 }
 
 func TestDeepSemanticASTTaboosNonStatementDiffs(t *testing.T) {

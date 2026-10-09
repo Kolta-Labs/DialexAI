@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"artix/pkg/knowledge"
+	"artix/pkg/policy"
 )
 
 func TestRunCLI_VersionAndHelp(t *testing.T) {
@@ -209,6 +211,68 @@ func TestRunCLI_KnowledgeRatify(t *testing.T) {
 		t.Errorf("expected ApprovedBy=alice, got %q", updated.ApprovedBy)
 	}
 }
+
+func TestRunCLI_Code_DisjointModelFamilies_Rejection(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create story spec in docs/specs/
+	specsDir := filepath.Join(tmpDir, "docs", "specs")
+	_ = os.MkdirAll(specsDir, 0755)
+	specPath := filepath.Join(specsDir, "STORY-001.md")
+	specContent := `# Spec STORY-001: Implement Feature
+
+User Story: As a user I want a feature
+
+## Acceptance Criteria
+- [Scenario 1] Given state, When action, Then success
+
+## Verification Commands
+` + "```bash\necho ok\n```\n"
+	if err := os.WriteFile(specPath, []byte(specContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Policy enforcing disjoint model families
+	policyFile := filepath.Join(tmpDir, "policy.json")
+	pol := policy.Policy{
+		Reviewer: policy.ReviewerPolicyConfig{
+			EnforceDisjointModelFamilies: true,
+		},
+		AllowedTestCommands: []string{"echo ok"},
+	}
+	data, _ := json.Marshal(pol)
+	_ = os.WriteFile(policyFile, data, 0644)
+	key := "policy-key"
+	policy.SetTrustedKey("test-key", key)
+	_ = policy.SignPolicyFile(policyFile, key)
+	policy.SetDefaultPolicyPath(policyFile)
+	defer func() {
+		policy.SetDefaultPolicyPath("/etc/artix/policy.json")
+		policy.ResetCache()
+	}()
+
+	t.Setenv("ANTHROPIC_API_KEY", "mock-anthropic-key")
+
+	var stdout, stderr bytes.Buffer
+	// Both coder and critic are set to same provider "anthropic"
+	code := RunCLI(tmpDir, nil, []string{
+		"code",
+		"--provider", "anthropic",
+		"--model", "claude-3-5-sonnet",
+		"--review-provider", "anthropic",
+		"--review-model", "claude-3-5-sonnet",
+		"--confirm-tests",
+		specPath,
+	}, &stdout, &stderr)
+
+	if code == 0 {
+		t.Errorf("expected failure when coder and critic share same model family under EnforceDisjointModelFamilies")
+	}
+	if !strings.Contains(stderr.String(), "disjoint model families") && !strings.Contains(stderr.String(), "critic model family") {
+		t.Errorf("expected error mentioning disjoint model families, got: %s", stderr.String())
+	}
+}
+
 
 
 
