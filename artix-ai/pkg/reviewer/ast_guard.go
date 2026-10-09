@@ -504,12 +504,46 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 		// Taint tracking data structures
 		taintedVars := make(map[string]bool)
 		taintedFuncs := make(map[string]bool)
+		taintedFields := make(map[string]bool)
+		taintedReceivers := make(map[string]bool)
 		aliasMap := make(map[string]string)
 		ptrAliasMap := make(map[string]string)
+		dsnExternalMap := make(map[string]bool)
 		funcCalls := make(map[string][]string)
 		funcHasNet := make(map[string]bool)
 		funcHasSecret := make(map[string]bool)
 		funcHasSink := make(map[string]bool)
+
+		isExternalHostDSN := func(expr ast.Expr) bool {
+			if id, ok := expr.(*ast.Ident); ok {
+				return dsnExternalMap[id.Name]
+			}
+			var allStrings []string
+			ast.Inspect(expr, func(n ast.Node) bool {
+				if lit, ok := n.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+					val := strings.Trim(lit.Value, "`\"")
+					allStrings = append(allStrings, val)
+				}
+				return true
+			})
+			if len(allStrings) == 0 {
+				return true
+			}
+			combined := strings.ToLower(strings.Join(allStrings, " "))
+			if strings.Contains(combined, "localhost") ||
+				strings.Contains(combined, "127.0.0.1") ||
+				strings.Contains(combined, "::1") ||
+				strings.Contains(combined, ":memory:") ||
+				strings.Contains(combined, ".db") ||
+				strings.Contains(combined, ".sqlite") {
+				return false
+			}
+			if strings.Contains(combined, "@") || strings.Contains(combined, "://") ||
+				strings.Contains(combined, "tcp(") || strings.Contains(combined, "host=") {
+				return true
+			}
+			return true
+		}
 
 		var isSecretExpr func(expr ast.Expr) bool
 		isSecretExpr = func(expr ast.Expr) bool {
@@ -549,6 +583,20 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 				if ident, ok := e.Fun.(*ast.Ident); ok && taintedFuncs[ident.Name] {
 					return true
 				}
+				if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
+					if taintedFuncs[sel.Sel.Name] {
+						return true
+					}
+					if isSecretExpr(sel.X) {
+						return true
+					}
+					// Method chains where receiver or any arg is tainted
+					for _, arg := range e.Args {
+						if isSecretExpr(arg) {
+							return true
+						}
+					}
+				}
 				if strings.HasSuffix(funLower, ".get") || strings.HasSuffix(funLower, ".getstring") || strings.HasSuffix(funLower, "get") {
 					for _, arg := range e.Args {
 						if argLit, ok := arg.(*ast.BasicLit); ok {
@@ -581,6 +629,24 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 					strings.Contains(selUpper, "TOKEN") || strings.Contains(selUpper, "PASSWORD") {
 					return true
 				}
+				exprStr := formatExpr(e)
+				if taintedVars[exprStr] || taintedFields[e.Sel.Name] {
+					return true
+				}
+				if isSecretExpr(e.X) {
+					return true
+				}
+				if id, ok := e.X.(*ast.Ident); ok && taintedVars[id.Name] {
+					return true
+				}
+			case *ast.IndexExpr:
+				exprStr := formatExpr(e)
+				if taintedVars[exprStr] {
+					return true
+				}
+				if isSecretExpr(e.X) {
+					return true
+				}
 				if id, ok := e.X.(*ast.Ident); ok && taintedVars[id.Name] {
 					return true
 				}
@@ -605,72 +671,118 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 		}
 
 		// Pass 1: Scan for tainted variables, tainted struct fields, and functions returning tainted expressions
-		for _, decl := range node.Decls {
-			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil {
-				fnName := fn.Name.Name
-				ast.Inspect(fn.Body, func(in ast.Node) bool {
-					if assign, ok := in.(*ast.AssignStmt); ok {
-						for i, rhs := range assign.Rhs {
-							if isSecretExpr(rhs) {
-								if i < len(assign.Lhs) {
-									if lhsIdent, ok := assign.Lhs[i].(*ast.Ident); ok {
+		for pass := 0; pass < 5; pass++ {
+			for _, decl := range node.Decls {
+				if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil {
+					fnName := fn.Name.Name
+					ast.Inspect(fn.Body, func(in ast.Node) bool {
+						if assign, ok := in.(*ast.AssignStmt); ok {
+							for i, rhs := range assign.Rhs {
+								rhsTainted := isSecretExpr(rhs)
+								if rhsTainted && i < len(assign.Lhs) {
+									lhs := assign.Lhs[i]
+									if lhsIdent, ok := lhs.(*ast.Ident); ok {
 										taintedVars[lhsIdent.Name] = true
 										funcHasSecret[fnName] = true
-									}
-								}
-							}
-							if i < len(assign.Lhs) {
-								if lhsIdent, ok := assign.Lhs[i].(*ast.Ident); ok {
-									if rhsIdent, ok := rhs.(*ast.Ident); ok {
-										aliasMap[lhsIdent.Name] = rhsIdent.Name
-										if taintedVars[rhsIdent.Name] {
-											taintedVars[lhsIdent.Name] = true
+										if isExternalHostDSN(rhs) {
+											dsnExternalMap[lhsIdent.Name] = true
 										}
 									}
-									// Pointer assignment: p := &b
-									if unary, ok := rhs.(*ast.UnaryExpr); ok && unary.Op == token.AND {
-										if targetIdent, ok := unary.X.(*ast.Ident); ok {
-											ptrAliasMap[lhsIdent.Name] = targetIdent.Name
-											aliasMap[lhsIdent.Name] = targetIdent.Name
-											if taintedVars[targetIdent.Name] {
+									if sel, ok := lhs.(*ast.SelectorExpr); ok {
+										taintedVars[formatExpr(sel)] = true
+										taintedFields[sel.Sel.Name] = true
+										funcHasSecret[fnName] = true
+										if recvIdent, ok := sel.X.(*ast.Ident); ok {
+											taintedVars[recvIdent.Name] = true
+											taintedReceivers[recvIdent.Name] = true
+										}
+									}
+									if idx, ok := lhs.(*ast.IndexExpr); ok {
+										taintedVars[formatExpr(idx)] = true
+										funcHasSecret[fnName] = true
+										if mapIdent, ok := idx.X.(*ast.Ident); ok {
+											taintedVars[mapIdent.Name] = true
+										}
+									}
+								}
+								if i < len(assign.Lhs) {
+									if lhsIdent, ok := assign.Lhs[i].(*ast.Ident); ok {
+										if rhsIdent, ok := rhs.(*ast.Ident); ok {
+											aliasMap[lhsIdent.Name] = rhsIdent.Name
+											if taintedVars[rhsIdent.Name] {
 												taintedVars[lhsIdent.Name] = true
+											}
+											if dsnExternalMap[rhsIdent.Name] {
+												dsnExternalMap[lhsIdent.Name] = true
+											}
+										}
+										// Pointer assignment: p := &b
+										if unary, ok := rhs.(*ast.UnaryExpr); ok && unary.Op == token.AND {
+											if targetIdent, ok := unary.X.(*ast.Ident); ok {
+												ptrAliasMap[lhsIdent.Name] = targetIdent.Name
+												aliasMap[lhsIdent.Name] = targetIdent.Name
+												if taintedVars[targetIdent.Name] {
+													taintedVars[lhsIdent.Name] = true
+												}
 											}
 										}
 									}
 								}
 							}
 						}
-					}
-					if rStmt, ok := in.(*ast.RangeStmt); ok {
-						if isSecretExpr(rStmt.X) {
-							if valIdent, ok := rStmt.Value.(*ast.Ident); ok {
-								taintedVars[valIdent.Name] = true
-								funcHasSecret[fnName] = true
-							}
-							if keyIdent, ok := rStmt.Key.(*ast.Ident); ok && rStmt.Value == nil {
-								taintedVars[keyIdent.Name] = true
-								funcHasSecret[fnName] = true
-							}
-						}
-					}
-					if valSpec, ok := in.(*ast.ValueSpec); ok {
-						for i, val := range valSpec.Values {
-							if isSecretExpr(val) && i < len(valSpec.Names) {
-								taintedVars[valSpec.Names[i].Name] = true
-								funcHasSecret[fnName] = true
-							}
-						}
-					}
-					if ret, ok := in.(*ast.ReturnStmt); ok {
-						for _, result := range ret.Results {
-							if isSecretExpr(result) {
-								taintedFuncs[fnName] = true
-								funcHasSecret[fnName] = true
+						if call, ok := in.(*ast.CallExpr); ok {
+							if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+								hasSecretArg := false
+								for _, arg := range call.Args {
+									if isSecretExpr(arg) {
+										hasSecretArg = true
+										break
+									}
+								}
+								if hasSecretArg {
+									funcHasSecret[fnName] = true
+									if recvIdent, ok := sel.X.(*ast.Ident); ok {
+										taintedVars[recvIdent.Name] = true
+										taintedReceivers[recvIdent.Name] = true
+									}
+									taintedFields[sel.Sel.Name] = true
+								}
 							}
 						}
-					}
-					return true
-				})
+						if rStmt, ok := in.(*ast.RangeStmt); ok {
+							if isSecretExpr(rStmt.X) {
+								if valIdent, ok := rStmt.Value.(*ast.Ident); ok {
+									taintedVars[valIdent.Name] = true
+									funcHasSecret[fnName] = true
+								}
+								if keyIdent, ok := rStmt.Key.(*ast.Ident); ok && rStmt.Value == nil {
+									taintedVars[keyIdent.Name] = true
+									funcHasSecret[fnName] = true
+								}
+							}
+						}
+						if valSpec, ok := in.(*ast.ValueSpec); ok {
+							for i, val := range valSpec.Values {
+								if isSecretExpr(val) && i < len(valSpec.Names) {
+									taintedVars[valSpec.Names[i].Name] = true
+									funcHasSecret[fnName] = true
+									if isExternalHostDSN(val) {
+										dsnExternalMap[valSpec.Names[i].Name] = true
+									}
+								}
+							}
+						}
+						if ret, ok := in.(*ast.ReturnStmt); ok {
+							for _, result := range ret.Results {
+								if isSecretExpr(result) {
+									taintedFuncs[fnName] = true
+									funcHasSecret[fnName] = true
+								}
+							}
+						}
+						return true
+					})
+				}
 			}
 		}
 
@@ -741,6 +853,25 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 						funStr := formatExpr(call.Fun)
 						funLower := strings.ToLower(funStr)
 
+						// Collect function / method calls
+						if id, ok := call.Fun.(*ast.Ident); ok {
+							funcCalls[fnName] = append(funcCalls[fnName], id.Name)
+						}
+						if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+							funcCalls[fnName] = append(funcCalls[fnName], sel.Sel.Name)
+						}
+						ast.Inspect(call.Fun, func(sub ast.Node) bool {
+							if subCall, ok := sub.(*ast.CallExpr); ok {
+								if subId, ok := subCall.Fun.(*ast.Ident); ok {
+									funcCalls[fnName] = append(funcCalls[fnName], subId.Name)
+								}
+								if subSel, ok := subCall.Fun.(*ast.SelectorExpr); ok {
+									funcCalls[fnName] = append(funcCalls[fnName], subSel.Sel.Name)
+								}
+							}
+							return true
+						})
+
 						// Reflection call on process/network function
 						if (strings.Contains(callStr, "reflect.ValueOf") || strings.Contains(funStr, "reflect.ValueOf")) &&
 							(strings.Contains(callStr, "exec.Command") || strings.Contains(callStr, "syscall.Exec") ||
@@ -755,14 +886,14 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 							strings.HasPrefix(funLower, "log.print") || strings.HasPrefix(funLower, "log.fatal") ||
 							funLower == "os.writefile" || funLower == "os.create" ||
 							strings.HasPrefix(funLower, "http.") || strings.HasPrefix(funLower, "net.") ||
+							strings.HasPrefix(funLower, "smtp.") || strings.HasPrefix(funLower, "rpc.") || strings.HasPrefix(funLower, "textproto.") ||
 							funLower == "exec.command" || funLower == "exec.commandcontext" || funLower == "syscall.exec" {
 							isSink = true
 							funcHasSink[fnName] = true
 						}
 
 						if !isTestCode {
-							if ident, ok := call.Fun.(*ast.Ident); ok {
-								funcCalls[fnName] = append(funcCalls[fnName], ident.Name)
+							if _, ok := call.Fun.(*ast.Ident); ok {
 								for _, arg := range call.Args {
 									if isSecretExpr(arg) {
 										funcHasSecret[fnName] = true
@@ -786,6 +917,57 @@ func inspectGoASTForTaboos(code string, taboos []string, wholeFiles ...*ast.File
 								pkgName := ""
 								if pkgIdent, ok := sel.X.(*ast.Ident); ok {
 									pkgName = pkgIdent.Name
+								}
+
+								// net/smtp sinks
+								if pkgName == "smtp" || sName == "SendMail" || sName == "PlainAuth" || sName == "CRAMMD5Auth" ||
+									sName == "Mail" || sName == "Rcpt" || sName == "Data" {
+									funcHasNet[fnName] = true
+									funcHasSink[fnName] = true
+									for _, arg := range call.Args {
+										if isSecretExpr(arg) {
+											funcHasSecret[fnName] = true
+											violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration via net/smtp in non-test code")
+										}
+									}
+								}
+
+								// net/rpc sinks
+								if pkgName == "rpc" || sName == "Call" || sName == "Go" || sName == "DialHTTP" || sName == "DialHTTPPath" {
+									funcHasNet[fnName] = true
+									funcHasSink[fnName] = true
+									for _, arg := range call.Args {
+										if isSecretExpr(arg) {
+											funcHasSecret[fnName] = true
+											violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration via net/rpc in non-test code")
+										}
+									}
+								}
+
+								// net/textproto sinks
+								if pkgName == "textproto" || sName == "Cmd" || sName == "PrintfLine" || sName == "DotWriter" {
+									funcHasNet[fnName] = true
+									funcHasSink[fnName] = true
+									for _, arg := range call.Args {
+										if isSecretExpr(arg) {
+											funcHasSecret[fnName] = true
+											violations = append(violations, "AST Taboo Violation: forbidden secret exfiltration via net/textproto in non-test code")
+										}
+									}
+								}
+
+								// database/sql external DSN sinks
+								if (pkgName == "sql" || strings.HasPrefix(funLower, "sql.")) && (sName == "Open" || sName == "OpenDB") {
+									for _, arg := range call.Args {
+										if isSecretExpr(arg) {
+											if isExternalHostDSN(arg) {
+												funcHasNet[fnName] = true
+												funcHasSink[fnName] = true
+												funcHasSecret[fnName] = true
+												violations = append(violations, "AST Taboo Violation: forbidden database/sql connection to remote host with secret in non-test code")
+											}
+										}
+									}
 								}
 
 								// Network sinks
