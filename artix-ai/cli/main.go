@@ -25,6 +25,7 @@ import (
 	"artix/pkg/knowledge"
 	"artix/pkg/lsp"
 	"artix/pkg/persona"
+	"artix/pkg/plugins"
 	"artix/pkg/policy"
 	"artix/pkg/repo"
 	"artix/pkg/reviewer"
@@ -55,6 +56,7 @@ Commands:
   steering      Manage dynamic steering rules (list, sync, bind)
   persona       Inspect and manage SWE Personas
   gc            Clean up stale and orphaned shadow worktrees
+  warm          Pre-warm offline dependency caches outside sandbox
   daemon        Launch webhook server for GitHub & GitLab automation
   version       Print version
 
@@ -196,6 +198,9 @@ func RunCLIWithIO(cwd string, reg *persona.Registry, rawArgs []string, stdin io.
 	case "gc":
 		handleGC(cwd, cmdArgs)
 		return 0
+
+	case "warm":
+		return runWarm(cwd, cmdArgs, humanOut, sendJSON, isJSON, stderr)
 
 	case "daemon":
 		handleDaemon(cwd, reg, cmdArgs)
@@ -1477,4 +1482,40 @@ func runKnowledge(cwd string, args []string, human io.Writer, sendJSON func(any)
 		fmt.Fprintf(stderr, "Unknown knowledge subcommand: %s\n", sub)
 		return 1
 	}
+}
+
+func runWarm(cwd string, args []string, human io.Writer, sendJSON func(any), isJSON bool, stderr io.Writer) int {
+	targetDir := cwd
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		targetDir = args[0]
+		if !filepath.IsAbs(targetDir) {
+			targetDir = filepath.Join(cwd, targetDir)
+		}
+	}
+	reg := plugins.NewRegistry()
+	driver, found := reg.DetectDriver(targetDir)
+	if !found {
+		errStr := fmt.Sprintf("Error: no supported build driver detected in %s to pre-warm", targetDir)
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+		}
+		fmt.Fprintf(stderr, "%s\n", errStr)
+		return 1
+	}
+
+	if err := driver.Warm(context.Background(), targetDir); err != nil {
+		errStr := fmt.Sprintf("Error: pre-warm dependencies failed for %s (%s): %v", targetDir, driver.Name(), err)
+		if isJSON {
+			sendJSON(map[string]any{"ok": false, "status": "error", "error": errStr})
+		}
+		fmt.Fprintf(stderr, "%s\n", errStr)
+		return 1
+	}
+
+	if isJSON {
+		sendJSON(map[string]any{"ok": true, "status": "warmed", "driver": driver.Name()})
+	} else {
+		fmt.Fprintf(human, "Pre-warmed offline dependency cache for driver %s in %s\n", driver.Name(), targetDir)
+	}
+	return 0
 }

@@ -182,6 +182,24 @@ func IsAllowedSemanticRunner(cmdStr string) bool {
 
 
 
+// DriverTimeoutConfig defines per-phase timeouts for a specific build driver.
+type DriverTimeoutConfig struct {
+	Compile time.Duration `json:"compile,omitempty"`
+	Test    time.Duration `json:"test,omitempty"`
+	Lint    time.Duration `json:"lint,omitempty"`
+}
+
+// TimeoutsConfig defines driver and job timeouts.
+type TimeoutsConfig struct {
+	JobTimeout time.Duration       `json:"jobTimeout,omitempty"`
+	Gradle     DriverTimeoutConfig `json:"gradle,omitempty"`
+	Go         DriverTimeoutConfig `json:"go,omitempty"`
+	Cargo      DriverTimeoutConfig `json:"cargo,omitempty"`
+	Npm        DriverTimeoutConfig `json:"npm,omitempty"`
+	SwiftPM    DriverTimeoutConfig `json:"swiftpm,omitempty"`
+	Xcode      DriverTimeoutConfig `json:"xcode,omitempty"`
+}
+
 // Policy specifies security, autonomy, audit, and resource constraints for Artix.
 type Policy struct {
 	EnterpriseMode          bool                 `json:"enterpriseMode"`
@@ -195,6 +213,7 @@ type Policy struct {
 	AuditPrivateKeyPath     string               `json:"auditPrivateKeyPath,omitempty"`
 	AuditRemoteSinks        []RemoteSinkConfig   `json:"auditRemoteSinks,omitempty"`
 	Budget                  BudgetConfig         `json:"budget,omitempty"`
+	Timeouts                TimeoutsConfig       `json:"timeouts,omitempty"`
 	Reviewer                ReviewerPolicyConfig `json:"reviewer,omitempty"`
 	ModelFamilies           map[string]string    `json:"modelFamilies,omitempty"`
 	ModelDerivations        map[string]string    `json:"modelDerivations,omitempty"`
@@ -206,6 +225,60 @@ type Policy struct {
 	PolicyHash              string               `json:"policyHash,omitempty"`
 	Source                  string               `json:"-"`
 	IsVerified              bool                 `json:"-"`
+}
+
+// GetDriverTimeout returns the configured or default timeout for a driver and phase.
+func (p *Policy) GetDriverTimeout(driver, phase string) time.Duration {
+	var dt DriverTimeoutConfig
+	if p != nil {
+		switch strings.ToLower(driver) {
+		case "gradle":
+			dt = p.Timeouts.Gradle
+		case "go":
+			dt = p.Timeouts.Go
+		case "cargo":
+			dt = p.Timeouts.Cargo
+		case "npm":
+			dt = p.Timeouts.Npm
+		case "swiftpm", "swift":
+			dt = p.Timeouts.SwiftPM
+		case "xcode":
+			dt = p.Timeouts.Xcode
+		}
+	}
+	switch strings.ToLower(phase) {
+	case "compile":
+		if dt.Compile > 0 {
+			return dt.Compile
+		}
+		if strings.EqualFold(driver, "gradle") || strings.EqualFold(driver, "xcode") {
+			return 300 * time.Second
+		}
+		return 180 * time.Second
+	case "test":
+		if dt.Test > 0 {
+			return dt.Test
+		}
+		if strings.EqualFold(driver, "gradle") || strings.EqualFold(driver, "xcode") {
+			return 360 * time.Second
+		}
+		return 300 * time.Second
+	case "lint":
+		if dt.Lint > 0 {
+			return dt.Lint
+		}
+		if strings.EqualFold(driver, "gradle") || strings.EqualFold(driver, "cargo") {
+			return 180 * time.Second
+		}
+		return 120 * time.Second
+	default:
+		return 180 * time.Second
+	}
+}
+
+// GetTimeout retrieves the timeout for a given driver and phase from the active policy.
+func GetTimeout(driver, phase string) time.Duration {
+	return Active().GetDriverTimeout(driver, phase)
 }
 
 // IsDisjointModelFamiliesEnforced returns true if disjoint coder and critic model families are mandated.

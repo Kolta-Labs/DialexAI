@@ -16,6 +16,7 @@ import (
 	"artix/pkg/audit"
 	"artix/pkg/git"
 	"artix/pkg/knowledge"
+	"artix/pkg/plugins"
 	"artix/pkg/policy"
 	"artix/pkg/repo"
 	"artix/pkg/reviewer"
@@ -610,6 +611,21 @@ func (c *ConvergenceCoordinator) Run(
 				tRes := c.sandbox.Run(ctx, cmdStr, tOpts)
 				testResults = append(testResults, tRes)
 				if !tRes.Success() {
+					combinedErr := tRes.Stderr + "\n" + tRes.Stdout
+					if artifact, ok := plugins.DetectOfflineCacheMiss(combinedErr); ok {
+						res.Error = fmt.Sprintf("OFFLINE_CACHE_MISS: %s", artifact)
+						_ = audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
+							EventType:   audit.EventCodeConvergence,
+							Status:      "OFFLINE_CACHE_MISS",
+							StorySpecID: s.ID,
+							Details: map[string]any{
+								"artifact": artifact,
+								"error":    res.Error,
+								"command":  cmdStr,
+							},
+						})
+						return res
+					}
 					priorFailures = append(priorFailures, fmt.Sprintf("%s: exit %d\n%s", cmdStr, tRes.ExitCode, tRes.Stderr))
 				}
 			}

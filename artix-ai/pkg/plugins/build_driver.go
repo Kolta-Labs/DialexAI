@@ -2,14 +2,16 @@ package plugins
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
+	"artix/pkg/policy"
 	"artix/pkg/sandbox"
 )
 
@@ -39,6 +41,7 @@ type BuildDriver interface {
 	Compile(ctx context.Context, rootDir string) *sandbox.ExecResult
 	Test(ctx context.Context, rootDir string) *sandbox.ExecResult
 	Lint(ctx context.Context, rootDir string) *sandbox.ExecResult
+	Warm(ctx context.Context, rootDir string) error
 	ParseErrorTrace(output string) []BuildDiagnostic
 }
 
@@ -90,27 +93,49 @@ func (g *GoDriver) Detect(rootDir string) bool {
 	return err == nil
 }
 
+func (g *GoDriver) CompileCmd(rootDir string) string {
+	return "GOFLAGS=-mod=mod GOPROXY=off go build ./..."
+}
+
+func (g *GoDriver) TestCmd(rootDir string) string {
+	return "GOFLAGS=-mod=mod GOPROXY=off go test -v ./..."
+}
+
+func (g *GoDriver) LintCmd(rootDir string) string {
+	return "GOFLAGS=-mod=mod GOPROXY=off go vet ./..."
+}
+
+func (g *GoDriver) Warm(ctx context.Context, rootDir string) error {
+	cmd := exec.CommandContext(ctx, "go", "mod", "download")
+	cmd.Dir = rootDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("go mod download failed: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 func (g *GoDriver) Compile(ctx context.Context, rootDir string) *sandbox.ExecResult {
 	box := sandbox.NewSandbox(rootDir)
-	return box.Run(ctx, "go build ./...", &sandbox.ExecOptions{
+	return box.Run(ctx, g.CompileCmd(rootDir), &sandbox.ExecOptions{
 		Cwd:     rootDir,
-		Timeout: 3 * time.Minute,
+		Timeout: policy.GetTimeout("go", "compile"),
 	})
 }
 
 func (g *GoDriver) Test(ctx context.Context, rootDir string) *sandbox.ExecResult {
 	box := sandbox.NewSandbox(rootDir)
-	return box.Run(ctx, "go test -v ./...", &sandbox.ExecOptions{
+	return box.Run(ctx, g.TestCmd(rootDir), &sandbox.ExecOptions{
 		Cwd:     rootDir,
-		Timeout: 5 * time.Minute,
+		Timeout: policy.GetTimeout("go", "test"),
 	})
 }
 
 func (g *GoDriver) Lint(ctx context.Context, rootDir string) *sandbox.ExecResult {
 	box := sandbox.NewSandbox(rootDir)
-	return box.Run(ctx, "go vet ./...", &sandbox.ExecOptions{
+	return box.Run(ctx, g.LintCmd(rootDir), &sandbox.ExecOptions{
 		Cwd:     rootDir,
-		Timeout: 2 * time.Minute,
+		Timeout: policy.GetTimeout("go", "lint"),
 	})
 }
 
@@ -156,30 +181,50 @@ func (gr *GradleDriver) gradlewCmd(rootDir string) string {
 	return gradlew
 }
 
+func (gr *GradleDriver) CompileCmd(rootDir string) string {
+	return gr.gradlewCmd(rootDir) + " assembleDebug --offline"
+}
+
+func (gr *GradleDriver) TestCmd(rootDir string) string {
+	return gr.gradlewCmd(rootDir) + " testDebugUnitTest --offline"
+}
+
+func (gr *GradleDriver) LintCmd(rootDir string) string {
+	return gr.gradlewCmd(rootDir) + " ktlintCheck --offline"
+}
+
+func (gr *GradleDriver) Warm(ctx context.Context, rootDir string) error {
+	gradlew := gr.gradlewCmd(rootDir)
+	cmd := exec.CommandContext(ctx, "sh", "-c", gradlew+" --refresh-dependencies dependencies testClasses")
+	cmd.Dir = rootDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("gradle pre-warm failed: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 func (gr *GradleDriver) Compile(ctx context.Context, rootDir string) *sandbox.ExecResult {
 	box := sandbox.NewSandbox(rootDir)
-	cmd := gr.gradlewCmd(rootDir) + " assembleDebug --no-daemon"
-	return box.Run(ctx, cmd, &sandbox.ExecOptions{
+	return box.Run(ctx, gr.CompileCmd(rootDir), &sandbox.ExecOptions{
 		Cwd:     rootDir,
-		Timeout: 5 * time.Minute,
+		Timeout: policy.GetTimeout("gradle", "compile"),
 	})
 }
 
 func (gr *GradleDriver) Test(ctx context.Context, rootDir string) *sandbox.ExecResult {
 	box := sandbox.NewSandbox(rootDir)
-	cmd := gr.gradlewCmd(rootDir) + " testDebugUnitTest --no-daemon"
-	return box.Run(ctx, cmd, &sandbox.ExecOptions{
+	return box.Run(ctx, gr.TestCmd(rootDir), &sandbox.ExecOptions{
 		Cwd:     rootDir,
-		Timeout: 6 * time.Minute,
+		Timeout: policy.GetTimeout("gradle", "test"),
 	})
 }
 
 func (gr *GradleDriver) Lint(ctx context.Context, rootDir string) *sandbox.ExecResult {
 	box := sandbox.NewSandbox(rootDir)
-	cmd := gr.gradlewCmd(rootDir) + " ktlintCheck --no-daemon"
-	return box.Run(ctx, cmd, &sandbox.ExecOptions{
+	return box.Run(ctx, gr.LintCmd(rootDir), &sandbox.ExecOptions{
 		Cwd:     rootDir,
-		Timeout: 3 * time.Minute,
+		Timeout: policy.GetTimeout("gradle", "lint"),
 	})
 }
 
@@ -217,27 +262,49 @@ func (c *CargoDriver) Detect(rootDir string) bool {
 	return err == nil
 }
 
+func (c *CargoDriver) CompileCmd(rootDir string) string {
+	return "cargo check --offline"
+}
+
+func (c *CargoDriver) TestCmd(rootDir string) string {
+	return "cargo test --offline"
+}
+
+func (c *CargoDriver) LintCmd(rootDir string) string {
+	return "cargo clippy --offline"
+}
+
+func (c *CargoDriver) Warm(ctx context.Context, rootDir string) error {
+	cmd := exec.CommandContext(ctx, "cargo", "fetch")
+	cmd.Dir = rootDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("cargo fetch failed: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 func (c *CargoDriver) Compile(ctx context.Context, rootDir string) *sandbox.ExecResult {
 	box := sandbox.NewSandbox(rootDir)
-	return box.Run(ctx, "cargo check", &sandbox.ExecOptions{
+	return box.Run(ctx, c.CompileCmd(rootDir), &sandbox.ExecOptions{
 		Cwd:     rootDir,
-		Timeout: 3 * time.Minute,
+		Timeout: policy.GetTimeout("cargo", "compile"),
 	})
 }
 
 func (c *CargoDriver) Test(ctx context.Context, rootDir string) *sandbox.ExecResult {
 	box := sandbox.NewSandbox(rootDir)
-	return box.Run(ctx, "cargo test", &sandbox.ExecOptions{
+	return box.Run(ctx, c.TestCmd(rootDir), &sandbox.ExecOptions{
 		Cwd:     rootDir,
-		Timeout: 5 * time.Minute,
+		Timeout: policy.GetTimeout("cargo", "test"),
 	})
 }
 
 func (c *CargoDriver) Lint(ctx context.Context, rootDir string) *sandbox.ExecResult {
 	box := sandbox.NewSandbox(rootDir)
-	return box.Run(ctx, "cargo clippy", &sandbox.ExecOptions{
+	return box.Run(ctx, c.LintCmd(rootDir), &sandbox.ExecOptions{
 		Cwd:     rootDir,
-		Timeout: 3 * time.Minute,
+		Timeout: policy.GetTimeout("cargo", "lint"),
 	})
 }
 
@@ -276,27 +343,49 @@ func (n *NpmDriver) Detect(rootDir string) bool {
 	return err == nil
 }
 
+func (n *NpmDriver) CompileCmd(rootDir string) string {
+	return "npm run build --if-present --offline"
+}
+
+func (n *NpmDriver) TestCmd(rootDir string) string {
+	return "npm test --offline"
+}
+
+func (n *NpmDriver) LintCmd(rootDir string) string {
+	return "npm run lint --if-present --offline"
+}
+
+func (n *NpmDriver) Warm(ctx context.Context, rootDir string) error {
+	cmd := exec.CommandContext(ctx, "npm", "ci")
+	cmd.Dir = rootDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("npm ci failed: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 func (n *NpmDriver) Compile(ctx context.Context, rootDir string) *sandbox.ExecResult {
 	box := sandbox.NewSandbox(rootDir)
-	return box.Run(ctx, "npm run build --if-present", &sandbox.ExecOptions{
+	return box.Run(ctx, n.CompileCmd(rootDir), &sandbox.ExecOptions{
 		Cwd:     rootDir,
-		Timeout: 3 * time.Minute,
+		Timeout: policy.GetTimeout("npm", "compile"),
 	})
 }
 
 func (n *NpmDriver) Test(ctx context.Context, rootDir string) *sandbox.ExecResult {
 	box := sandbox.NewSandbox(rootDir)
-	return box.Run(ctx, "npm test", &sandbox.ExecOptions{
+	return box.Run(ctx, n.TestCmd(rootDir), &sandbox.ExecOptions{
 		Cwd:     rootDir,
-		Timeout: 5 * time.Minute,
+		Timeout: policy.GetTimeout("npm", "test"),
 	})
 }
 
 func (n *NpmDriver) Lint(ctx context.Context, rootDir string) *sandbox.ExecResult {
 	box := sandbox.NewSandbox(rootDir)
-	return box.Run(ctx, "npm run lint --if-present", &sandbox.ExecOptions{
+	return box.Run(ctx, n.LintCmd(rootDir), &sandbox.ExecOptions{
 		Cwd:     rootDir,
-		Timeout: 2 * time.Minute,
+		Timeout: policy.GetTimeout("npm", "lint"),
 	})
 }
 
@@ -328,4 +417,55 @@ func (n *NpmDriver) ParseErrorTrace(output string) []BuildDiagnostic {
 		})
 	}
 	return diags
+}
+
+// DetectOfflineCacheMiss parses build failure output and identifies any missing offline artifact.
+func DetectOfflineCacheMiss(output string) (string, bool) {
+	// 1. Gradle patterns
+	reGradleResolve := regexp.MustCompile(`(?i)(?:Could not resolve|Could not download)\s+([^\s:]+:[^\s:]+:[^\s:]+)[.\s]`)
+	if m := reGradleResolve.FindStringSubmatch(output); len(m) > 1 {
+		return strings.TrimRight(m[1], "."), true
+	}
+	reGradleOffline := regexp.MustCompile(`(?i)No cached version of\s+([^\s:]+:[^\s:]+:[^\s:]+)\s+available for offline mode`)
+	if m := reGradleOffline.FindStringSubmatch(output); len(m) > 1 {
+		return m[1], true
+	}
+
+	// 2. Go patterns
+	reGoProxy := regexp.MustCompile(`(?:go:\s+)?([^\s:]+@[^\s:]+|[^\s:]+):\s*(?:reading\s+[^\s:]+:)?\s*GOPROXY=off`)
+	if m := reGoProxy.FindStringSubmatch(output); len(m) > 1 {
+		return m[1], true
+	}
+	reGoFind := regexp.MustCompile(`cannot find module providing package\s+([^\s:]+)`)
+	if m := reGoFind.FindStringSubmatch(output); len(m) > 1 {
+		return m[1], true
+	}
+
+	// 3. Cargo patterns
+	reCargo := regexp.MustCompile(`(?i)failed to select a version for the requirement\s+['"` + "`" + `]?([a-zA-Z0-9_\-]+)`)
+	if m := reCargo.FindStringSubmatch(output); len(m) > 1 {
+		return m[1], true
+	}
+
+	// 4. Npm patterns
+	reNpmCache := regexp.MustCompile(`(?i)package\s+([@a-zA-Z0-9_\-\./]+)\s+not in cache`)
+	if m := reNpmCache.FindStringSubmatch(output); len(m) > 1 {
+		return m[1], true
+	}
+	reNpmENOTCACHED := regexp.MustCompile(`(?i)ENOTCACHED`)
+	if reNpmENOTCACHED.MatchString(output) {
+		reNpmPkg := regexp.MustCompile(`(?:npm ERR!\s+)?(?:request to https?://[^\s]+/([^\s/]+)|package\s+([^\s]+))`)
+		if m := reNpmPkg.FindStringSubmatch(output); len(m) > 1 {
+			pkg := m[1]
+			if pkg == "" && len(m) > 2 {
+				pkg = m[2]
+			}
+			if pkg != "" {
+				return pkg, true
+			}
+		}
+		return "unknown-npm-package", true
+	}
+
+	return "", false
 }

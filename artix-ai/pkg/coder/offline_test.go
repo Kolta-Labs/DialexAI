@@ -2,13 +2,11 @@ package coder
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"artix/pkg/git"
 	"artix/pkg/persona"
 	"artix/pkg/repo"
 	"artix/pkg/reviewer"
@@ -17,20 +15,11 @@ import (
 )
 
 func TestCoderLoop_OfflineCacheMiss_FailsWithDistinctError(t *testing.T) {
-	tempDir := t.TempDir()
+	tempDir, d := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
 
-	// Initialize git repo
-	d := git.NewDriver(tempDir)
-	if err := d.Init(); err != nil {
-		t.Fatalf("git init failed: %v", err)
-	}
-	_ = os.WriteFile(filepath.Join(tempDir, "build.gradle.kts"), []byte("plugins { java }\n"), 0644)
-	if err := d.Add("."); err != nil {
-		t.Fatalf("git add failed: %v", err)
-	}
-	if err := d.Commit("initial commit"); err != nil {
-		t.Fatalf("git commit failed: %v", err)
-	}
+	_ = os.WriteFile(filepath.Join(tempDir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644)
+	_, _ = d.CommitAll("add main.go")
 
 	reg := persona.NewRegistry(tempDir)
 	dc, err := NewDomainCoder("backend_engineer", reg)
@@ -58,10 +47,11 @@ func TestCoderLoop_OfflineCacheMiss_FailsWithDistinctError(t *testing.T) {
 	rc, _ := repo.DetectContext(tempDir)
 
 	opts := &LoopOptions{
-		MaxRounds: 1,
-		Autonomy:  AutonomySupervised,
+		MaxRounds:             1,
+		Autonomy:              AutonomySupervised,
+		TestCommandsConfirmed: true,
 		MockPatchGen: func(round int, feedback string) string {
-			return "diff --git a/build.gradle.kts b/build.gradle.kts\n--- a/build.gradle.kts\n+++ b/build.gradle.kts\n@@ -1,1 +1,2 @@\n plugins { java }\n+// comment\n"
+			return "diff --git a/main.go b/main.go\n--- a/main.go\n+++ b/main.go\n@@ -2,1 +2,2 @@\n func main() {}\n+// updated\n"
 		},
 	}
 
@@ -78,19 +68,11 @@ func TestCoderLoop_OfflineCacheMiss_FailsWithDistinctError(t *testing.T) {
 }
 
 func TestCoderLoop_WarmThenSandboxedExecution_UnshareNetVerified(t *testing.T) {
-	tempDir := t.TempDir()
+	tempDir, d := setupTestRepo(t)
+	defer os.RemoveAll(tempDir)
 
-	d := git.NewDriver(tempDir)
-	if err := d.Init(); err != nil {
-		t.Fatalf("git init failed: %v", err)
-	}
-	_ = os.WriteFile(filepath.Join(tempDir, "build.gradle.kts"), []byte("plugins { java }\n"), 0644)
-	if err := d.Add("."); err != nil {
-		t.Fatalf("git add failed: %v", err)
-	}
-	if err := d.Commit("initial commit"); err != nil {
-		t.Fatalf("git commit failed: %v", err)
-	}
+	_ = os.WriteFile(filepath.Join(tempDir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0644)
+	_, _ = d.CommitAll("add main.go")
 
 	// Fake gradlew that checks outbound network in test phase
 	// In sandboxed mode without network (--unshare-net / deny network*), connecting outbound fails.
@@ -115,6 +97,8 @@ func TestCoderLoop_WarmThenSandboxedExecution_UnshareNetVerified(t *testing.T) {
 	}
 
 	rev := reviewer.NewAdversarialReviewer(reg)
+	rev.SetCoderFamily("anthropic")
+	rev.SetCriticFamily("openai")
 	rev.SetCritic(func(ctx context.Context, prompt string) (string, error) {
 		return `{"approved":true,"blocking":[],"warnings":[]}`, nil
 	})
@@ -131,10 +115,11 @@ func TestCoderLoop_WarmThenSandboxedExecution_UnshareNetVerified(t *testing.T) {
 	rc, _ := repo.DetectContext(tempDir)
 
 	opts := &LoopOptions{
-		MaxRounds: 1,
-		Autonomy:  AutonomySupervised,
+		MaxRounds:             1,
+		Autonomy:              AutonomySupervised,
+		TestCommandsConfirmed: true,
 		MockPatchGen: func(round int, feedback string) string {
-			return "diff --git a/build.gradle.kts b/build.gradle.kts\n--- a/build.gradle.kts\n+++ b/build.gradle.kts\n@@ -1,1 +1,2 @@\n plugins { java }\n+// comment\n"
+			return "diff --git a/main.go b/main.go\n--- a/main.go\n+++ b/main.go\n@@ -2,1 +2,2 @@\n func main() {}\n+// updated\n"
 		},
 	}
 

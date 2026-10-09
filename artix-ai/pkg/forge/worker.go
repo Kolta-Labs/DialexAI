@@ -13,6 +13,7 @@ import (
 	"artix/pkg/coder"
 	"artix/pkg/git"
 	"artix/pkg/persona"
+	"artix/pkg/plugins"
 	"artix/pkg/policy"
 	"artix/pkg/repo"
 	"artix/pkg/reviewer"
@@ -153,6 +154,13 @@ func (w *RemoteWorker) Execute(ctx context.Context, task *RemoteWorkerTask) *Rem
 		return res
 	}
 	res.Branch = branchName
+
+	// Pre-warm dependencies outside sandbox before confined builds
+	if reg := plugins.NewRegistry(); reg != nil {
+		if buildDrv, ok := reg.DetectDriver(cloneDir); ok {
+			_ = buildDrv.Warm(ctx, cloneDir)
+		}
+	}
 
 	// 3. Plan: Stakeholder Council generates Story Spec
 	council := spec.NewCouncil(w.registry)
