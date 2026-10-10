@@ -771,7 +771,10 @@ func (s *WebhookServer) canAcceptJob() bool {
 }
 
 func (s *WebhookServer) isAuthorized(r *http.Request) bool {
-	if s.cfg.JobsAuthToken != "" {
+	if s.cfg.JobsAuthToken != "" || policy.IsEnterprise() {
+		if s.cfg.JobsAuthToken == "" {
+			return false // fail closed in enterprise mode when no token is set
+		}
 		authHeader := r.Header.Get("Authorization")
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 		if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(s.cfg.JobsAuthToken)) != 1 {
@@ -782,11 +785,9 @@ func (s *WebhookServer) isAuthorized(r *http.Request) bool {
 }
 
 func (s *WebhookServer) handleReadyz(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.JobsAuthToken != "" {
-		if !s.isAuthorized(r) {
-			http.Error(w, "unauthorized: valid authorization token required", http.StatusUnauthorized)
-			return
-		}
+	if !s.isAuthorized(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
 	}
 
 	if err := s.checkJobStoreWritable(); err != nil {
@@ -810,11 +811,9 @@ func (s *WebhookServer) handleReadyz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *WebhookServer) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.JobsAuthToken != "" {
-		if !s.isAuthorized(r) {
-			http.Error(w, "unauthorized: valid authorization token required", http.StatusUnauthorized)
-			return
-		}
+	if !s.isAuthorized(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
 	}
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")

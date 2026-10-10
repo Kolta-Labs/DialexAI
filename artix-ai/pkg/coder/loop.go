@@ -16,6 +16,7 @@ import (
 	"artix/pkg/audit"
 	"artix/pkg/git"
 	"artix/pkg/knowledge"
+	"artix/pkg/metrics"
 	"artix/pkg/plugins"
 	"artix/pkg/policy"
 	"artix/pkg/repo"
@@ -86,6 +87,8 @@ type LoopResult struct {
 	CommitHash       string                  `json:"commitHash,omitempty"`
 	CostReport       *CostReport             `json:"costReport,omitempty"`
 	Error            string                  `json:"error,omitempty"`
+	SkippedTargets   map[string]string       `json:"skippedTargets,omitempty"`
+	TargetSummary    string                  `json:"targetSummary,omitempty"`
 }
 
 // ConvergenceCoordinator manages the iterative Coder <--> Reviewer <--> Sandbox loop.
@@ -221,8 +224,37 @@ func (c *ConvergenceCoordinator) Run(
 		}
 	}
 
+	reg := plugins.NewRegistry()
+	buildDrv, hasDrv := reg.DetectDriver(repoCtx.RootDir)
+	driverName := ""
+	if hasDrv {
+		driverName = buildDrv.Name()
+	}
+
+	if gr, ok := buildDrv.(*plugins.GradleDriver); ok && gr.IsKMP(repoCtx.RootDir) {
+		selected, skipped, _ := gr.ResolveKMPTasks(ctx, repoCtx.RootDir)
+		if len(skipped) > 0 {
+			res.SkippedTargets = skipped
+			for range skipped {
+				metrics.RecordSkippedHostUnsupported()
+			}
+			res.TargetSummary = gr.FormatTargetStatusSummary(selected, skipped)
+		} else if len(selected) > 0 {
+			res.TargetSummary = "All targets green"
+		}
+	}
+
+	testCommandsToValidate := s.TestCommands
+	if len(testCommandsToValidate) == 0 && hasDrv {
+		if gr, ok := buildDrv.(*plugins.GradleDriver); ok {
+			testCommandsToValidate = []string{gr.TestCmd(repoCtx.RootDir)}
+		}
+	}
+
+	phaseTimeout := policy.GetTimeout(driverName, "test")
+
 	// Validate test commands against signed enterprise policy before any execution
-	effectiveTestCommands, pErr := policy.ValidateTestCommands(s.TestCommands)
+	effectiveTestCommands, pErr := policy.ValidateTestCommands(testCommandsToValidate)
 	if pErr != nil {
 		res.Error = fmt.Sprintf("test execution blocked by policy: %v", pErr)
 		res.CostReport = costReport
@@ -603,7 +635,7 @@ func (c *ConvergenceCoordinator) Run(
 			for _, cmdStr := range effectiveTestCommands {
 				tOpts := &sandbox.ExecOptions{
 					Cwd:     repoCtx.RootDir,
-					Timeout: 2 * time.Minute,
+					Timeout: phaseTimeout,
 				}
 				if opts != nil && opts.TestTimeout > 0 {
 					tOpts.Timeout = opts.TestTimeout
@@ -612,6 +644,7 @@ func (c *ConvergenceCoordinator) Run(
 				testResults = append(testResults, tRes)
 				if !tRes.Success() {
 					if tRes.TimedOut {
+						metrics.RecordTimeout()
 						if activeSession != nil {
 							_ = activeSession.Rollback()
 						}
@@ -647,6 +680,7 @@ func (c *ConvergenceCoordinator) Run(
 					}
 					combinedErr := tRes.Stderr + "\n" + tRes.Stdout
 					if artifact, ok := plugins.DetectOfflineCacheMiss(combinedErr); ok {
+						metrics.RecordOfflineCacheMiss()
 						res.Error = fmt.Sprintf("OFFLINE_CACHE_MISS: %s", artifact)
 						_ = AppendRoundTrace(repoCtx.RootDir, &RoundTrace{
 							TaskID:          s.ID,
@@ -969,7 +1003,7 @@ func (c *ConvergenceCoordinator) Run(
 				for _, cmdStr := range effectiveTestCommands {
 					tOpts := &sandbox.ExecOptions{
 						Cwd:     repoCtx.RootDir,
-						Timeout: 2 * time.Minute,
+						Timeout: phaseTimeout,
 					}
 					if opts != nil && opts.TestTimeout > 0 {
 						tOpts.Timeout = opts.TestTimeout
@@ -1186,6 +1220,10 @@ func (c *ConvergenceCoordinator) Run(
 				convergenceDetails["criticFamily"] = opts.ReviewerFamily
 				convergenceDetails["criticFamilyResolution"] = criticRes
 			}
+			if res.SkippedTargets != nil {
+				convergenceDetails["skippedTargets"] = res.SkippedTargets
+				convergenceDetails["targetSummary"] = res.TargetSummary
+			}
 
 			emitErr := auditLogger.Emit(audit.AuditEvent{
 				EventType: audit.EventCodeConvergence,
@@ -1325,6 +1363,10 @@ func (c *ConvergenceCoordinator) Run(
 		failedDetails["criticModel"] = opts.ReviewerModel
 		failedDetails["criticFamily"] = opts.ReviewerFamily
 		failedDetails["criticFamilyResolution"] = criticRes
+	}
+	if res.SkippedTargets != nil {
+		failedDetails["skippedTargets"] = res.SkippedTargets
+		failedDetails["targetSummary"] = res.TargetSummary
 	}
 
 	emitErr := audit.Default(repoCtx.RootDir).Emit(audit.AuditEvent{
