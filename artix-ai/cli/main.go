@@ -59,6 +59,7 @@ Commands:
   warm          Pre-warm offline dependency caches outside sandbox
   explain       Explain job failure root causes and reproduction commands
   replay        Replay a recorded convergence round in a fresh worktree
+  pilot         Pilot success metrics and stop rule reports (pilot report)
   daemon        Launch webhook server for GitHub & GitLab automation
   version       Print version
 
@@ -209,6 +210,9 @@ func RunCLIWithIO(cwd string, reg *persona.Registry, rawArgs []string, stdin io.
 
 	case "replay":
 		return runReplay(cwd, cmdArgs, humanOut, sendJSON, isJSON, stderr)
+
+	case "pilot":
+		return runPilot(cwd, cmdArgs, humanOut, sendJSON, isJSON, stderr)
 
 	case "daemon":
 		handleDaemon(cwd, reg, cmdArgs)

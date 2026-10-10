@@ -222,9 +222,45 @@ type Policy struct {
 	RequireForgeApproval    bool                 `json:"requireForgeApproval,omitempty"`
 	ExpiresAt               string               `json:"expiresAt,omitempty"`
 	ApproverIdentity        string               `json:"approverIdentity,omitempty"`
-	PolicyHash              string               `json:"policyHash,omitempty"`
+	PolicyHash                string               `json:"policyHash,omitempty"`
+	AllowedDrivers            []string             `json:"allowedDrivers,omitempty"`
+	Pilot                     PilotPolicyConfig    `json:"pilot,omitempty"`
 	Source                  string               `json:"-"`
 	IsVerified              bool                 `json:"-"`
+}
+
+// PilotPolicyConfig defines pilot stop rule thresholds.
+type PilotPolicyConfig struct {
+	MaxAbortRate    float64 `json:"maxAbortRate,omitempty"`
+	MaxCostPerStory float64 `json:"maxCostPerStory,omitempty"`
+}
+
+// GetAllowedDrivers returns the list of allowed build drivers. Defaults to ["go", "gradle"].
+func (p *Policy) GetAllowedDrivers() []string {
+	if p == nil || len(p.AllowedDrivers) == 0 {
+		return []string{"go", "gradle"}
+	}
+	return p.AllowedDrivers
+}
+
+// IsDriverAllowed checks if a driver is permitted under the policy.
+func (p *Policy) IsDriverAllowed(driver string) bool {
+	driver = strings.ToLower(strings.TrimSpace(driver))
+	allowed := p.GetAllowedDrivers()
+	for _, a := range allowed {
+		if strings.ToLower(strings.TrimSpace(a)) == driver {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateDriverAllowed returns an error if the driver is not permitted under the policy.
+func (p *Policy) ValidateDriverAllowed(driver string) error {
+	if !p.IsDriverAllowed(driver) {
+		return fmt.Errorf("build driver %q is not allowed by policy; allowedDrivers: %v", driver, p.GetAllowedDrivers())
+	}
+	return nil
 }
 
 // GetDriverTimeout returns the configured or default timeout for a driver and phase.

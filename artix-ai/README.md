@@ -54,11 +54,17 @@ Most AI coding tools operate under the **"Solo Sycophant Problem"**: a single LL
 
 ## 2. Installation & Quick Start
 
-### 2.1 System Requirements
+### 2.1 System Requirements & Platform Constraints
 - **macOS** (Apple Silicon or Intel), **Linux** (x86_64 or aarch64), or **Windows** (WSL2).
 - **Go 1.27+** (for native CLI and LSP server).
 - **Java JDK 21+** (for Compose Multiplatform Desktop Cockpit App).
 - **Git 2.30+** (with support for `git worktree`).
+
+> [!IMPORTANT]
+> **Platform Constraints & Driver Governance:**
+> - **Supported Drivers & Rollout Allowlist:** By default, only `go` and `gradle` are allowed (`allowedDrivers: [go, gradle]`). Unallowed drivers (e.g. `cargo`, `npm`, `swiftpm`, `xcode`) are refused before any LLM spend unless explicitly enabled in policy.
+> - **Offline Cache Prerequisite (`artix warm`):** Sandboxed builds run in complete network isolation (`--offline`). Dependencies must be pre-warmed outside the sandbox with `artix warm` before running the loop. A cold cache returns `OFFLINE_CACHE_MISS` naming the missing artifact.
+> - **iOS Targets Unsupported on Linux (`SKIPPED_HOST_UNSUPPORTED`):** iOS simulator and compilation targets require macOS. On Linux, iOS targets are classified as `SKIPPED_HOST_UNSUPPORTED`, preventing false "all targets green" convergence claims and refusing autonomous execution.
 
 ### 2.2 Installing the Native CLI
 

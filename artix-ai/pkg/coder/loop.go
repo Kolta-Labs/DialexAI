@@ -229,6 +229,11 @@ func (c *ConvergenceCoordinator) Run(
 	driverName := ""
 	if hasDrv {
 		driverName = buildDrv.Name()
+		if err := policy.Active().ValidateDriverAllowed(driverName); err != nil {
+			res.Error = fmt.Sprintf("execution blocked: %v", err)
+			res.CostReport = costReport
+			return res
+		}
 	}
 
 	if gr, ok := buildDrv.(*plugins.GradleDriver); ok && gr.IsKMP(repoCtx.RootDir) {
@@ -242,6 +247,12 @@ func (c *ConvergenceCoordinator) Run(
 		} else if len(selected) > 0 {
 			res.TargetSummary = "All targets green"
 		}
+	}
+
+	if autonomy == AutonomyAutonomous && len(res.SkippedTargets) > 0 {
+		res.Error = fmt.Sprintf("autonomous execution refused: driver has targets in SKIPPED_HOST_UNSUPPORTED mode (%s)", res.TargetSummary)
+		res.CostReport = costReport
+		return res
 	}
 
 	testCommandsToValidate := s.TestCommands

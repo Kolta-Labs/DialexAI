@@ -20,28 +20,31 @@ import (
 
 	"artix/pkg/audit"
 	"artix/pkg/knowledge"
+	"artix/pkg/pilot"
 	"artix/pkg/policy"
 	"artix/pkg/steering"
 )
 
 // WebhookServerConfig defines configuration for the webhook daemon.
 type WebhookServerConfig struct {
-	ListenAddr         string
-	GitHubSecret       string
-	GitLabToken        string
-	RequireWebhookAuth bool
-	AllowedCloneHosts  []string
-	JobsAuthToken      string
-	TriggerLabel       string
-	AllowedUsers       []string
-	DefaultDomain      string
-	Worker             *RemoteWorker
-	MaxConcurrentJobs  int
-	MaxQueuedJobs      int
-	MaxBodyLength      int
-	JobTimeout         time.Duration
-	StoragePath        string
-	OfflineCacheDir    string
+	ListenAddr          string
+	GitHubSecret        string
+	GitLabToken         string
+	RequireWebhookAuth  bool
+	AllowedCloneHosts   []string
+	JobsAuthToken       string
+	TriggerLabel        string
+	AllowedUsers        []string
+	DefaultDomain       string
+	Worker              *RemoteWorker
+	MaxConcurrentJobs   int
+	MaxQueuedJobs       int
+	MaxBodyLength       int
+	JobTimeout          time.Duration
+	StoragePath         string
+	OfflineCacheDir     string
+	WorkspaceDir        string
+	PilotStopRuleConfig pilot.PilotStopRuleConfig
 }
 
 // JobStatus tracks the state of an asynchronous worker run.
@@ -1021,6 +1024,44 @@ func (s *WebhookServer) handleTasks(w http.ResponseWriter, r *http.Request) {
 			},
 			Prompt: sub.Prompt,
 			Domain: domain,
+		}
+
+		stopCfg := s.cfg.PilotStopRuleConfig
+		if polCfg := policy.Active(); polCfg != nil {
+			if polCfg.Pilot.MaxAbortRate > 0 && stopCfg.MaxAbortRate <= 0 {
+				stopCfg.MaxAbortRate = polCfg.Pilot.MaxAbortRate
+			}
+			if polCfg.Pilot.MaxCostPerStory > 0 && stopCfg.MaxCostPerStory <= 0 {
+				stopCfg.MaxCostPerStory = polCfg.Pilot.MaxCostPerStory
+			}
+		}
+		if envAbort := os.Getenv("ARTIX_PILOT_MAX_ABORT_RATE"); envAbort != "" && stopCfg.MaxAbortRate <= 0 {
+			if v, err := strconv.ParseFloat(envAbort, 64); err == nil && v > 0 {
+				stopCfg.MaxAbortRate = v
+			}
+		}
+		if envCost := os.Getenv("ARTIX_PILOT_MAX_COST_PER_STORY"); envCost != "" && stopCfg.MaxCostPerStory <= 0 {
+			if v, err := strconv.ParseFloat(envCost, 64); err == nil && v > 0 {
+				stopCfg.MaxCostPerStory = v
+			}
+		}
+		if stopCfg.MaxAbortRate > 0 || stopCfg.MaxCostPerStory > 0 {
+			wsDir := s.cfg.WorkspaceDir
+			if wsDir == "" {
+				wsDir = sub.RootDir
+			}
+			if wsDir == "" {
+				wsDir = "."
+			}
+			if err := pilot.CheckPilotStopRules(wsDir, stopCfg); err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"error":  err.Error(),
+					"status": "refused",
+				})
+				return
+			}
 		}
 
 		s.startJob(taskID, "task_api", tenant, task)

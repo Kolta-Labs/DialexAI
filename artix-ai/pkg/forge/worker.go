@@ -155,9 +155,13 @@ func (w *RemoteWorker) Execute(ctx context.Context, task *RemoteWorkerTask) *Rem
 	}
 	res.Branch = branchName
 
-	// Pre-warm dependencies outside sandbox before confined builds
+	// Enforce driver allowlist before any LLM planning or warm execution
 	if reg := plugins.NewRegistry(); reg != nil {
 		if buildDrv, ok := reg.DetectDriver(cloneDir); ok {
+			if err := policy.Active().ValidateDriverAllowed(buildDrv.Name()); err != nil {
+				res.Error = fmt.Sprintf("job execution blocked: %v", err)
+				return res
+			}
 			_ = buildDrv.Warm(ctx, cloneDir)
 		}
 	}

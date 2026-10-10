@@ -13,7 +13,9 @@ import (
 	"strings"
 	"testing"
 
+	"artix/pkg/audit"
 	"artix/pkg/persona"
+	"artix/pkg/pilot"
 	"artix/pkg/policy"
 )
 
@@ -1593,3 +1595,59 @@ func TestWebhookServer_TasksEndpoint(t *testing.T) {
 		t.Fatalf("expected 200 OK for /tasks GET, got %d", getRec.Code)
 	}
 }
+
+func TestWebhookServer_PilotStopRule_RefusesJob(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Seed audit log with 2 failed jobs
+	_ = audit.Default(tempDir).Emit(audit.AuditEvent{
+		EventType:   audit.EventCodeConvergence,
+		Status:      "FAILED",
+		StorySpecID: "FAIL-1",
+	})
+	_ = audit.Default(tempDir).Emit(audit.AuditEvent{
+		EventType:   audit.EventCodeConvergence,
+		Status:      "FAILED",
+		StorySpecID: "FAIL-2",
+	})
+
+	cfg := WebhookServerConfig{
+		DefaultDomain: "backend_engineer",
+		WorkspaceDir:  tempDir,
+		PilotStopRuleConfig: pilot.PilotStopRuleConfig{
+			MaxAbortRate: 0.50,
+		},
+	}
+	server := NewWebhookServer(cfg)
+	handler := server.Handler()
+
+	payload := []byte(`{"prompt":"Implement feature","domain":"backend_engineer"}`)
+	req := httptest.NewRequest(http.MethodPost, "/tasks", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 Service Unavailable when stop rule exceeded, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "abort rate") {
+		t.Errorf("expected response body to name 'abort rate', got: %s", rec.Body.String())
+	}
+
+	// Verify STOP_RULE_TRIGGERED audit event
+	events, err := audit.Default(tempDir).ReadEvents()
+	if err != nil {
+		t.Fatalf("failed to read audit events: %v", err)
+	}
+	found := false
+	for _, e := range events {
+		if e.EventType == "STOP_RULE_TRIGGERED" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected STOP_RULE_TRIGGERED audit event")
+	}
+}
+
