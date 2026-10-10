@@ -74,14 +74,45 @@ func TestReadyz_EnterpriseAuditSinkDown_Returns503(t *testing.T) {
 	srv := NewWebhookServer(WebhookServerConfig{
 		StoragePath:     filepath.Join(tempDir, "jobs.json"),
 		OfflineCacheDir: cacheDir,
+		JobsAuthToken:   "ent-token-123",
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	req.Header.Set("Authorization", "Bearer ent-token-123")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when enterprise audit sink is down, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestEnterpriseMode_NoToken_FailsClosed_Returns401_GenericBody(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
+	_ = os.MkdirAll(cacheDir, 0755)
+
+	t.Setenv("ARTIX_ENTERPRISE", "1")
+	policy.ResetCachedPolicy()
+
+	srv := NewWebhookServer(WebhookServerConfig{
+		StoragePath:     filepath.Join(tempDir, "jobs.json"),
+		OfflineCacheDir: cacheDir,
+		JobsAuthToken:   "", // no token set in enterprise mode
+	})
+
+	for _, endpoint := range []string{"/readyz", "/metrics"} {
+		req := httptest.NewRequest(http.MethodGet, endpoint, nil)
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401 for %s in enterprise mode without token, got %d", endpoint, rec.Code)
+		}
+		body := rec.Body.String()
+		if strings.Contains(body, tempDir) || strings.Contains(body, "/") {
+			t.Errorf("expected generic error body without filesystem paths for %s, got: %q", endpoint, body)
+		}
 	}
 }
 
