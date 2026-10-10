@@ -57,6 +57,8 @@ Commands:
   persona       Inspect and manage SWE Personas
   gc            Clean up stale and orphaned shadow worktrees
   warm          Pre-warm offline dependency caches outside sandbox
+  explain       Explain job failure root causes and reproduction commands
+  replay        Replay a recorded convergence round in a fresh worktree
   daemon        Launch webhook server for GitHub & GitLab automation
   version       Print version
 
@@ -201,6 +203,12 @@ func RunCLIWithIO(cwd string, reg *persona.Registry, rawArgs []string, stdin io.
 
 	case "warm":
 		return runWarm(cwd, cmdArgs, humanOut, sendJSON, isJSON, stderr)
+
+	case "explain":
+		return runExplain(cwd, cmdArgs, humanOut, sendJSON, isJSON, stderr)
+
+	case "replay":
+		return runReplay(cwd, cmdArgs, humanOut, sendJSON, isJSON, stderr)
 
 	case "daemon":
 		handleDaemon(cwd, reg, cmdArgs)

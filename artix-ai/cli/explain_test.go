@@ -13,6 +13,7 @@ import (
 	"artix/pkg/audit"
 	"artix/pkg/coder"
 	"artix/pkg/persona"
+	"artix/pkg/policy"
 )
 
 func setupTestGitRepo(t *testing.T) string {
@@ -152,5 +153,43 @@ func TestReplay_ReproducesSameExitCodeInFreshWorktree(t *testing.T) {
 
 	if exitCode != 42 {
 		t.Fatalf("expected artix replay to reproduce exit code 42, got %d\nStdout: %s\nStderr: %s", exitCode, stdout.String(), stderr.String())
+	}
+}
+
+func TestExplain_TamperedTrace_ExitsNonZero(t *testing.T) {
+	tempDir := setupTestGitRepo(t)
+	taskID := "TASK-TAMPER-1"
+
+	_ = coder.AppendRoundTrace(tempDir, &coder.RoundTrace{
+		TaskID:          taskID,
+		Round:           1,
+		PromptHash:      "p1",
+		PatchHash:       "patch1",
+		SandboxCommand:  "sh -c 'exit 0'",
+		ExitCode:        0,
+		ReviewerVerdict: "APPROVED",
+		Tokens:          100,
+		Cost:            0.001,
+		Phase:           "REVIEW",
+		Timestamp:       time.Now().UTC(),
+	})
+
+	// Tamper with trace.jsonl
+	auditLogPath := policy.EffectiveAuditLogPath(tempDir)
+	tracePath := filepath.Join(filepath.Dir(auditLogPath), "trace.jsonl")
+	data, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatalf("failed to read trace: %v", err)
+	}
+	tampered := strings.Replace(string(data), `"tokens":100`, `"tokens":9999`, 1)
+	if err := os.WriteFile(tracePath, []byte(tampered), 0600); err != nil {
+		t.Fatalf("failed to write tampered trace: %v", err)
+	}
+
+	reg := persona.NewRegistry(tempDir)
+	var stdout, stderr bytes.Buffer
+	exitCode := RunCLI(tempDir, reg, []string{"explain", taskID}, &stdout, &stderr)
+	if exitCode == 0 {
+		t.Fatalf("expected artix explain to exit non-zero on tampered trace.jsonl, but got 0")
 	}
 }
